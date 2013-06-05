@@ -170,7 +170,7 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
 def _resolveConnectionsOrShards(connections=None):
     """
     When connections is None, all shards will be returned, otherwise connections is returned unmodified.
-    
+
     @param connections mixed List of connection names or Dict of handle->psqlConnectionString.  Defaults to None.  If
         None, all primary shard connections will be used.
     """
@@ -264,7 +264,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         persistent dblink connections exist.
     """
     import sqlparse
-    from sqlparse.sql import Identifier, IdentifierList, Function
+    from sqlparse.sql import Identifier, IdentifierList, Function, Where
     from sqlparse.tokens import Keyword, Wildcard
     from . import getPsqlConnectionString
 
@@ -393,13 +393,24 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             if len(found) == 0:
                 # Search for columns after a "RETURNING" clause.
                 active = False
+
+                # Build list of tokens, making sure to break down everything in the `WHERE` clause.
+                tokens = []
                 for token in parsed.tokens:
+                    if isinstance(token, Where):
+                        tokens += token.tokens
+                    else:
+                        tokens.append(token)
+
+                # Attempt to find any fields listed after a `RETURNING` clause.
+                for token in tokens:
+                    #logging.info('>>>>>>>> {}/{}'.format(str(token), type(token)))
                     if str(token).lower() == 'returning':
                         active = True
-                    
+
                     if active and isInteresting(token):
                         found.append(token)
-                    
+
             return found
 
         selecting = _findSelecting()

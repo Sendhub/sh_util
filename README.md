@@ -8,6 +8,10 @@ requirements:
 
             AWS_STORAGE_BUCKET_NAME = ''
 
+            STATIC_TABLES = ('sequence', 'of', 'static', 'db', 'tables', 'which', 'should', 'not', 'be', 'replicated')
+
+            SHARDING_IGNORE_TABLES = ('sequence', 'of', 'additional', 'tables', 'to', 'ignore')
+
     - Python >= 2.7
     - DB Driver: Django or SQLAlchemy
     - SQL Parse lib from: git+git://github.com/Sendhub/sqlparse.git@betterAliasDetection
