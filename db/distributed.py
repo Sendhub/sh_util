@@ -241,6 +241,8 @@ def evaluatedDistributedSelect(
 
 _stringArgumentFinder = re.compile(r'%s')
 
+_offsetLimitRe = re.compile(r'(:?OFFSET|LIMIT)\s+\d+', re.I)
+
 def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, usePersistentDbLink=None):
     """
     Generate a distributed query and associated args.  Note: when there is only one connection (or shard), the same
@@ -293,16 +295,18 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         @return str including the `where` clause and everything after it.
         """
         seenInterestingKeyword = False
-        tokens = []
+        innerTokens = []
+        outerTokens = []
         for token in parsed.tokens:
             # WHERE or GROUP BY keywrods..
             if seenInterestingKeyword is not True and str(token).lower() in ('group', 'limit', 'order'):
                 seenInterestingKeyword = True
 
             if seenInterestingKeyword:
-                tokens.append(token.value)
+                innerTokens.append(token.value.replace('"."', '_'))
+                outerTokens.append(token.value)
 
-        innerTail = ''.join(map(lambda t: t.replace('"."', '_'), tokens))
+        innerTail = ''.join(innerTokens)
 
         #logging.info(columnsToAliases)
         def remapTokenToAlias(token):
@@ -313,7 +317,9 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                 return columnsToAliases[token]
             return token
 
-        outerTail = ''.join(map(remapTokenToAlias, tokens))
+        # Strip offsets and limits from the outermost where tail (should retain only order by clauses).
+        outerTail = _offsetLimitRe.sub('', ''.join(map(remapTokenToAlias, outerTokens)).replace('\n', ' ')).strip()
+        #logging.info(u'outerTail->{0}'.format(outerTail))
 
         return (innerTail, outerTail)
 
