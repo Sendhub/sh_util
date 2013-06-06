@@ -286,6 +286,16 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
     parsed = sqlparse.parse(sql)[0]
 
+    def _tokensWithSubTokensFor(*classes):
+        """Generate a token list with expanded tokens for matching class token types."""
+        tokens = []
+        for token in parsed.tokens:
+            if isinstance(token, classes):
+                tokens += token.tokens
+            else:
+                tokens.append(token)
+        return tokens
+
     def _findWhereTail(parsed, columnsToAliases):
         """
         @param parsed sqlparse result
@@ -297,7 +307,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         seenInterestingKeyword = False
         innerTokens = []
         outerTokens = []
-        for token in parsed.tokens:
+        for token in _tokensWithSubTokensFor(Where, IdentifierList): #parsed.tokens:
             # WHERE or GROUP BY keywrods..
             if seenInterestingKeyword is not True and str(token).lower() in ('group', 'limit', 'order'):
                 seenInterestingKeyword = True
@@ -313,8 +323,10 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             """Takes a token and produces the aliased name of the field when applicable."""
             #logging.info('CANDIDATE IS: &{}&'.format(token))
             if token in columnsToAliases:
-                #logging.info('FOUND A MATCH!!! {}'.format(token))
+                #logging.info(u'FOUND A MATCH!!! {}'.format(token))
                 return columnsToAliases[token]
+            #else:
+            #    logging.info(u'NOMATCHFOUNDFOR: {}'.format(token))
             return token
 
         # Strip offsets and limits from the outermost where tail (should retain only order by clauses).
@@ -357,9 +369,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                 assert token.ttype is None
 
                 # Add this table reference to the results.
-                results.append(
-                    {'table': token.value, 'alias': token.get_alias()}
-                )
+                results.append({'table': token.value, 'alias': token.get_alias()})
 
                 # Reset to detect next interesting token.
                 precededByJoinOrFromKeyword = False
@@ -395,15 +405,8 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                 active = False
 
                 # Build list of tokens, making sure to break down everything in the `WHERE` clause.
-                tokens = []
-                for token in parsed.tokens:
-                    if isinstance(token, Where):
-                        tokens += token.tokens
-                    else:
-                        tokens.append(token)
-
-                # Attempt to find any fields listed after a `RETURNING` clause.
-                for token in tokens:
+                for token in _tokensWithSubTokensFor(Where):
+                    # Attempt to find any fields listed after a `RETURNING` clause.
                     #logging.info('>>>>>>>> {}/{}'.format(str(token), type(token)))
                     if str(token).lower() == 'returning':
                         active = True
