@@ -8,7 +8,7 @@ import logging, re, settings
 from sqlalchemy.sql.expression import bindparam, text
 
 
-_argRe = re.compile(r'%s')
+_argRe = re.compile(r'([^%])%s')
 
 def sqlAndArgsToText(sql, args=None):
     """
@@ -22,17 +22,14 @@ def sqlAndArgsToText(sql, args=None):
     bindparams = []
     i = [-1] # Using a list since we need to mutate the variable which isn't allowed with a direct variable reference.
 
-    def nextBindSub(*_):
+    def nextBindSub(match):
         i[0] += 1
         binding = '${0}'.format(i[0])
         bindparams.append(bindparam(binding, args[i[0]]))
-        return ':{0}'.format(binding)
+        return '{0}:{1}'.format(match.group(1), binding)
 
     transformedSql = _argRe.sub(nextBindSub, sql)
     return text(transformedSql, bindparams=bindparams)
-
-
-_transactions = {}
 
 
 def connections():
@@ -67,16 +64,19 @@ def db_query(sql, args=None, as_dict=False, using='default', debug=False):
     other type of query.
     """
     from ..import DEBUG
+    from app import ScopedSessions
 
     if args is None:
         args = tuple()
 
     using = _getRealShardConnectionName(using)
 
-    if DEBUG is True or debug is True:
-        logging.info(u'-- [DEBUG] DB_QUERY, using={0} ::\n{1}'.format(using, sql))
+    if 1 or DEBUG is True or debug is True:
+        logging.info(u'-- [DEBUG] DB_QUERY, using={0} ::\n{1} {2}'.format(using, sql, args))
 
-    resultProxy = connections()[using].execute(sqlAndArgsToText(sql, args).execution_options(autocommit=False))
+    #resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args).execution_options(autocommit=False))
+    resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
+    #resultProxy = ScopedSessions[using]().execute(sql, args)
 
     res = _dictfetchall(resultProxy) if as_dict is True else resultProxy.fetchall()
     resultProxy.close()
@@ -85,33 +85,33 @@ def db_query(sql, args=None, as_dict=False, using='default', debug=False):
 
 def db_exec(sql, args=None, using='default', debug=False):
     """Execute a raw query on the requested database connection."""
+    from sqlalchemy.exc import InvalidRequestError
     from ..import DEBUG
+    from app import ScopedSessions
 
     if args is None:
         args = tuple()
 
     using = _getRealShardConnectionName(using)
 
-#    txCandidate = sql.strip().rstrip(';').strip().lower()
-#    if txCandidate == 'begin':
-#        logging.info('OPENING NEW TXN ......................')
-#        _transactions[using] = connections()[using].begin()
-#    elif txCandidate == 'rollback':
-#        logging.info('ROLLING BACK TXN ......................')
-#        _transactions[using].rollback()
-#        del _transactions[using]
-#    elif txCandidate == 'commit':
-#        logging.info('COMMITTING TXN ......................')
-#        _transactions[using].commit()
-#        del _transactions[using]
-
     if DEBUG is True or debug is True:
         logging.info(u'-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
 
-    statement = sqlAndArgsToText(sql, args).execution_options(autocommit=False)
-    #connections()[using].execute(statement)
-    from app import ScopedSessions
-    ScopedSessions[using]().execute(statement)
+    txCandidate = sql.strip().rstrip(';').strip().lower()
+    if txCandidate == 'begin':
+        try:
+            ScopedSessions[using]().begin()
+        except InvalidRequestError:
+            pass
+    elif txCandidate == 'rollback':
+        ScopedSessions[using]().rollback()
+    elif txCandidate == 'commit':
+        ScopedSessions[using]().commit()
+    else:
+        #statement = sqlAndArgsToText(sql, args).execution_options(autocommit=False)
+        #ScopedSessions[using]().execute(statement)
+        ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
+        #ScopedSessions[using]().execute(sql, args)
 
 
 _saAttrsToPsql = (
