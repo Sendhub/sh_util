@@ -183,6 +183,24 @@ def _resolveConnectionsOrShards(connections=None):
         return connections
 
 
+def pgInitializeDbLinks(using, connections=None):
+    """
+    Ensure dblinks are initialized for one or more connections.
+
+    @param connections list Optional, defaults to None in which case all shard connections will be used.
+    """
+    resolvedConnections = _resolveConnectionsOrShards(connections)
+    logging.info(u'Resolved connections: {0}'.format(resolvedConnections))
+
+    # If the number of connections is 1, then the query does not need to use dblink.
+    if len(resolvedConnections) != 1:
+        pgConnectPersistentDbLinks(
+            using,
+            *(resolvedConnections if isinstance(resolvedConnections, list) else []),
+            **(resolvedConnections if isinstance(resolvedConnections, dict) else {})
+        )
+
+
 def evaluatedDistributedSelect(
    sql,
     args=None,
@@ -225,16 +243,7 @@ def evaluatedDistributedSelect(
     logging.info(u'usePersistentDbLink={0}'.format(usePersistentDbLink))
 
     if usePersistentDbLink is not False:
-        resolvedConnections = _resolveConnectionsOrShards(connections)
-        logging.info(u'Resolved connections: {0}'.format(resolvedConnections))
-
-        # If the number of connections is 1, then the query does not need to use dblink.
-        if len(resolvedConnections) != 1:
-            pgConnectPersistentDbLinks(
-                using,
-                *(resolvedConnections if isinstance(resolvedConnections, list) else []),
-                **(resolvedConnections if isinstance(resolvedConnections, dict) else {})
-            )
+        pgInitializeDbLinks(using, connections)
 
     return db_query(sql, args, using=using, as_dict=asDict)
 
