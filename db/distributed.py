@@ -154,7 +154,7 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
 
     connectionNames = connections()
 
-    alreadyConnected = pgGetPersistentConnectionHandles(using=using)
+    alreadyConnected = pgGetPersistentConnectionHandles(using=using) or []
 
     for c in handles:
         assert c in connectionNames, 'Connection "{0}" was not found in connections ({1})'.format(c, connectionNames)
