@@ -146,7 +146,7 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
 
     @param **custom Dict of desired handle -> raw psql connection string.
     """
-    from . import connections, getPsqlConnectionString
+    from . import connections, db_query, getPsqlConnectionString
 
     if len(handles) == 0 and len(custom) == 0:
         logging.warn('pgConnectPersistentDbLinks invoked with no handles, no action taken')
@@ -157,14 +157,20 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
     alreadyConnected = pgGetPersistentConnectionHandles(using=using) or []
 
     for c in handles:
-        assert c in connectionNames, 'Connection "{0}" was not found in connections ({1})'.format(c, connectionNames)
-        if c not in alreadyConnected:
-            psqlConnectionString = getPsqlConnectionString(c)
-            pgConnectPersistentDbLink(using, c, psqlConnectionString)
+        assert c in connectionNames, 'Connection "{0}" was not found in connections ({1})' \
+            .format(c, connectionNames)
 
-    for handle, psqlConnectionString in custom.items():
-        if handle not in alreadyConnected:
-            pgConnectPersistentDbLink(using, handle, psqlConnectionString)
+    # Generate a single statement to connect to all dblinks.
+    sql = 'SELECT {0}'.format(', '.join(
+        map(lambda c: '''dblink_connect('{0}', '{1}')'''.format(c, getPsqlConnectionString(c)),
+            filter(lambda c: c not in alreadyConnected, handles)
+        ) + map(
+            lambda c, psqlConnectionString: '''dblink_connect('{0}', '{1}')'''.format(c, psqlConnectionString),
+            filter(lambda c, _: c not in alreadyConnected, custom.items())
+        )
+    ))
+
+    db_query(sql, using=using, force=True)
 
 
 def _resolveConnectionsOrShards(connections=None):
@@ -593,7 +599,8 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     table = _findTable(parsed)
     listOfReferencedTables = _findReferencedTables(parsed)
     identifiers, columnsToAliases = _findColumns(parsed, table)
-    innerWhereTail, outerWhereTail = _findWhereTail(parsed, columnsToAliases)
+    #innerWhereTail, outerWhereTail = _findWhereTail(parsed, columnsToAliases)
+    _, outerWhereTail = _findWhereTail(parsed, columnsToAliases)
     dbLinkT = _toDbLinkT(identifiers, table, listOfReferencedTables)
 
     stdArgs = (identifiers, table, listOfReferencedTables)

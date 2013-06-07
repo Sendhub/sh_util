@@ -58,10 +58,12 @@ def _dictfetchall(resultProxy):
     return [dict(zip([col for col in desc], row)) for row in resultProxy.fetchall()]
 
 
-def db_query(sql, args=None, as_dict=False, using='default', debug=False):
+def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=False):
     """
     Execute raw select queries.  Not tested or guaranteed to work with any
     other type of query.
+
+    @param force boolean Defaults to False. Whether or not to force the named connection to be used.
     """
     from ..import DEBUG
     from app import ScopedSessions
@@ -69,7 +71,8 @@ def db_query(sql, args=None, as_dict=False, using='default', debug=False):
     if args is None:
         args = tuple()
 
-    using = _getRealShardConnectionName(using)
+    if force is False:
+        using = _getRealShardConnectionName(using)
 
     if 1 or DEBUG is True or debug is True:
         logging.info(u'-- [DEBUG] DB_QUERY, using={0} ::\n{1} {2}'.format(using, sql, args))
@@ -83,8 +86,12 @@ def db_query(sql, args=None, as_dict=False, using='default', debug=False):
     return res
 
 
-def db_exec(sql, args=None, using='default', debug=False):
-    """Execute a raw query on the requested database connection."""
+def db_exec(sql, args=None, using='default', force=False, debug=False):
+    """
+    Execute a raw query on the requested database connection.
+    
+    @param force boolean Defaults to False. Whether or not to force the named connection to be used.
+    """
     from sqlalchemy.exc import InvalidRequestError
     from ..import DEBUG
     from app import ScopedSessions
@@ -92,7 +99,8 @@ def db_exec(sql, args=None, using='default', debug=False):
     if args is None:
         args = tuple()
 
-    using = _getRealShardConnectionName(using)
+    if force is False:
+        using = _getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
         logging.info(u'-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
