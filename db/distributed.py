@@ -161,16 +161,16 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
             .format(c, connectionNames)
 
     # Generate a single statement to connect to all dblinks.
-    sql = 'SELECT {0}'.format(', '.join(
-        map(lambda c: '''dblink_connect('{0}', '{1}')'''.format(c, getPsqlConnectionString(c)),
-            filter(lambda c: c not in alreadyConnected, handles)
-        ) + map(
-            lambda c, psqlConnectionString: '''dblink_connect('{0}', '{1}')'''.format(c, psqlConnectionString),
-            filter(lambda c, _: c not in alreadyConnected, custom.items())
-        )
-    ))
-
-    db_query(sql, using=using, force=True)
+    connectStatements = map(
+        lambda c: '''dblink_connect('{0}', '{1}')'''.format(c, getPsqlConnectionString(c)),
+        filter(lambda c: c not in alreadyConnected, handles)
+    ) + map(
+        lambda c, psqlConnectionString: '''dblink_connect('{0}', '{1}')'''.format(c, psqlConnectionString),
+        filter(lambda c, _: c not in alreadyConnected, custom.items())
+    )
+    if len(connectStatements) > 0:
+        sql = 'SELECT {0}'.format(', '.join(connectStatements))
+        db_query(sql, using=using, force=True)
 
 
 def _resolveConnectionsOrShards(connections=None):
