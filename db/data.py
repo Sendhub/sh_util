@@ -951,6 +951,11 @@ def deleteUsers(userIds, using, **kw):
             SELECT "id" FROM "main_group" WHERE "user_id" IN ({0})
         )
         ''',
+        '''
+        DELETE FROM "main_callobservation" WHERE "voiceCall" IN (
+            SELECT "id" FROM "main_voicecall" WHERE "user_id" IN ({0})
+        )
+        ''',
     ]
     map(lambda sql: db_exec(_toSingleLine(sql.format(inUserIds)), using=using), sqls)
     del sqls
