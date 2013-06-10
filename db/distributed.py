@@ -128,7 +128,6 @@ def pgGetPersistentConnectionHandles(using):
 def pgConnectPersistentDbLink(using, handle, psqlConnectionString):
     """Create a single persistent dblink connection."""
     from . import db_exec
-
     logging.info(u'Connecting persistent dblink "{0}" on connection {1}'.format(handle, using))
     db_exec('''SELECT dblink_connect('{0}', '{1}')'''.format(handle, psqlConnectionString), using=using)
 
@@ -170,7 +169,7 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
     )
     if len(connectStatements) > 0:
         sql = 'SELECT {0}'.format(', '.join(connectStatements))
-        db_query(sql, using=using, force=True)
+        db_query(sql, using=using)
 
 
 def _resolveConnectionsOrShards(connections=None):
@@ -329,7 +328,8 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
             if seenInterestingKeyword:
                 innerTokens.append(token.value.replace('"."', '_'))
-                outerTokens.append(token.value)
+                outerTokens.append(token.value.replace('"."', '_'))
+                #outerTokens.append(token.value)
 
         innerTail = ''.join(innerTokens)
 

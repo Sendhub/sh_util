@@ -10,8 +10,7 @@ import logging, settings
 DEBUG = False
 
 _useDjangoDriver =  lambda: settings.SH_UTIL_DB_DRIVER.lower() == 'django'
-_useSqlAlchemyDriver = lambda: settings.SH_UTIL_DB_DRIVER.lower() in \
-    ('sqlalchemy', 'sa')
+_useSqlAlchemyDriver = lambda: settings.SH_UTIL_DB_DRIVER.lower() in ('sqlalchemy', 'sa')
 
 if _useDjangoDriver():
     from .drivers.dj import *
@@ -20,9 +19,7 @@ elif _useSqlAlchemyDriver():
     from .drivers.sa import *
 
 else:
-    raise Exception(
-        'Unrecognized sh_util db driver: {0}'.format(settings.SH_UTIL_DB_DRIVER)
-    )
+    raise Exception('Unrecognized sh_util db driver: {0}'.format(settings.SH_UTIL_DB_DRIVER))
 
 def begin(using):
     """Begin a transaction."""

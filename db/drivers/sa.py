@@ -44,7 +44,7 @@ def switchDefaultDatabase(name):
     pass
 
 
-def _getRealShardConnectionName(using):
+def getRealShardConnectionName(using):
     """Lookup and return the ACTUAL connection name, never use 'default'."""
     if using == 'default':
         using = connections().keys()[0]
@@ -72,7 +72,7 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
         args = tuple()
 
     if force is False:
-        using = _getRealShardConnectionName(using)
+        using = getRealShardConnectionName(using)
 
     if 1 or DEBUG is True or debug is True:
         logging.info(u'-- [DEBUG] DB_QUERY, using={0} ::\n{1} {2}'.format(using, sql, args))
@@ -100,7 +100,7 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
         args = tuple()
 
     if force is False:
-        using = _getRealShardConnectionName(using)
+        using = getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
         logging.info(u'-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
