@@ -607,8 +607,8 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             containsAggregate = len(filter(lambda pi: pi['function'] in aggregates, pids)) > 0
             #logging.info('PIDS={}'.format(pids))
             #logging.info('ADDING {}'.format(
-                    ', '.join(map(lambda pi: pi['column'], filter(lambda pi: pi['function'] not in aggregates, pids)))
-            ))
+            #    ', '.join(map(lambda pi: pi['column'], filter(lambda pi: pi['function'] not in aggregates, pids)))
+            #))
             if containsAggregate is True:
                 whereTail += '{0}{1}'.format(
                     nextToken,
