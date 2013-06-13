@@ -195,7 +195,7 @@ def pgInitializeDbLinks(using, connections=None):
     @param connections list Optional, defaults to None in which case all shard connections will be used.
     """
     resolvedConnections = _resolveConnectionsOrShards(connections)
-    logging.info(u'Resolved connections: {0}'.format(resolvedConnections))
+    #logging.info(u'Resolved connections: {0}'.format(resolvedConnections))
 
     # If the number of connections is 1, then the query does not need to use dblink.
     if len(resolvedConnections) != 1:
@@ -245,7 +245,7 @@ def evaluatedDistributedSelect(
         usePersistentDbLink=usePersistentDbLink
     )
 
-    logging.info(u'usePersistentDbLink={0}'.format(usePersistentDbLink))
+    #logging.info(u'usePersistentDbLink={0}'.format(usePersistentDbLink))
 
     if usePersistentDbLink is not False:
         pgInitializeDbLinks(using, connections)
@@ -310,7 +310,25 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                 tokens.append(token)
         return tokens
 
-    def _findWhereTail(parsed, columnsToAliases):
+    def _remapTokenToAlias(token):
+        """Takes a token and produces the aliased name of the field when applicable."""
+        #logging.info('CANDIDATE IS: &{}&'.format(token))
+        if not isinstance(token, (str, unicode)):
+            # Assume this is an sqlparse token.
+            tokens = [token.value, token.value.replace('"."', '_')]
+        else:
+            tokens = [token]
+
+        for t in tokens:
+            if t in columnsToAliases:
+                #logging.info(u'FOUND A MATCH!!! {}'.format(t))
+                return columnsToAliases[t]
+            #else:
+            #    logging.info(u'NOMATCHFOUNDFOR: {}'.format(t))
+
+        return token
+
+    def _findWhereTail(parsed):
         """
         @param parsed sqlparse result
 
@@ -319,36 +337,23 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         @return str including the `where` clause and everything after it.
         """
         seenInterestingKeyword = False
-        innerTokens = []
         outerTokens = []
-        for token in _tokensWithSubTokensFor(Where, IdentifierList): #parsed.tokens:
-            # WHERE or GROUP BY keywrods..
+        extraIdentifiers = []
+        for token in _tokensWithSubTokensFor(Where, IdentifierList):
+            # WHERE or GROUP BY keywords..
             if seenInterestingKeyword is not True and str(token).lower() in ('group', 'limit', 'order'):
                 seenInterestingKeyword = True
 
             if seenInterestingKeyword:
-                innerTokens.append(token.value.replace('"."', '_'))
                 outerTokens.append(token.value.replace('"."', '_'))
-                #outerTokens.append(token.value)
-
-        innerTail = ''.join(innerTokens)
-
-        #logging.info(columnsToAliases)
-        def remapTokenToAlias(token):
-            """Takes a token and produces the aliased name of the field when applicable."""
-            #logging.info('CANDIDATE IS: &{}&'.format(token))
-            if token in columnsToAliases:
-                #logging.info(u'FOUND A MATCH!!! {}'.format(token))
-                return columnsToAliases[token]
-            #else:
-            #    logging.info(u'NOMATCHFOUNDFOR: {}'.format(token))
-            return token
+                if isinstance(token, Identifier):
+                    extraIdentifiers.append(token)
 
         # Strip offsets and limits from the outermost where tail (should retain only order by clauses).
-        outerTail = _offsetLimitRe.sub('', ''.join(map(remapTokenToAlias, outerTokens)).replace('\n', ' ')).strip()
+        outerTail = _offsetLimitRe.sub('', ''.join(map(_remapTokenToAlias, outerTokens)).replace('\n', ' ')).strip()
         #logging.info(u'outerTail->{0}'.format(outerTail))
 
-        return (innerTail, outerTail)
+        return (outerTail, extraIdentifiers)
 
     def _findTable(parsed):
         """@return str containing the name of the table being queried."""
@@ -460,19 +465,31 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             )
 
         joinedOut = map(joiner, flatIdentifiers)
+        #joinedOut = map(
+        #    lambda c: '{0}{1}'.format(
+        #        columns[c.value.strip('"')] if c.value.strip('"') in columns else c.value,
+        #        ' AS "{0}"'.format(c.get_alias()) if hasattr(c, 'has_alias') and c.has_alias() else ''
+        #    ),
+        #    flatIdentifiers
+        #)
 
-        def columnAliasMapper(column):
+        def columnAliasMapper(column, replacePeriods=False):
             """Given an identifier, resolves to a column/alias tuple."""
             pIdent = parseIdentifier(str(column))
             value = column.value.strip('"')
+            if replacePeriods is True:
+                value = value.replace('"."', '_')
             a = columns[value] if value in columns else column.value
             b = '"{0}"'.format((pIdent['alias'] if pIdent['alias'] is not None else a).strip('"')
                 #(column.get_alias() if hasattr(column, 'has_alias') and column.has_alias() else a).strip('"')
             )
             return (a, b)
 
-        columnsToAliases = dict(map(columnAliasMapper, flatIdentifiers))
-        #logging.info('out={0}\n{1}'.format(joinedOut, columnsToAliases))
+        columnsToAliases = dict(
+            map(columnAliasMapper, flatIdentifiers) +
+            map(lambda c: columnAliasMapper(c, True), flatIdentifiers)
+        )
+        #logging.info(u'_findColumns :: joinedOut={0}\ncolumnsToAliases={1}'.format(joinedOut, columnsToAliases))
         return (joinedOut, columnsToAliases)
 
     def _toDbLinkT(identifiers, table, listOfReferencedTables=None):
@@ -489,14 +506,14 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             ),
             annotatedIdents
         )
-        #logging.debug(annotatedIdents)
         identifierNames = map(lambda x: x[0], description)
 
-        #logging.debug('!!! {0}'.format(description))
+        #logging.info(u'_toDbLinkT :: annotatedIdents={0}'.format(annotatedIdents))
+        #logging.info(u'_toDbLinkT :: description={0}, identifierNames={1}'.format(description, identifierNames))
         dbLinkT = tableDescriptionToDbLinkT(description, identifierNames)
         return dbLinkT
 
-    def _remapFunctionIdentifiers(identifiers, table, listOfReferencedTables):
+    def _remapFunctionIdentifiers(identifiers, table, listOfReferencedTables, stripFunctions=False):
         """
         For distributed queries to return correct results, count(*) needs to
         be remapped to sum(*) in the outermost query.
@@ -514,12 +531,12 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                 identifier = '"{0}"'.format(stripped)
             del stripped
 
-            if p['function'] is not None and p['function'].lower() in _aggregateFunctions.keys():
+            if not stripFunctions and p['function'] is not None and p['function'].lower() in _aggregateFunctions.keys():
                 # Apply any function remappings below.
                 if p['function'].lower() == 'count':
                     p['function'] = 'sum'
 
-                remapped.append('{0}({1})'.format(p['function'].upper(), identifier))
+                remapped.append('{0}({1}) {1}'.format(p['function'].upper(), identifier))
 
             else:
                 remapped.append(
@@ -528,8 +545,12 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
         return remapped
 
-    def _prepareDbLinkQuery(sql):
-        """Double quote strings inside the dblink query."""
+    def _prepareDbLinkQuery(sql, extraIdentifiers):
+        """
+        Double-quotes strings inside the dblink query.
+
+        @param extraIdentifiers list of extra tokens to append to select clause.
+        """
         # @FIXME This breaks for queries with incidential '%s' substrings, e.g.: .. LIKE '%super%'
 
         def positionalCallback(match):
@@ -538,13 +559,10 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             quotes if appropriate depending on the arg type.
             """
             try:
-                logging.debug('sql={0}'.format(sql))
-                logging.debug('args={0}'.format(args))
-                logging.debug('pos={0}'.format(positionalCallback.position))
-                if not any(map(
-                    lambda t: isinstance(args[positionalCallback.position], t),
-                    (int, long, bool)
-                )):
+                #logging.debug('sql={0}'.format(sql))
+                #logging.debug('args={0}'.format(args))
+                #logging.debug('pos={0}'.format(positionalCallback.position))
+                if not any(map(lambda t: isinstance(args[positionalCallback.position], t), (int, long, bool))):
                     # Add extra set of single quotes, which will become ''arg''
                     # once the db adds additional quotes.
                     return "''{0}''".format(match.group(0))
@@ -562,10 +580,11 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             # Then add 2 single quotes around any %s string arguments.
             dbLinkSql = _stringArgumentFinder.sub(positionalCallback, dbLinkSql)
 
-        return dbLinkSql
+        return dbLinkSql.replace(' FROM', ', {0} FROM'.format(', '.join(extraIdentifiers)), 1) \
+            if len(extraIdentifiers) > 0 else dbLinkSql
 
     def _prepareGroupingTail(identifiers, table, listOfReferencedTables):
-        """d"""
+        """Identify and extract grouping clause to generate outer query grouping clause."""
         # For counts or sums where that was the only thing queried, chop off the
         # "where" portion of the outermost query.
         whereTail = ''
@@ -602,21 +621,31 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
     table = _findTable(parsed)
     listOfReferencedTables = _findReferencedTables(parsed)
+
+    # NB: @var columnsToAliases Dict of column name to alias.  Used to generate a proper outer tail.
     identifiers, columnsToAliases = _findColumns(parsed, table)
+
     #innerWhereTail, outerWhereTail = _findWhereTail(parsed, columnsToAliases)
-    _, outerWhereTail = _findWhereTail(parsed, columnsToAliases)
-    dbLinkT = _toDbLinkT(identifiers, table, listOfReferencedTables)
+    outerWhereTail, extraIdentifiers = _findWhereTail(parsed)
+
+    # Create inner identifiers set.
+    innerIdentifiers = \
+        map(lambda t: t.value, filter(lambda t: _remapTokenToAlias(t) not in identifiers, extraIdentifiers))
+
+    dbLinkT = _toDbLinkT(identifiers + innerIdentifiers, table, listOfReferencedTables)
 
     stdArgs = (identifiers, table, listOfReferencedTables)
 
     # Sometimes count(*) needs to be remapped to sum(*) in the outermost query.
     remappedIdentifiers = _remapFunctionIdentifiers(*stdArgs) + (['shard'] if includeShardInfo is True else [])
+    outerRemappedIdentifiers = \
+        _remapFunctionIdentifiers(*stdArgs, stripFunctions=True) + (['shard'] if includeShardInfo is True else [])
 
     maybeGroupingTail = _prepareGroupingTail(*stdArgs)
 
     # Get SQL with single quotes -> double single quotes.
-    dbLinkSql = _prepareDbLinkQuery(sql)
-    logging.info('usePersistentDbLink={}'.format(usePersistentDbLink))
+    dbLinkSql = _prepareDbLinkQuery(sql, innerIdentifiers)
+    #logging.info('usePersistentDbLink={}'.format(usePersistentDbLink))
 
     multiShardSql = '\nUNION\n'.join(
         map(
@@ -632,12 +661,31 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         )
     )
 
-    distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}'.format(
-        remapped=', '.join(remappedIdentifiers),
-        multiShardSql=multiShardSql,
-        tail0=maybeGroupingTail if 'GROUP BY' not in outerWhereTail.upper() else '',
-        tail1=outerWhereTail
-    ).strip()
+    if len(innerIdentifiers) > 0:
+        distributedSql = 'SELECT {outerRemapped}\n' \
+            'FROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}) q1'.format(
+            outerRemapped=', '.join(outerRemappedIdentifiers),
+            remapped=', '.join(remappedIdentifiers),
+            inner=', '.join(map(lambda i: i.replace('"."', '_'), innerIdentifiers)),
+            multiShardSql=multiShardSql,
+            tail0=maybeGroupingTail,
+            tail1=outerWhereTail
+        ).strip()
+
+    else:
+        distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}'.format(
+            remapped=', '.join(remappedIdentifiers),
+            multiShardSql=multiShardSql,
+            tail0=maybeGroupingTail,
+            tail1=outerWhereTail
+        ).strip()
+
+    #distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}'.format(
+    #    remapped=', '.join(remappedIdentifiers),
+    #    multiShardSql=multiShardSql,
+    #    tail0=maybeGroupingTail if 'GROUP BY' not in outerWhereTail.upper() else '',
+    #    tail1=outerWhereTail
+    #).strip()
 
     logging.debug('IN: {0}'.format(sql))
     logging.debug('OUT: {0}'.format(distributedSql))
@@ -711,6 +759,7 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
     out = {'function': None}
 
     out['column'], out['alias'] = map(pgStripDoubleQuotes, m.groups())
+    #logging.info(u'in={} => alias={}'.format(identifierFragment, out['alias']))
 
     def _findColumn(name):
         """Try to find a specific column name from the table description."""
