@@ -285,6 +285,9 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     if args is None:
         args = tuple()
 
+    # Remove trailing semicolons from sql.
+    sql = sql.rstrip(';')
+
     shards = _resolveConnectionsOrShards(connections)
     if isinstance(shards, dict):
         # Only interested in the connection handles.
@@ -328,11 +331,9 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
         return token
 
-    def _findWhereTail(parsed, selectIdentifiers):
+    def _findWhereTail(parsed):
         """
         @param parsed sqlparse result
-
-        @param selectIdentifiers List of identifier tokens of SELECT-clause.
 
         @return str including the `where` clause and everything after it.
         """
@@ -405,9 +406,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         table = pgStripDoubleQuotes(table)
 
         def _findSelecting():
-            """
-            Watch for the "FROM" keyword and set a flag when it's been seen.
-            """
+            """Watch for the "FROM" keyword and set a flag once it's been seen."""
             isInteresting = lambda token: \
                 isinstance(token, IdentifierList) or isinstance(token, Identifier) or isinstance(token, Function)
 
@@ -466,13 +465,6 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             )
 
         joinedOut = map(joiner, flatIdentifiers)
-        #joinedOut = map(
-        #    lambda c: '{0}{1}'.format(
-        #        columns[c.value.strip('"')] if c.value.strip('"') in columns else c.value,
-        #        ' AS "{0}"'.format(c.get_alias()) if hasattr(c, 'has_alias') and c.has_alias() else ''
-        #    ),
-        #    flatIdentifiers
-        #)
 
         def columnAliasMapper(column, replacePeriods=False):
             """Given an identifier, resolves to a column/alias tuple."""
@@ -491,7 +483,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             map(lambda c: columnAliasMapper(c, True), flatIdentifiers)
         )
         #logging.info(u'_findColumns :: joinedOut={0}\ncolumnsToAliases={1}'.format(joinedOut, columnsToAliases))
-        return (joinedOut, columnsToAliases, selecting)
+        return (joinedOut, columnsToAliases)
 
     def _toDbLinkT(identifiers, table, listOfReferencedTables=None):
         """
@@ -533,16 +525,18 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                 identifier = '"{0}"'.format(stripped)
             del stripped
 
-            if not stripFunctions and p['function'] is not None and \
-                    p['function'].lower() in _aggregateFunctionTransformMappings.keys():
-                # Apply any function remappings below.
+            if stripFunctions is False and p['function'] is not None and \
+                p['function'].lower() in _aggregateFunctionTransformMappings.keys():
+                # Apply any remapping.
                 p['function'] = _aggregateFunctionTransformMappings[p['function']]
-                remapped.append('{0}({1}) {1}'.format(p['function'].upper(), identifier))
+                remapped.append('{0}({1}) {2}'.format(
+                    p['function'].upper(),
+                    identifier if identifier != '*' else '"{0}"'.format(identifier),
+                    identifier if identifier != '*' else ''
+                ).strip())
 
             else:
-                remapped.append(
-                    '{0}'.format(identifier)#if p['function'] is None else '{0}({1})'.format(p['function'], p['column'])
-                )
+                remapped.append('{0}'.format(identifier))
 
         return remapped
 
@@ -623,9 +617,9 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     listOfReferencedTables = _findReferencedTables(parsed)
 
     # NB: @var columnsToAliases Dict of column name to alias.  Used to generate a proper outer tail.
-    identifiers, columnsToAliases, selecting = _findColumns(parsed, table)
+    identifiers, columnsToAliases = _findColumns(parsed, table)
 
-    outerWhereTail, extraIdentifiers = _findWhereTail(parsed, selecting)
+    outerWhereTail, extraIdentifiers = _findWhereTail(parsed)
 
     # Create inner identifiers set.
     innerIdentifiers = \
@@ -637,8 +631,6 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
     # Sometimes count(*) needs to be remapped to sum(*) in the outermost query.
     remappedIdentifiers = _remapFunctionIdentifiers(*stdArgs) + (['shard'] if includeShardInfo is True else [])
-    outerRemappedIdentifiers = \
-        _remapFunctionIdentifiers(*stdArgs, stripFunctions=True) + (['shard'] if includeShardInfo is True else [])
 
     groupingTail = _prepareGroupingTail(*stdArgs, outerWhereTail=outerWhereTail)
 
@@ -661,6 +653,10 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     )
 
     if len(innerIdentifiers) > 0:
+        # Sometimes count(*) needs to be remapped to sum(*) in the outermost query.
+        outerRemappedIdentifiers = \
+            _remapFunctionIdentifiers(*stdArgs, stripFunctions=True) + (['shard'] if includeShardInfo is True else [])
+
         distributedSql = 'SELECT {outerRemapped}\n' \
             'FROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) q0 {tail}) q1'.format(
             outerRemapped=', '.join(outerRemappedIdentifiers),
