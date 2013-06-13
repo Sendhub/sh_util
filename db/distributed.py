@@ -450,20 +450,24 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             selecting
         )))
 
-        joinedOut = map(
-            lambda c: '{0}{1}'.format(
-                columns[c.value.strip('"')] if c.value.strip('"') in columns else c.value,
-                ' AS "{0}"'.format(c.get_alias()) if hasattr(c, 'has_alias') and c.has_alias() else ''
-            ),
-            flatIdentifiers
-        )
+        def joiner(column):
+            """Transform a sqlparse column into a SELECT-clause fragment."""
+            pIdent = parseIdentifier(str(column))
+            return '{0}{1}'.format(
+                columns[column.value.strip('"')] if column.value.strip('"') in columns else column.value,
+                ' AS "{0}"'.format(pIdent['alias']) if pIdent['alias'] is not None else ''
+                #c.get_alias()) if hasattr(c, 'has_alias') and c.has_alias() else ''
+            )
+
+        joinedOut = map(joiner, flatIdentifiers)
 
         def columnAliasMapper(column):
             """Given an identifier, resolves to a column/alias tuple."""
+            pIdent = parseIdentifier(str(column))
             value = column.value.strip('"')
             a = columns[value] if value in columns else column.value
-            b = '"{0}"'.format(
-                (column.get_alias() if hasattr(column, 'has_alias') and column.has_alias() else a).strip('"')
+            b = '"{0}"'.format((pIdent['alias'] if pIdent['alias'] is not None else a).strip('"')
+                #(column.get_alias() if hasattr(column, 'has_alias') and column.has_alias() else a).strip('"')
             )
             return (a, b)
 
@@ -631,7 +635,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}'.format(
         remapped=', '.join(remappedIdentifiers),
         multiShardSql=multiShardSql,
-        tail0=maybeGroupingTail,
+        tail0=maybeGroupingTail if 'GROUP BY' not in outerWhereTail.upper() else '',
         tail1=outerWhereTail
     ).strip()
 
@@ -659,10 +663,14 @@ _aggregateFunctions = {
     'min': '<T>',
     'string_agg': '<T>',
     'sum': 'numeric',
+    'to_char': 'character varying',
     'xmlagg': 'xml',
 }
 
-_identifierParser = re.compile(r'''^\s*(?P<identifier>.*?)(?:\s+(?:as\s+)?(?P<alias>[^ ]+?))?\s*$''', re.I)
+_identifierParser = re.compile(
+    r'''^\s*(?P<identifier>.*?)(?:\s+(?:as\s+)?(?P<alias>(?:[a-z0-9_]+|"[^"]+"?)))?\s*$''',
+    re.I
+)
 
 _aggregateParser = re.compile(
     r'''^(P<function>{0})\(\s*(?P<arg1>.*?)(?P<rest>(?:\s*,\s*.*?\s*)*)\)$''' \
