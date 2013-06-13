@@ -4,8 +4,7 @@
 
 __author__ = 'Jay Taylor [@jtaylor]'
 
-import logging
-import re, settings
+import logging, re, settings #, time
 
 
 def tableDescriptionToDbLinkT(description, columns='*'):
@@ -281,6 +280,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     from sqlparse.sql import Identifier, IdentifierList, Function, Where
     from sqlparse.tokens import Keyword, Wildcard
     from . import getPsqlConnectionString
+    #startedTs = time.time()
 
     if args is None:
         args = tuple()
@@ -328,11 +328,11 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
         return token
 
-    def _findWhereTail(parsed):
+    def _findWhereTail(parsed, selectIdentifiers):
         """
         @param parsed sqlparse result
 
-        @param columnsToAliases Dict of column name to alias.  Used to generate a proper outer tail.
+        @param selectIdentifiers List of identifier tokens of SELECT-clause.
 
         @return str including the `where` clause and everything after it.
         """
@@ -346,12 +346,13 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
             if seenInterestingKeyword:
                 outerTokens.append(token.value.replace('"."', '_'))
-                if isinstance(token, Identifier):
+                if isinstance(token, Identifier) and token.value not in \
+                    columnsToAliases.keys() + columnsToAliases.values() + map(lambda t: t.value, extraIdentifiers):
                     extraIdentifiers.append(token)
 
         # Strip offsets and limits from the outermost where tail (should retain only order by clauses).
         outerTail = _offsetLimitRe.sub('', ''.join(map(_remapTokenToAlias, outerTokens)).replace('\n', ' ')).strip()
-        #logging.info(u'outerTail->{0}'.format(outerTail))
+        #logging.info(u'_findWhereTail :: outerTail={0}\nextraIdentifiers={1}'.format(outerTail, extraIdentifiers))
 
         return (outerTail, extraIdentifiers)
 
@@ -490,7 +491,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             map(lambda c: columnAliasMapper(c, True), flatIdentifiers)
         )
         #logging.info(u'_findColumns :: joinedOut={0}\ncolumnsToAliases={1}'.format(joinedOut, columnsToAliases))
-        return (joinedOut, columnsToAliases)
+        return (joinedOut, columnsToAliases, selecting)
 
     def _toDbLinkT(identifiers, table, listOfReferencedTables=None):
         """
@@ -531,11 +532,10 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                 identifier = '"{0}"'.format(stripped)
             del stripped
 
-            if not stripFunctions and p['function'] is not None and p['function'].lower() in _aggregateFunctions.keys():
+            if not stripFunctions and p['function'] is not None and \
+                    p['function'].lower() in _aggregateFunctionTransformMappings.keys():
                 # Apply any function remappings below.
-                if p['function'].lower() == 'count':
-                    p['function'] = 'sum'
-
+                p['function'] = _aggregateFunctionTransformMappings[p['function']]
                 remapped.append('{0}({1}) {1}'.format(p['function'].upper(), identifier))
 
             else:
@@ -583,50 +583,48 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         return dbLinkSql.replace(' FROM', ', {0} FROM'.format(', '.join(extraIdentifiers)), 1) \
             if len(extraIdentifiers) > 0 else dbLinkSql
 
-    def _prepareGroupingTail(identifiers, table, listOfReferencedTables):
+    def _prepareGroupingTail(identifiers, table, listOfReferencedTables, outerWhereTail):
         """Identify and extract grouping clause to generate outer query grouping clause."""
         # For counts or sums where that was the only thing queried, chop off the
         # "where" portion of the outermost query.
-        whereTail = ''
+        #logging.info('OOOOOOOOOOOOUTER WHERE TAIL={}'.format(outerWhereTail))
+        initial = 'GROUP BY'
+        whereTail = outerWhereTail or initial
+        nextToken = ' ' if outerWhereTail else ', '
+
         if len(identifiers) == 1:
-            ident = parseIdentifier(
-                identifiers[0],
-                table,
-                listOfReferencedTables
-            )
+            ident = parseIdentifier(identifiers[0], table, listOfReferencedTables)
             if ident['function'] == 'count' and includeShardInfo is True:
-                whereTail = 'GROUP BY "shard"'
+                whereTail += '{0}"shard"'.format(nextToken)
 
         else:
             # List of parsed identifiers.
-            pids = map(
-                lambda i: parseIdentifier(i, table, listOfReferencedTables),
-                identifiers
-            )
+            pids = map(lambda i: parseIdentifier(i, table, listOfReferencedTables), identifiers)
             # List of aggregate function names.
-            aggregates = _aggregateFunctions.keys()
+            aggregates = _sqlFunctionTypeMappings.keys()
             # Check for aggregate function mixed with fields, and create
             # appropriate group-by clause.
-            containsAggregate = len(filter(
-                lambda pi: pi['function'] in aggregates,
-                pids
-            )) > 0
+            containsAggregate = len(filter(lambda pi: pi['function'] in aggregates, pids)) > 0
+            #logging.info('PIDS={}'.format(pids))
+            #logging.info('ADDING {}'.format(
+                    ', '.join(map(lambda pi: pi['column'], filter(lambda pi: pi['function'] not in aggregates, pids)))
+            ))
             if containsAggregate is True:
-                whereTail = 'GROUP BY {0}'.format(', '.join(map(
-                    lambda pi: pi['column'],
-                    filter(lambda pi: pi['function'] not in aggregates, pids)
-                )))
+                whereTail += '{0}{1}'.format(
+                    nextToken,
+                    ', '.join(map(lambda pi: pi['column'], filter(lambda pi: pi['function'] not in aggregates, pids)))
+                )
 
-        return whereTail
+        #logging.info('!!!!!!!!!!!! {}'.format(whereTail))
+        return whereTail if whereTail != initial else ''
 
     table = _findTable(parsed)
     listOfReferencedTables = _findReferencedTables(parsed)
 
     # NB: @var columnsToAliases Dict of column name to alias.  Used to generate a proper outer tail.
-    identifiers, columnsToAliases = _findColumns(parsed, table)
+    identifiers, columnsToAliases, selecting = _findColumns(parsed, table)
 
-    #innerWhereTail, outerWhereTail = _findWhereTail(parsed, columnsToAliases)
-    outerWhereTail, extraIdentifiers = _findWhereTail(parsed)
+    outerWhereTail, extraIdentifiers = _findWhereTail(parsed, selecting)
 
     # Create inner identifiers set.
     innerIdentifiers = \
@@ -641,7 +639,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     outerRemappedIdentifiers = \
         _remapFunctionIdentifiers(*stdArgs, stripFunctions=True) + (['shard'] if includeShardInfo is True else [])
 
-    maybeGroupingTail = _prepareGroupingTail(*stdArgs)
+    groupingTail = _prepareGroupingTail(*stdArgs, outerWhereTail=outerWhereTail)
 
     # Get SQL with single quotes -> double single quotes.
     dbLinkSql = _prepareDbLinkQuery(sql, innerIdentifiers)
@@ -663,21 +661,19 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
     if len(innerIdentifiers) > 0:
         distributedSql = 'SELECT {outerRemapped}\n' \
-            'FROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}) q1'.format(
+            'FROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) q0 {tail}) q1'.format(
             outerRemapped=', '.join(outerRemappedIdentifiers),
             remapped=', '.join(remappedIdentifiers),
             inner=', '.join(map(lambda i: i.replace('"."', '_'), innerIdentifiers)),
             multiShardSql=multiShardSql,
-            tail0=maybeGroupingTail,
-            tail1=outerWhereTail
+            tail=groupingTail
         ).strip()
 
     else:
-        distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}'.format(
+        distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail}'.format(
             remapped=', '.join(remappedIdentifiers),
             multiShardSql=multiShardSql,
-            tail0=maybeGroupingTail,
-            tail1=outerWhereTail
+            tail=groupingTail,
         ).strip()
 
     #distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}'.format(
@@ -687,8 +683,10 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     #    tail1=outerWhereTail
     #).strip()
 
-    logging.debug('IN: {0}'.format(sql))
-    logging.debug('OUT: {0}'.format(distributedSql))
+    #finishedTs = time.time()
+    #logging.info(u'distributedSelect took {0}'.format(finishedTs - startedTs))
+    #logging.debug(u'IN: {0}'.format(sql))
+    #logging.debug(u'OUT: {0}'.format(distributedSql))
 
     #from django_util.log_errors import print_stack
     #logging.debug('[distributedSelect stack]')
@@ -697,9 +695,14 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     return (distributedSql % (args * len(shards))).replace('%', '%%'), tuple()
 
 
-_aggregateFunctions = {
+# Some aggregate functions require remapping in the outermost part of the distributed query to produce the expected
+# combined result.  e.g. count -> sum
+_aggregateFunctionTransformMappings = {
+    'count': 'sum',
+}
+
+_aggregateFunctionTypeMappings = {
     # NB: <T> is used to indicate the same as the underlying type of the input.
-#    'array_agg': '', # Not currently supported
     'avg': 'numeric',
     'bit_and': '<T>',
     'bit_or': '<T>',
@@ -715,14 +718,22 @@ _aggregateFunctions = {
     'xmlagg': 'xml',
 }
 
-_identifierParser = re.compile(
+# Recognized functions:
+_sqlFunctionTypeMappings = dict(
+    {
+        'to_char': 'character varying',
+        'array_agg': 'bigint[]', # NB: actually returns array[T] (Not fully supported, bigint[] is just a common case).
+    }.items() + _aggregateFunctionTypeMappings.items()
+)
+
+_identifierParserRe = re.compile(
     r'''^\s*(?P<identifier>.*?)(?:\s+(?:as\s+)?(?P<alias>(?:[a-z0-9_]+|"[^"]+"?)))?\s*$''',
     re.I
 )
 
-_aggregateParser = re.compile(
-    r'''^(P<function>{0})\(\s*(?P<arg1>.*?)(?P<rest>(?:\s*,\s*.*?\s*)*)\)$''' \
-        .format('|'.join(_aggregateFunctions.keys())),
+_functionParserRe = re.compile(
+    r'''^(?P<function>{0})\(\s*(?P<arg1>.*?)(?P<rest>(?:\s*,\s*.*?\s*)*)\)$''' \
+        .format('|'.join(_sqlFunctionTypeMappings.keys())),
     re.I
 )
 
@@ -752,7 +763,7 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
     if listOfReferencedTables is None:
         listOfReferencedTables = []
 
-    m = _identifierParser.match(identifierFragment)
+    m = _identifierParserRe.match(identifierFragment)
     if m is None:
         raise Exception('No identifer found in "{0}"'.format(identifierFragment))
 
@@ -794,7 +805,7 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
 
     def _attemptTypeInference():
         """Infer the identifiers return type."""
-        aggregateTest = _aggregateParser.match(out['column'])
+        aggregateTest = _functionParserRe.match(out['column'])
         if aggregateTest is None:
             return
 
@@ -811,11 +822,11 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
             out['column'] = arg1
 
         # Function return type inference/lookup.
-        if out['function'] in _aggregateFunctions:
-            out['type'] = _aggregateFunctions[out['function']]
+        if out['function'] in _aggregateFunctionTypeMappings:
+            out['type'] = _sqlFunctionTypeMappings[out['function']]
 
         else:
-            # If not in _aggregateFunctions, try to query for the return type.
+            # If not in _aggregateFunctionTypeMappings, try to query for the return type.
             returnType = plFunctionReturnType(out['function'])
             if len(returnType) > 0:
                 out['type'] = returnType[0][0]
