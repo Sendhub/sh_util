@@ -524,6 +524,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
             p = parseIdentifier(identifier, table, listOfReferencedTables)
 
+            #logging.info('........identifier={}'.format(p))
             identifier = p['alias'] if p['alias'] is not None else p['column']
 
             # Add quoting if appropriate.
@@ -685,8 +686,8 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
     #finishedTs = time.time()
     #logging.info(u'distributedSelect took {0}'.format(finishedTs - startedTs))
-    #logging.debug(u'IN: {0}'.format(sql))
-    #logging.debug(u'OUT: {0}'.format(distributedSql))
+    logging.debug(u'IN: {0}'.format(sql))
+    logging.debug(u'OUT: {0}'.format(distributedSql))
 
     #from django_util.log_errors import print_stack
     #logging.debug('[distributedSelect stack]')
@@ -727,8 +728,13 @@ _sqlFunctionTypeMappings = dict(
 )
 
 _identifierParserRe = re.compile(
-    r'''^\s*(?P<identifier>.*?)(?:\s+(?:as\s+)?(?P<alias>(?:[a-z0-9_]+|"[^"]+"?)))?\s*$''',
-    re.I
+    r'''
+        ^\s*
+        (?P<identifier>(?:[a-zA-Z0-9_]+\()?(?P<column>.*?)(?:\))?)
+        (?:\s+(?:as\s+)?(?P<alias>(?:[a-z0-9_]+|"[^"]+"?)))?
+        \s*$
+    ''',
+    re.I | re.X
 )
 
 _functionParserRe = re.compile(
@@ -769,12 +775,13 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
 
     out = {'function': None}
 
-    out['column'], out['alias'] = map(pgStripDoubleQuotes, m.groups())
-    #logging.info(u'in={} => alias={}'.format(identifierFragment, out['alias']))
+    out['identifier'], out['column'], out['alias'] = map(pgStripDoubleQuotes, m.groups())
+    #logging.info(u'in={}, column={}, alias={}'.format(identifierFragment, out['column'], out['alias']))
 
     def _findColumn(name):
         """Try to find a specific column name from the table description."""
         # Test for table.column or "table"."column"-style column name:
+        #logging.info('NAME={}'.format(name))
         tableColumnMatch = _tableColumnRe.match(out['column'])
         if tableColumnMatch is not None:
             name = tableColumnMatch.group('column').replace('"', '')
@@ -805,7 +812,7 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
 
     def _attemptTypeInference():
         """Infer the identifiers return type."""
-        aggregateTest = _functionParserRe.match(out['column'])
+        aggregateTest = _functionParserRe.match(out['identifier'])
         if aggregateTest is None:
             return
 
@@ -838,7 +845,7 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
 
     # Do our best to infer the type if the attempt failed or resulted in
     # a '<T>'.
-    found = _findColumn(out['column'])
+    found = _findColumn(out['identifier'])
     if 'type' not in out or out['type'] == '<T>':
         # Try to find the column type from the description of the table.
         if found is not None:
@@ -850,6 +857,8 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
     # @TODO Add support for inferring `1 as q` as bigint,
     # 'someval' as character varying, etc.
 
+    # NB: For our purposes, the column will always be referred to by the full auto-generated alias (with underscores)
+    # rather than the table.column.
     out['column'] = out['column'].replace('"."', '_')
     return out
 
