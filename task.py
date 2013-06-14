@@ -42,7 +42,6 @@ def _generateSubject(
 
 def _on_failure(self, exc, task_id, args, kwargs, einfo):
     """Failure callback handler with email support."""
-    from sh_util.mail import sendEmail
     body = '''Async task on failure triggered:
 --------------------------------------------------------------------------------
 exc: {exc}
@@ -52,6 +51,9 @@ kwargs: {kwargs}
 einfo: {einfo}
 --------------------------------------------------------------------------------
 '''.format(exc=exc, task_id=task_id, args=args, kwargs=kwargs, einfo=einfo)
+    logging.error(body)
+
+    from sh_util.mail import sendEmail
     sendEmail(
         subject=_generateSubject(str(einfo)),
         body=body,
