@@ -25,6 +25,7 @@ from .reflect import describe, discoverDependencies, findTablesWithUserIdColumn,
 from .distributed import tableDescriptionToDbLinkT
 # NB: Don't use cStringIO because it is unable to work with UTF-8.
 from StringIO import StringIO
+from ..text import toSingleLine
 
 
 # Logical shard S3 backup path.
@@ -38,7 +39,7 @@ def _baseBackupFileName(logicalShardId, ts):
 # Used to cleanup SQL queries sometimes (not always guaranteed to be safe
 # WRT messing up your SQL query, discretion required).
 _spacesRe = re.compile(r'\s+', re.M)
-_toSingleLine = lambda s: _spacesRe.sub(' ', s).strip()
+toSingleLine = lambda s: _spacesRe.sub(' ', s).strip()
 
 
 class MigrateUserError(Exception):
@@ -171,7 +172,7 @@ def autoDbLinkInsert(table, dbLinkSql, sourceConnectionString, using='default', 
     if sourceConnectionString in connections():
         sourceConnectionString = getPsqlConnectionString(sourceConnectionString)
 
-    dbLinkSql = _toSingleLine(dbLinkSql)
+    dbLinkSql = toSingleLine(dbLinkSql)
     dbLinkT = tableDescriptionToDbLinkT(describe(table))
 
     try:
@@ -240,7 +241,7 @@ def tableRowCounts(tableColumnPairs, userIdOrUserIds, using):
     isIterable = isinstance(userIdOrUserIds, (set, list))
 
     sql = ' UNION '.join(map(
-        lambda (table, column): _toSingleLine(
+        lambda (table, column): toSingleLine(
             '''
                 SELECT '{table}' "table", COUNT(*) "count"
                 FROM "{table}"
@@ -703,7 +704,7 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
             logging.debug(u'Skipping copy to static table: {0}'.format(sourceTable))
             return
 
-        dbLinkSql = _toSingleLine(
+        dbLinkSql = toSingleLine(
             '''
                 SELECT * FROM "{sourceTable}" WHERE "{pk}" IN (
                     SELECT "{innerColumn}" FROM "{innerTable}" WHERE "{innerUserIdColumn}" in ({userIds})
@@ -962,7 +963,7 @@ def deleteUsers(userIds, using, **kw):
         )
         ''',
     ]
-    map(lambda sql: db_exec(_toSingleLine(sql.format(inUserIds)), using=using), sqls)
+    map(lambda sql: db_exec(toSingleLine(sql.format(inUserIds)), using=using), sqls)
     del sqls
 
     savePoint = 0
@@ -994,7 +995,7 @@ def deleteUsers(userIds, using, **kw):
 
                     logging.info(u'[{0}] Deleting from subtable: {1}'.format(using, sourceTable))
 
-                    deleteSql = _toSingleLine(
+                    deleteSql = toSingleLine(
                         '''
                             DELETE FROM "{sourceTable}" WHERE "{pk}" IN (
                                 SELECT "{fkColumn}" FROM "{fkTable}" WHERE "{userIdColumn}" IN ({userIds})
@@ -1019,7 +1020,7 @@ def deleteUsers(userIds, using, **kw):
 
                     logging.info(u'[{0}] Deleting from subtable: {1}'.format(using, fkTable))
 
-                    deleteSql = _toSingleLine(
+                    deleteSql = toSingleLine(
                         '''
                             DELETE FROM "{fkTable}" WHERE "{fkColumn}" IN (
                                 SELECT "{column}" FROM "{table}" WHERE "{userIdColumn}" IN ({userIds})
@@ -1035,7 +1036,7 @@ def deleteUsers(userIds, using, **kw):
                     )
                     db_exec(deleteSql, using=using)
 
-            deleteSql = _toSingleLine(
+            deleteSql = toSingleLine(
                 '''DELETE FROM "{0}" WHERE "{1}" IN ({2})'''.format(table, userIdColumn, inUserIds)
             )
             db_exec(deleteSql, using=using)

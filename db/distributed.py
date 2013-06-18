@@ -5,6 +5,7 @@
 __author__ = 'Jay Taylor [@jtaylor]'
 
 import logging, re, settings #, time
+from ..text import toSingleLine
 
 
 def tableDescriptionToDbLinkT(description, columns='*'):
@@ -282,6 +283,8 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     from . import getPsqlConnectionString
     #startedTs = time.time()
 
+    sql = toSingleLine(sql)
+
     if args is None:
         args = tuple()
 
@@ -345,13 +348,13 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             if seenInterestingKeyword is not True and str(token).lower() in ('group', 'limit', 'order'):
                 seenInterestingKeyword = True
 
-            if seenInterestingKeyword:
+            if seenInterestingKeyword is True:
                 outerTokens.append(token.value.replace('"."', '_'))
                 if isinstance(token, Identifier) and token.value not in \
-                    columnsToAliases.keys() + columnsToAliases.values() + map(lambda t: t.value, extraIdentifiers):
+                    columnsToAliases.values() + map(lambda t: t.value, extraIdentifiers):
                     extraIdentifiers.append(token)
 
-        # Strip offsets and limits from the outermost where tail (should retain only order by clauses).
+        # Strip offsets and limits from the outermost where tail (should retain only order-by clauses).
         outerTail = _offsetLimitRe.sub('', ''.join(map(_remapTokenToAlias, outerTokens)).replace('\n', ' ')).strip()
         #logging.info(u'_findWhereTail :: outerTail={0}\nextraIdentifiers={1}'.format(outerTail, extraIdentifiers))
 
@@ -434,6 +437,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
                     if active and isInteresting(token):
                         found.append(token)
 
+            #logging.info(u'SELECTING FOUND {0}'.format(map(lambda x: str(x), found)))
             return found
 
         selecting = _findSelecting()
@@ -575,7 +579,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             # Then add 2 single quotes around any %s string arguments.
             dbLinkSql = _stringArgumentFinder.sub(positionalCallback, dbLinkSql)
 
-        return dbLinkSql.replace(' FROM', ', {0} FROM'.format(', '.join(extraIdentifiers)), 1) \
+        return re.sub(r'([\n ])FROM([\n ])', r', {0}\1FROM\2'.format(', '.join(extraIdentifiers)), dbLinkSql, 1) \
             if len(extraIdentifiers) > 0 else dbLinkSql
 
     def _prepareGroupingTail(identifiers, table, listOfReferencedTables, outerWhereTail):
@@ -618,6 +622,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
     # NB: @var columnsToAliases Dict of column name to alias.  Used to generate a proper outer tail.
     identifiers, columnsToAliases = _findColumns(parsed, table)
+    #logging.info(u'columnsToAliases={0}'.format(columnsToAliases))
 
     outerWhereTail, extraIdentifiers = _findWhereTail(parsed)
 
