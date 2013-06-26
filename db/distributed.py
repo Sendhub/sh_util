@@ -257,7 +257,7 @@ _stringArgumentFinder = re.compile(r'%s')
 
 _offsetLimitRe = re.compile(r'(:?OFFSET|LIMIT)\s+\d+', re.I)
 
-def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, usePersistentDbLink=None):
+def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, usePersistentDbLink=None, alias='q0'):
     """
     Generate a distributed query and associated args.  Note: when there is only one connection (or shard), the same
     sql/args will be returned to avoid doing unnecessary work.
@@ -663,24 +663,27 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
             _remapFunctionIdentifiers(*stdArgs, stripFunctions=True) + (['shard'] if includeShardInfo is True else [])
 
         distributedSql = 'SELECT {outerRemapped}\n' \
-            'FROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) q0 {tail}) q1'.format(
+            'FROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) {alias} {tail}) q1'.format(
             outerRemapped=', '.join(outerRemappedIdentifiers),
             remapped=', '.join(remappedIdentifiers),
             inner=', '.join(map(lambda i: i.replace('"."', '_'), innerIdentifiers)),
             multiShardSql=multiShardSql,
-            tail=groupingTail
-        ).strip()
-
-    else:
-        distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail}'.format(
-            remapped=', '.join(remappedIdentifiers),
-            multiShardSql=multiShardSql,
+            alias=alias,
             tail=groupingTail,
         ).strip()
 
-    #distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) q0 {tail0} {tail1}'.format(
+    else:
+        distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) {alias} {tail}'.format(
+            remapped=', '.join(remappedIdentifiers),
+            multiShardSql=multiShardSql,
+            alias=alias,
+            tail=groupingTail,
+        ).strip()
+
+    #distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) {alias} {tail0} {tail1}'.format(
     #    remapped=', '.join(remappedIdentifiers),
     #    multiShardSql=multiShardSql,
+    #    alias=alias,
     #    tail0=maybeGroupingTail if 'GROUP BY' not in outerWhereTail.upper() else '',
     #    tail1=outerWhereTail
     #).strip()
