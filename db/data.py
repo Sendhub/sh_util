@@ -933,7 +933,7 @@ def deleteUsers(userIds, using, **kw):
         )
         ''',
         '''
-        DELETE FROM "main_enterpriseinvitation" WHERE "owner_id" = {0}
+        DELETE FROM "main_invitation" WHERE "owner_id" = {0}
         ''',
         '''
         DELETE FROM "main_enterpriseinvitation" WHERE "invitation_ptr_id" IN (
