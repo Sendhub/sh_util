@@ -924,8 +924,18 @@ def deleteUsers(userIds, using, **kw):
             )
         ''',
         '''
+        DELETE FROM "main_groupshare" WHERE "invitation_ptr_id" IN (
+            SELECT "id" FROM "main_invitation" WHERE "owner_id" IN ({0})
+        )
+        ''',
+        '''
         DELETE FROM "main_sendhubinvitation" WHERE "invitation_ptr_id" IN (
             SELECT "id" FROM "main_invitation" WHERE "user_id" IN ({0})
+        )
+        ''',
+        '''
+        DELETE FROM "main_sendhubinvitation" WHERE "invitation_ptr_id" IN (
+            SELECT "id" FROM "main_invitation" WHERE "owner_id" IN ({0})
         )
         ''',
         '''
