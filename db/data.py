@@ -377,11 +377,12 @@ def migrateLogicalShard(logicalShardId, destinationShard):
         else:
             logging.info(u'SUCCEEDED: pre/post source/destination counts all match')
             fileName = '{0}.succeeded'.format(baseFileName)
+            newPhysicalShardId = ShardedResource.shardNameToId(destinationShard)
             logging.info(
                 u'Updating LogicalShard table to point id={0} at physicalShardId={1}' \
-                .format(logicalShardId, physicalShardId)
+                .format(logicalShardId, newPhysicalShardId)
             )
-            setLogicalShardPhysicalShardId(logicalShardId, ShardedResource.shardNameToId(destinationShard), 'OK')
+            setLogicalShardPhysicalShardId(logicalShardId, newPhysicalShardId, 'OK')
             attemptMemcacheFlush()
             deleteUsers(userIds, sourceShard)
 
@@ -931,6 +932,9 @@ def deleteUsers(userIds, using, **kw):
         DELETE FROM "main_enterpriseinvitation" WHERE "invitation_ptr_id" IN (
             SELECT "id" FROM "main_invitation" WHERE "user_id" IN ({0})
         )
+        ''',
+        '''
+        DELETE FROM "main_invitation" WHERE "owner_id" IN ({0})
         ''',
         '''
         DELETE FROM "main_usermessage_contacts" WHERE "contact_id" IN (
