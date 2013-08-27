@@ -665,7 +665,7 @@ def migrateUser(userId, sourceShard, destinationShard):
 _additionalRelations = {
     'main_receipt': [('main_receipt', 'shortlink_id', 'main_shortlink'),],
     'main_usermessage': [('main_usermessage', 'shortlink_id', 'main_shortlink'),],
-    'main_extendeduser': [('main_extendeduser', 'twilio_phone_number_id', 'main_phonenumber'),],
+    'main_extendeduser': [('main_extendeduser', 'twilio_phone_number_id', 'main_phonenumber'),('main_extendeduser', 'entitlement_id', 'main_entitlement'),],
     'main_groupshare': [('main_groupshare', 'invitation_ptr_id', 'main_invitation'),],
 }
 
@@ -983,6 +983,16 @@ def deleteUsers(userIds, using, **kw):
         '''
         DELETE FROM "main_voicecallrating" WHERE "voiceCall" IN (
             SELECT "id" FROM "main_voicecall" WHERE "user_id" IN ({0})
+        )
+        ''',
+        '''
+        DELETE FROM "main_phonenumber" WHERE "id" IN (
+            SELECT "twilio_phone_number_id" FROM "main_extendeduser" WHERE "user_id" IN ({0})
+        )
+        ''',
+        '''
+        DELETE FROM "main_entitlement" WHERE "id" IN (
+            SELECT "entitlement_id" FROM "main_extendeduser" WHERE "user_id" IN ({0})
         )
         ''',
     ]
