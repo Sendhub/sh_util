@@ -51,6 +51,21 @@ def getPrimaryKeyColumns(table, using='default'):
     return allTableNamesAndPrimaryKeys(using=using).get(table, [])
 
 
+def updatePrimaryKeyId(table, currentId, newId, using):
+    """Update a primary-key id to a new value everywhere it is referenced."""
+    from . import db_exec
+    pkColumns = getPrimaryKeyColumns(table)
+    assert len(pkColumns) == 1, 'updatePrimaryKeyId can only operate on tables with 1 primary key, but table "{0}" had {1}'.format(table, len(pkColumns))
+    discoveredRelations = discoverDependencies([table])
+    # NB: If the table is not in the returned dict, then there are no dependencies.
+    if table in discoveredRelations:
+        relations = discoveredRelations[table]
+        db_exec('SET CONSTRAINTS ALL DEFERRED', using=using)
+        for _, relTable, relColumn in relations:
+            db_exec('UPDATE "{relTable}" SET "{relColumn}" = {newId} WHERE "{relColumn}" = {currentId}'.format(relTable=relTable, relColumn=relColumn, newId=newId, currentId=currentId), using=using)
+    db_exec('UPDATE "{table}" SET "{pkColumn}" = {newId} WHERE "{pkColumn}" = {currentId}'.format(table=table, pkColumn=pkColumns[0], newId=newId, currentId=currentId), using=using)
+
+
 @memoize
 def plFunctionReturnType(function, as_dict=False, using='default'):
     """Get the return type for a user defined PL/SQL function."""
