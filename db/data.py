@@ -944,6 +944,11 @@ def deleteUsers(userIds, using, **kw):
         )
         ''',
         '''
+        DELETE FROM "main_enterpriseinvitation" WHERE "invitation_ptr_id" IN (
+            SELECT "id" FROM "main_invitation" WHERE "owner_id" IN ({0})
+        )
+        ''',
+        '''
         DELETE FROM "main_invitation" WHERE "owner_id" IN ({0})
         ''',
         '''
@@ -989,6 +994,11 @@ def deleteUsers(userIds, using, **kw):
         '''
         DELETE FROM "main_entitlement" WHERE "id" IN (
             SELECT "entitlement_id" FROM "main_extendeduser" WHERE "user_id" IN ({0})
+        )
+        ''',
+        '''
+        DELETE FROM "main_receipt" WHERE "group_id" IN (
+            SELECT "id" FROM "main_group" WHERE "user_id" IN ({0})
         )
         ''',
     ]
