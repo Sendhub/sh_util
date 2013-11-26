@@ -239,7 +239,7 @@ def tableRowCounts(tableColumnPairs, userIdOrUserIds, using):
     # True if userIdOrUserIds is an iterable, otherwise False.
     isIterable = isinstance(userIdOrUserIds, (set, list))
 
-    sql = ' UNION '.join(map(
+    sql = ' UNION ALL '.join(map(
         lambda (table, column): toSingleLine(
             '''
                 SELECT '{table}' "table", COUNT(*) "count"
