@@ -46,6 +46,7 @@ def labelUser(userId, isBad, reason):
 
     if settings.SIFTSCIENCE_ENABLED != '1':
         logging.warning('Siftscience disabled. Exiting.')
+        return
 
     if isBad:
         label = mapReasonToSiftScienceLabel(reason)
