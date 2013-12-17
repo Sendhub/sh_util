@@ -44,6 +44,9 @@ def labelUser(userId, isBad, reason):
 
     SIFTSCIENCE_203_API_URL = 'https://api.siftscience.com/v203/'
 
+    if settings.SIFTSCIENCE_ENABLED != '1':
+        logging.warning('Siftscience disabled. Exiting.')
+
     if isBad:
         label = mapReasonToSiftScienceLabel(reason)
     else:
