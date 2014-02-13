@@ -296,9 +296,12 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
         # Only interested in the connection handles.
         shards = shards.keys()
 
-    if len(shards) == 1: # and includeShardInfo is False:
-        # Is it desirable to use DB-Link when there is only 1 shard? No..
-        return (sql, args)
+    # ALWAYS USE DBLINK: this is because this produces different result
+    # sets (ex: dblink returns table names in the result set)
+    # which makes for shitty special case programming
+    #if len(shards) == 1: # and includeShardInfo is False:
+    #    # Is it desirable to use DB-Link when there is only 1 shard? No..
+    #    return (sql, args)
 
     # Use supplied value if not None, otherwise read from environment.
     usePersistentDbLink = usePersistentDbLink if usePersistentDbLink is not None \
