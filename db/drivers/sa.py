@@ -141,7 +141,7 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     psqlValues = {}
     for key, param, default in _saAttrsToPsql:
-        psqlValues[key] = getattr(engine.url, key) or default
+        psqlValues[param] = getattr(engine.url, key) or default
 
     if settings.DIRECT_DATABASE_HOSTS[connectionName]:
         psqlValues['host'] = settings.DIRECT_DATABASE_HOSTS[connectionName]
