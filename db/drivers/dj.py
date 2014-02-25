@@ -94,7 +94,7 @@ _djangoConfigToPsql = (
     ('NAME', 'dbname'),
     ('USER', 'user'),
     ('PASSWORD', 'password'),
-    ('HOST', 'host'),
+    ('DIRECT_HOST', 'host'),
     ('PORT', 'port'),
 )
 
