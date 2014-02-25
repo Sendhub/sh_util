@@ -139,7 +139,14 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = 'sslmode=require' if secure is True else ''
 
-    psqlTuples = map(lambda (key, param, default): '{0}={1}'.format(param, getattr(engine.url, key) or default), _saAttrsToPsql)
+    psqlValues = {}
+    for key, param, default in _saAttrsToPsql:
+        psqlValues[key] = getattr(engine.url, key) or default
+
+    if settings.DIRECT_DATABASE_HOSTS[connectionName]:
+        psqlValues['host'] = settings.DIRECT_DATABASE_HOSTS[connectionName]
+
+    psqlTuples = ['{0}={1}'.format(k, psqlValues[k]) for k in psqlValues]
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out
