@@ -106,10 +106,10 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = 'sslmode=require' if secure is True else ''
 
-    filtered = filter(
+    filtered = list(filter(
         lambda (key, _): key in dbConfig and dbConfig[key] is not None and dbConfig[key] != '',
         _djangoConfigToPsql
-    )
+    ))
 
     if 'DIRECT_HOST' in dbConfig:
         filtered.append(('DIRECT_HOST', 'host'))
