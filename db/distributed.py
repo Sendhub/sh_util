@@ -643,7 +643,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
     dbLinkSql = _prepareDbLinkQuery(sql, innerIdentifiers)
     #logging.info('usePersistentDbLink={}'.format(usePersistentDbLink))
 
-    multiShardSql = '\nUNION\n'.join(
+    multiShardSql = '\nUNION ALL\n'.join(
         map(
             lambda shard: '''SELECT *{maybeSelectShardId} FROM ''' \
                 '''dblink('{connectionString}', '{dbLinkSql}') AS {tClause}'''.format(

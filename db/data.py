@@ -1464,6 +1464,11 @@ def deleteUsers(userIds, using, **kw):
             SELECT "entitlement_id" FROM "main_extendeduser" WHERE "user_id" IN ({0})
         )
         ''',
+        '''
+        DELETE FROM "main_receipt" WHERE "group_id" IN (
+            SELECT "id" FROM "main_group" WHERE "user_id" IN ({0})
+        )
+        ''',
     ]
     map(lambda sql: db_exec(toSingleLine(sql.format(inUserIds)), using=using), sqls)
     del sqls

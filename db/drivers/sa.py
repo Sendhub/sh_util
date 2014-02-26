@@ -47,7 +47,10 @@ def switchDefaultDatabase(name):
 def getRealShardConnectionName(using):
     """Lookup and return the ACTUAL connection name, never use 'default'."""
     if using == 'default':
-        using = connections().keys()[0]
+        if hasattr(settings, 'DATABASE_DEFAULT_SHARD'):
+            using = settings.DATABASE_DEFAULT_SHARD
+        else:
+            using = connections().keys()[0]
 
     return using
 
