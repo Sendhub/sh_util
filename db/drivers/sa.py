@@ -143,7 +143,7 @@ def getPsqlConnectionString(connectionName, secure=True):
     for key, param, default in _saAttrsToPsql:
         psqlValues[param] = getattr(engine.url, key) or default
 
-    if settings.DIRECT_DATABASE_HOSTS[connectionName]:
+    if connectionName in settings.DIRECT_DATABASE_HOSTS and settings.DIRECT_DATABASE_HOSTS[connectionName]:
         psqlValues['host'] = settings.DIRECT_DATABASE_HOSTS[connectionName]
 
     psqlTuples = ['{0}={1}'.format(k, psqlValues[k]) for k in psqlValues]

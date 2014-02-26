@@ -94,7 +94,6 @@ _djangoConfigToPsql = (
     ('NAME', 'dbname'),
     ('USER', 'user'),
     ('PASSWORD', 'password'),
-    ('DIRECT_HOST', 'host'),
     ('PORT', 'port'),
 )
 
@@ -111,6 +110,11 @@ def getPsqlConnectionString(connectionName, secure=True):
         lambda (key, _): key in dbConfig and dbConfig[key] is not None and dbConfig[key] != '',
         _djangoConfigToPsql
     )
+
+    if 'DIRECT_HOST' in dbConfig:
+        filtered.append(('DIRECT_HOST', 'host'))
+    else:
+        filtered.append(('HOST', 'host'))
 
     psqlTuples = map(lambda (key, param): '{0}={1}'.format(param, dbConfig[key]), filtered)
 
