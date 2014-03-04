@@ -137,7 +137,8 @@ class KazooClient(object):
             u'device_type':u'softphone',
             u'owner_id':str(ownerId),
             u'pvt_sendhub_user_id':userId,
-            u'pvt_sendhub_enterprise_id':enterpriseId
+            u'pvt_sendhub_enterprise_id':enterpriseId,
+            u'sendhub_number':number
         }
 
     def _physicalPhoneTemplate(self, userId, enterpriseId, ownerId, number, type=u'cellphone', name=u'cell'):
@@ -158,7 +159,8 @@ class KazooClient(object):
             },
             u'owner_id':str(ownerId),
             u'pvt_sendhub_user_id':userId,
-            u'pvt_sendhub_enterprise_id':enterpriseId
+            u'pvt_sendhub_enterprise_id':enterpriseId,
+            u'forwarding_number':number
         }
 
     def createDevice(self, type, accountId, userId, enterpriseId, ownerId, number, username=u'', password=u'', name='phone'):
@@ -368,6 +370,7 @@ class KazooClient(object):
 
             if phoneNumber is not None:
                 try:
+                    phoneNumber = phoneNumber[2:] if phoneNumber.startswith("+1") else phoneNumber
                     self.kazooCli.delete_phone_number(accountId, phoneNumber)
                 except Exception as e:
                     logging.error('Unable to delete phone number: {}'.format(phoneNumber))
