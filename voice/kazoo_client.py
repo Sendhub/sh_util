@@ -131,6 +131,16 @@ class KazooClient(object):
                 u'username':username,
                 u'password':password,
             },
+            u"caller_id": {
+                u"external": {
+                    u"number": number,
+                    u"name": u""
+                },
+                u"internal": {
+                    u"name": u"",
+                    u"number": number
+                }
+            },
             u'caller_id':{
                 u'external':{u'number':number}
             },
