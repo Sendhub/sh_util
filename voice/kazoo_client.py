@@ -141,9 +141,6 @@ class KazooClient(object):
                     u"number": number
                 }
             },
-            u'caller_id':{
-                u'external':{u'number':number}
-            },
             u'device_type':u'softphone',
             u'owner_id':str(ownerId),
             u'sendhub_number':number
@@ -210,11 +207,35 @@ class KazooClient(object):
         callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
 
         # anything but the following is invalid, so this should blow up
-        assert 'data' in callFlow and 'numbers' in callFlow['data']['numbers'], "Detected invalid call flow when provisioning new number"
+        assert 'data' in callFlow and 'numbers' in callFlow['data'], "Detected invalid call flow when provisioning new number"
+
+        shortNumber = number[2:] if number.startswith("+1") else number
+        self.kazooCli.create_phone_number(accountId, shortNumber)
 
         callFlow['data']['numbers'].append(number)
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
+        self.kazooCli.update_callflow(accountId, callFlowId, callFlow)
+
+    def deProvisionPhoneNumberAndRemoveFromCallFlow(self, accountId, callFlowId, number):
+        logging.info('deProvisionPhoneNumberAndRemoveFromCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
+
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        # let this blow up if it fails.. it should always succeed
+        callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
+
+        # anything but the following is invalid, so this should blow up
+        assert 'data' in callFlow and 'numbers' in callFlow['data'], "Detected invalid call flow when provisioning new number"
+
+        callFlow['data']['numbers'] = [nbr for nbr in callFlow['data']['numbers'] if number != nbr]
+
+        self.kazooCli.update_callflow(accountId, callFlowId, callFlow)
+
+        shortNumber = number[2:] if number.startswith("+1") else number
+        self.kazooCli.delete_phone_number(accountId, shortNumber)
 
     def createUser(self, accountId, name, userId, password, enterpriseId, sipUsername, sipPassword, softPhoneNumber=None, cellPhoneNumbers=[], email=None):
         '''
@@ -274,28 +295,51 @@ class KazooClient(object):
                 if createUserResult['status'] == 'success':
 
                     callFlow = DEFAULT_KAZOO_CALL_FLOW
-
                     callFlow['numbers'].append(str(userId))
-                    callFlow['flow']['data']['endpoints'].append(
-                        {
-                            "endpoint_type":"user",
-                            "id":str(createUserResult['data']['id']),
-                            "delay":"0",
-                            "timeout": '{}'.format(DEFAULT_RING_TIMEOUT)
-                        }
-                    )
 
                     softPhoneDeviceResult = None
                     if softPhoneNumber is not None:
                         shortNumber = softPhoneNumber[2:] if softPhoneNumber.startswith("+1") else softPhoneNumber
                         self.kazooCli.create_phone_number(accountId, shortNumber)
-                        # arbitrary data cannot be passed in the create request so we gotta send two
-                        self.kazooCli.update_phone_number(accountId, shortNumber, {'userId':str(userId)})
 
                         callFlow['numbers'].append(softPhoneNumber)
 
                         softPhoneDeviceResult = self.createDevice(type=u'softphone', accountId=accountId, userId=userId, enterpriseId=enterpriseId,
                                           ownerId=createUserResult['data']['id'], number=shortNumber, username=sipUsername, password=sipPassword)
+
+                        softPhoneGroupResult = self.kazooCli.create_group(
+                            accountId,
+                            {
+                                u"music_on_hold": {},
+                                u"name": str(userId),
+                                u"resources": {},
+                                u"endpoints": {
+                                    softPhoneDeviceResult['data']['id']: {
+                                        u"type": u"device"
+                                    }
+                                },
+                            }
+                        )
+                    else:
+                        softPhoneGroupResult = self.kazooCli.create_group(
+                            accountId,
+                            {
+                                u"music_on_hold": {},
+                                u"name": str(userId),
+                                u"resources": {},
+                                u"endpoints": {},
+                            }
+                        )
+
+                    callFlow['flow']['data']['endpoints'].append(
+                        {
+                            "endpoint_type":"group",
+                            "id":str(softPhoneGroupResult['data']['id']),
+                            "delay":"0",
+                            "timeout": '{}'.format(DEFAULT_RING_TIMEOUT),
+                            "strategy": "simultaneous"
+                        }
+                    )
 
                     cellPhoneResults = []
                     for number in cellPhoneNumbers:
@@ -337,7 +381,8 @@ class KazooClient(object):
                     userDetails['enterpriseId'] = createUserResult['data']['enterprise_id']
                     userDetails['voicemailId'] = vmBoxObj['data']['id']
                     userDetails['softphoneId'] = softPhoneDeviceResult['data']['id']
-                    userDetails['cellphoneIds'] = [{'id':cellPhoneResult['data']['id'], 'number':cellPhoneResult['data']['call_forward']['number']} for cellPhoneResult in cellPhoneResults]
+                    userDetails['cellphoneIds'] = [{'id':cellPhoneResult['data']['id'], 'number':'+1{}'.format(cellPhoneResult['data']['call_forward']['number'])} for cellPhoneResult in cellPhoneResults]
+                    userDetails['softPhoneGroupId'] = softPhoneGroupResult['data']['id']
                     userDetails['callFlowId'] = callFlowResult['data']['id']
                     userDetails['autoAttendantMenuId'] = autoAttendantMenuResult['data']['id']
 
