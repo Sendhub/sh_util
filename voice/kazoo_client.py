@@ -358,7 +358,7 @@ class KazooClient(object):
         else:
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
-    def deleteUser(self, accountId, userId, phoneNumber=None, deviceIds=[], voicemailId=None, callFlowId=None, menuId=None):
+    def deleteUser(self, accountId, userId, phoneNumber=None, deviceIds=[], voicemailId=None, callFlowId=None, groupId=None, menuId=None):
         logging.info('Deleting user on Kazoo with account {} and user {}'.format(accountId, userId))
 
 
@@ -374,6 +374,13 @@ class KazooClient(object):
                     self.kazooCli.delete_menu(accountId, menuId)
                 except Exception as e:
                     logging.error('Unable to delete menu: {}'.format(menuId))
+                    logging.error(e)
+
+            if groupId is not None:
+                try:
+                    self.kazooCli.delete_group(accountId, groupId)
+                except Exception as e:
+                    logging.error('Unable to delete group: {}'.format(groupId))
                     logging.error(e)
 
             if callFlowId is not None:
