@@ -206,8 +206,6 @@ class KazooClient(object):
         else:
             authenticated = True
 
-        import pdb;pdb.set_trace()
-
         # let this blow up if it fails.. it should always succeed
         callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
 
@@ -216,7 +214,7 @@ class KazooClient(object):
 
         callFlow['data']['numbers'].append(number)
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlow)
+        self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
 
     def createUser(self, accountId, name, userId, password, enterpriseId, sipUsername, sipPassword, softPhoneNumber=None, cellPhoneNumbers=[], email=None):
         '''
