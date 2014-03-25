@@ -214,7 +214,7 @@ class KazooClient(object):
 
         callFlow['data']['numbers'].append(number)
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlow)
+        self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
 
     def deProvisionPhoneNumberAndRemoveFromCallFlow(self, accountId, callFlowId, number):
         logging.info('deProvisionPhoneNumberAndRemoveFromCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
@@ -232,7 +232,7 @@ class KazooClient(object):
 
         callFlow['data']['numbers'] = [nbr for nbr in callFlow['data']['numbers'] if number != nbr]
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlow)
+        self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
 
         shortNumber = number[2:] if number.startswith("+1") else number
         self.kazooCli.delete_phone_number(accountId, shortNumber)
