@@ -197,6 +197,27 @@ class KazooClient(object):
 
         return None
 
+    def provisionPhoneNumberAndAddToCallFlow(self, accountId, callFlowId, number):
+
+        logging.info('provisionPhoneNumberAndAddToCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
+
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        import pdb;pdb.set_trace()
+
+        # let this blow up if it fails.. it should always succeed
+        callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
+
+        # anything but the following is invalid, so this should blow up
+        assert 'data' in callFlow and 'numbers' in callFlow['data']['numbers'], "Detected invalid call flow when provisioning new number"
+
+        callFlow['data']['numbers'].append(number)
+
+        self.kazooCli.update_callflow(accountId, callFlowId, callFlow)
+
     def createUser(self, accountId, name, userId, password, enterpriseId, sipUsername, sipPassword, softPhoneNumber=None, cellPhoneNumbers=[], email=None):
         '''
         Create a user on Kazoo within an given enterprise or within the general sendhub enterprise
