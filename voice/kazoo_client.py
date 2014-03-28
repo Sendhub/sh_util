@@ -3,6 +3,10 @@ from sh_util.retry import retry
 import kazoo.exceptions as exceptions
 import logging
 from requests.exceptions import RequestException
+import tempfile
+from sh_util.http.wget import wget
+import pycurl
+import os
 
 DEFAULT_RING_TIMEOUT = 30
 DEFAULT_KAZOO_CALL_FLOW = {
@@ -124,7 +128,7 @@ class KazooClient(object):
 
     def _softPhoneTemplate(self, userId, enterpriseId, ownerId, number, username, password):
         return {
-            u'name':number,
+            u'name':'{}-{}'.format(number, username),
             u'sip': {
                 u'realm':u'{}.sip.sendhub.com'.format(enterpriseId if enterpriseId is not None else 'default'),
                 u'method':u'password',
@@ -142,8 +146,7 @@ class KazooClient(object):
                 }
             },
             u'device_type':u'softphone',
-            u'owner_id':str(ownerId),
-            u'sendhub_number':number
+            u'owner_id':str(ownerId)
         }
 
     def _physicalPhoneTemplate(self, userId, enterpriseId, ownerId, number, type=u'cellphone'):
@@ -156,7 +159,7 @@ class KazooClient(object):
             u'call_forward': {
                 u'enabled': True,
                 u'substitute': True,
-                u'require_keypress': True,
+                u'require_keypress': False,
                 u'keep_caller_id': True,
                 u'direct_calls_only': False,
                 u'ignore_early_media': True,
@@ -203,18 +206,21 @@ class KazooClient(object):
         else:
             authenticated = True
 
-        # let this blow up if it fails.. it should always succeed
-        callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
+        if authenticated:
+            # let this blow up if it fails.. it should always succeed
+            callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
 
-        # anything but the following is invalid, so this should blow up
-        assert 'data' in callFlow and 'numbers' in callFlow['data'], "Detected invalid call flow when provisioning new number"
+            # anything but the following is invalid, so this should blow up
+            assert 'data' in callFlow and 'numbers' in callFlow['data'], "Detected invalid call flow when provisioning new number"
 
-        shortNumber = number[2:] if number.startswith("+1") else number
-        self.kazooCli.create_phone_number(accountId, shortNumber)
+            shortNumber = number[2:] if number.startswith("+1") else number
+            self.kazooCli.create_phone_number(accountId, shortNumber)
 
-        callFlow['data']['numbers'].append(number)
+            callFlow['data']['numbers'].append(number)
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
+            self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
     def deProvisionPhoneNumberAndRemoveFromCallFlow(self, accountId, callFlowId, number):
         logging.info('deProvisionPhoneNumberAndRemoveFromCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
@@ -224,18 +230,211 @@ class KazooClient(object):
         else:
             authenticated = True
 
-        # let this blow up if it fails.. it should always succeed
-        callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
+        if authenticated:
+            # let this blow up if it fails.. it should always succeed
+            callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
 
-        # anything but the following is invalid, so this should blow up
-        assert 'data' in callFlow and 'numbers' in callFlow['data'], "Detected invalid call flow when provisioning new number"
+            # anything but the following is invalid, so this should blow up
+            assert 'data' in callFlow and 'numbers' in callFlow['data'], "Detected invalid call flow when provisioning new number"
 
-        callFlow['data']['numbers'] = [nbr for nbr in callFlow['data']['numbers'] if number != nbr]
+            callFlow['data']['numbers'] = [nbr for nbr in callFlow['data']['numbers'] if number != nbr]
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
+            self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
 
-        shortNumber = number[2:] if number.startswith("+1") else number
-        self.kazooCli.delete_phone_number(accountId, shortNumber)
+            shortNumber = number[2:] if number.startswith("+1") else number
+            self.kazooCli.delete_phone_number(accountId, shortNumber)
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+    def updateVmBox(self, accountId, vmBoxId, ownerId, userId, mediaId):
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        if authenticated:
+            self.kazooCli.update_voicemail_box(
+                accountId,
+                vmBoxId,
+                {
+                    'check_if_owner': True,
+                    'mailbox':str(userId),
+                    'require_pin':False,
+                    'name':str(userId),
+                    'check_if_owner': True,
+                    'owner_id':str(ownerId),
+                    'unavailable':mediaId
+                }
+            )
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+    def updateMenu(self, accountId, menuId, userId, mediaId):
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        if authenticated:
+            self.kazooCli.update_menu(
+                accountId,
+                menuId,
+                {
+                    'name':str(userId),
+                    'retries' : 3,
+                    'timeout' : '10000',
+                    'max_extension_length':'1',
+                    'media' : {
+                        'exit_media': True,
+                        'greeting': mediaId,
+                        'invalid_media': True,
+                        'transfer_media': True
+                    }
+                }
+            )
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+    def copyMedia(self, accountId, mediaId, fromUrl):
+
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        if authenticated:
+            # this function doesn't fit the general model for crossbar API URLs hence why it is hand built
+            try:
+                c = None
+                fh = None
+
+                mediaData = wget(fromUrl, numTries=3)
+
+                toUrl = '{}/accounts/{}/media/{}/raw'.format(self.kazooCli.base_url, accountId, mediaId)
+
+                fh = tempfile.NamedTemporaryFile(mode='wr+b')
+                fh.write(mediaData)
+                fh.flush()
+                fh.seek(0)
+
+                c = pycurl.Curl()
+                c.setopt(pycurl.URL, toUrl)
+                c.setopt(pycurl.READFUNCTION, fh.read)
+                c.setopt(pycurl.POST, 1)
+                c.setopt(pycurl.HTTPHEADER, ["Content-type: audio/mp3", "X-Auth-Token: {}".format(self.kazooCli.auth_token)])
+                c.setopt(pycurl.POSTFIELDSIZE, os.path.getsize(fh.name))
+
+                logging.info('Uploading file %s to url %s' % (fh.name, toUrl))
+
+                c.perform()
+
+            finally:
+                c.close()
+                fh.close()
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+    def addMedia(self, accountId, url, name):
+        logging.info('Adding media {}-{} to account {} on Kazoo'.format(name, url, accountId))
+
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        result = None
+        if authenticated:
+            try:
+                result = self.kazooCli.create_media(accountId, {'streamable':True, 'name':name})
+
+                self.copyMedia(accountId, result['data']['id'])
+
+            except Exception as e:
+                logging.error('Unable to create media {}-{} on account: {}'.format(name, url, accountId))
+                logging.error(e)
+                raise
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+        return result
+
+    def addTtsMedia(self, accountId, tts, name):
+        logging.info('Adding tts media {}-{} to account {} on Kazoo'.format(name, tts, accountId))
+
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        result = None
+        if authenticated:
+            try:
+                result = self.kazooCli.create_media(accountId, {'streamable':True, 'name':name, "media_source":"tts","tts":{"text":tts,"voice":"female/en-US"}})
+
+            except Exception as e:
+                logging.error('Unable to create media {}-{} on account: {}'.format(name, tts, accountId))
+                logging.error(e)
+                raise
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+        return result
+
+    def updateTemporalRules(self, accountId, ruleId, userId, openSecond, closeSecond, daysOfWeek):
+        self.kazooCli.update_temporal_rule(
+                accountId,
+                ruleId,
+                {
+                    'name':str(userId),
+                    'time_window_start':0,
+                    'time_window_stop':86400,
+                    'wdays':[
+                        'monday',
+                        'tuesday',
+                        'wednesday',
+                        'thursday',
+                        'friday',
+                        'saturday',
+                        'sunday'
+                    ],
+                    'name': '{}'.format(str(userId)),
+                    'cycle':'weekly',
+                    'start_date':62586115200,
+                    'ordinal':'every',
+                    'interval':1
+                }
+            )
+
+    def addDeviceToGroup(self, accountId, groupId, deviceId, userId):
+
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        if authenticated:
+            result = self.kazooCli.get_group(accountId, groupId)
+
+            if 'data' in result and 'endpoints' in result['data']:
+
+                endpoints = result['data']['endpoints']
+
+                if deviceId not in endpoints:
+
+                    endpoints.update({deviceId : {u"type": u"device"}})
+
+                    self.kazooCli.update_group(
+                        accountId,
+                        groupId,
+                        {
+                            u"music_on_hold": {},
+                            u"name": str(userId),
+                            u"resources": {},
+                            u"endpoints": endpoints
+                        }
+                    )
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
     def createUser(self, accountId, name, userId, password, enterpriseId, sipUsername, sipPassword, softPhoneNumber=None, cellPhoneNumbers=[], email=None):
         '''
@@ -355,6 +554,7 @@ class KazooClient(object):
                         accountId,
                         {
                             'mailbox':str(userId),
+                            'check_if_owner': True,
                             'require_pin':False,
                             'name':str(userId),
                             'check_if_owner': True,
@@ -375,6 +575,29 @@ class KazooClient(object):
                         }
                     )
 
+                    temporalRuleResult = self.kazooCli.create_temporal_rule(
+                        accountId,
+                        {
+                            'name':str(userId),
+                            'time_window_start':0,
+                            'time_window_stop':86400,
+                            'wdays':[
+                                'monday',
+                                'tuesday',
+                                'wednesday',
+                                'thursday',
+                                'friday',
+                                'saturday',
+                                'sunday'
+                            ],
+                            'name': '{}'.format(str(userId)),
+                            'cycle':'weekly',
+                            'start_date':62586115200,
+                            'ordinal':'every',
+                            'interval':1
+                        }
+                    )
+
                     userDetails['id'] = createUserResult['data']['id']
                     userDetails['name'] = createUserResult['data']['first_name']
                     userDetails['username'] = createUserResult['data']['username']
@@ -385,6 +608,7 @@ class KazooClient(object):
                     userDetails['softPhoneGroupId'] = softPhoneGroupResult['data']['id']
                     userDetails['callFlowId'] = callFlowResult['data']['id']
                     userDetails['autoAttendantMenuId'] = autoAttendantMenuResult['data']['id']
+                    userDetails['temporalRuleId'] = temporalRuleResult['data']['id']
 
             except Exception as e:
 
