@@ -7,6 +7,8 @@ import tempfile
 from sh_util.http.wget import wget
 import pycurl
 import os
+from urlparse import urlparse
+from os.path import basename
 
 DEFAULT_RING_TIMEOUT = 30
 DEFAULT_KAZOO_CALL_FLOW = {
@@ -92,18 +94,33 @@ class KazooClient(object):
             if enterpriseId is None or name is None:
                 raise exceptions.KazooApiError(u'EnterpriseId () and Name () must be provided'.format(enterpriseId, name))
 
-            result = self.kazooCli.create_account(
-                {
-                    u'name':str(enterpriseId),
-                    u'enterprise_id':str(enterpriseId),
-                    u'enterprise_name':name,
-                    u'realm':u'{}.sip.sendhub.com'.format(enterpriseId)
-                }
-            )
+            result = {}
 
-            # create the no-match call flow for this account
-            # so the global carrier stuff works
-            self.kazooCli.create_callflow(result['data']['id'], NO_MATCH_CALL_FLOW)
+            @retry(3)
+            def _wrappedAccountCreation(result):
+                '''
+                Wrap calls to account creation to allow for retries
+                '''
+
+                result.update(self.kazooCli.create_account(
+                    {
+                        u'name':str(enterpriseId),
+                        u'enterprise_id':str(enterpriseId),
+                        u'enterprise_name':name,
+                        u'realm':u'{}.sip.sendhub.com'.format(enterpriseId)
+                    }
+                ))
+
+                return ('data' in result and 'id' in result['data'])
+
+            if _wrappedAccountCreation(result):
+                # create the no-match call flow for this account
+                # so the global carrier stuff works
+                self.kazooCli.create_callflow(result['data']['id'], NO_MATCH_CALL_FLOW)
+            else:
+                logging.error('Unable to create account on kazoo: {}'.format(result))
+
+                raise Exception('Kazoo account creation error: {}'.format(result))
         else:
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
@@ -263,7 +280,10 @@ class KazooClient(object):
                     'name':str(userId),
                     'check_if_owner': True,
                     'owner_id':str(ownerId),
-                    'unavailable':mediaId
+                    'skip_instructions': True,
+                    'media':{
+                        'unavailable':mediaId
+                    }
                 }
             )
         else:
@@ -345,9 +365,10 @@ class KazooClient(object):
         result = None
         if authenticated:
             try:
-                result = self.kazooCli.create_media(accountId, {'streamable':True, 'name':name})
+                filename = basename(urlparse(url).path)
+                result = self.kazooCli.create_media(accountId, {'streamable':True, 'name':name, 'description':'C:\\fakepath\\{}'.format(filename)})
 
-                self.copyMedia(accountId, result['data']['id'])
+                self.copyMedia(accountId, result['data']['id'], url)
 
             except Exception as e:
                 logging.error('Unable to create media {}-{} on account: {}'.format(name, url, accountId))
@@ -386,17 +407,9 @@ class KazooClient(object):
                 ruleId,
                 {
                     'name':str(userId),
-                    'time_window_start':0,
-                    'time_window_stop':86400,
-                    'wdays':[
-                        'monday',
-                        'tuesday',
-                        'wednesday',
-                        'thursday',
-                        'friday',
-                        'saturday',
-                        'sunday'
-                    ],
+                    'time_window_start':openSecond,
+                    'time_window_stop':closeSecond,
+                    'wdays':daysOfWeek,
                     'name': '{}'.format(str(userId)),
                     'cycle':'weekly',
                     'start_date':62586115200,
