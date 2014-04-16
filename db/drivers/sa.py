@@ -24,7 +24,7 @@ def sqlAndArgsToText(sql, args=None):
 
     def nextBindSub(match):
         i[0] += 1
-        binding = '${0}'.format(i[0])
+        binding = 'arg{0}'.format(i[0])
         bindparams.append(bindparam(binding, args[i[0]]))
         return '{0}:{1}'.format(match.group(1), binding)
 
