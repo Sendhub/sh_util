@@ -32,15 +32,15 @@ def buyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US', phoneN
                 return newNumber
 
             except Exception as e:
-                logging.error(u'buy_phone_number(): Failed Buying number. Attempt count is: {0}'.format(index))
-                logging.error(u'buy_phone_number() error was: {0}'.format(e))
+                logging.warning(u'buy_phone_number(): Failed Buying number. Attempt count is: {0}'.format(index))
+                logging.warning(u'buy_phone_number() error was: {0}'.format(e))
         else:
             # If we've exhaused our iteration, and we did not break, this else
             # block will run. For more info on for...else see:
             # http://docs.python.org/tutorial/controlflow.html#break-and-continue-statements-and-else-clauses-on-loops
             #
             # If we didn't get the number, throw an error
-            logging.error(u'buy_phone_number(): Exhausted MAX tries. Throwing an error.')
+            logging.warning(u'buy_phone_number(): Exhausted MAX tries. Throwing an error.')
             raise AreaCodeUnavailableError(
                 'We are currently having problemsbuying phone numbers from  our carrier. Please wait a ' \
                 'moment and try again.'

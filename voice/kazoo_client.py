@@ -9,6 +9,7 @@ import pycurl
 import os
 from urlparse import urlparse
 from os.path import basename
+from copy import deepcopy
 
 DEFAULT_RING_TIMEOUT = 30
 DEFAULT_KAZOO_CALL_FLOW = {
@@ -116,7 +117,7 @@ class KazooClient(object):
             if _wrappedAccountCreation(result):
                 # create the no-match call flow for this account
                 # so the global carrier stuff works
-                self.kazooCli.create_callflow(result['data']['id'], NO_MATCH_CALL_FLOW)
+                self.kazooCli.create_callflow(result['data']['id'], deepcopy(NO_MATCH_CALL_FLOW))
             else:
                 logging.error('Unable to create account on kazoo: {}'.format(result))
 
@@ -188,8 +189,13 @@ class KazooClient(object):
 
     def createDevice(self, type, accountId, userId, enterpriseId, ownerId, number, username=u'', password=u''):
         assert type in (u'softphone', u'cellphone', u'landline')
+        from sh_util.tel import validatePhoneNumber
 
-        logging.info('createDevice invoked with {},{},{},{},{},{},{}'.format(type, accountId, userId, enterpriseId, ownerId, number, username))
+        logging.info(u'createDevice invoked with {},{},{},{},{},{},{}'.format(type, accountId, userId, enterpriseId, ownerId, number, username))
+
+        if validatePhoneNumber(number) is False:
+            logging.warning(u'Phone number validation failed for {}-{}-{}'.format(accountId, userId, number))
+            return None
 
         if self.authToken is None:
             authenticated = self.authenticate()
@@ -210,13 +216,52 @@ class KazooClient(object):
             if ('sip.username' in e.field_errors and 'unique' in e.field_errors['sip.username']) is False:
                 logging.error('Unexpected error creating device: {}'.format(e))
                 raise
-            logging.info('SIP Device already exists for username: {}'.format(username))
+            logging.info(u'SIP Device already exists for username: {}'.format(username))
 
         return None
 
+
+    def createPhoneNumber(self, accountId, number):
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        if authenticated:
+
+
+            result = {}
+
+            @retry(3)
+            def _wrappedNumberCreation(result, shortNumber):
+                '''
+                Wrap calls to account creation to allow for retries
+                '''
+
+                logging.info('Creating phone number on kazoo account={}, number={}'.format(accountId, shortNumber))
+
+                try:
+                    result.update(self.kazooCli.create_phone_number(accountId, shortNumber))
+
+                    logging.info('Phone number creation result: {}'.format('data' in result and 'id' in result['data']))
+
+                    return ('data' in result and 'id' in result['data'])
+
+                except Exception as e:
+                    logging.warning('Phone number creation threw exception: {}'.format(e))
+
+                return False
+
+            shortNumber = number[2:] if number.startswith("+1") else number
+            _wrappedNumberCreation(result, shortNumber)
+            return result
+
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
     def provisionPhoneNumberAndAddToCallFlow(self, accountId, callFlowId, number):
 
-        logging.info('provisionPhoneNumberAndAddToCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
+        logging.info(u'provisionPhoneNumberAndAddToCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
 
         if self.authToken is None:
             authenticated = self.authenticate()
@@ -230,17 +275,16 @@ class KazooClient(object):
             # anything but the following is invalid, so this should blow up
             assert 'data' in callFlow and 'numbers' in callFlow['data'], "Detected invalid call flow when provisioning new number"
 
-            shortNumber = number[2:] if number.startswith("+1") else number
-            self.kazooCli.create_phone_number(accountId, shortNumber)
+            result = self.createPhoneNumber(accountId, number)
 
-            callFlow['data']['numbers'].append(number)
-
-            self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
+            if 'data' in result and 'id' in result['data']:
+                callFlow['data']['numbers'].append(number)
+                self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
         else:
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
     def deProvisionPhoneNumberAndRemoveFromCallFlow(self, accountId, callFlowId, number):
-        logging.info('deProvisionPhoneNumberAndRemoveFromCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
+        logging.info(u'deProvisionPhoneNumberAndRemoveFromCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
 
         if self.authToken is None:
             authenticated = self.authenticate()
@@ -344,7 +388,7 @@ class KazooClient(object):
                 c.setopt(pycurl.HTTPHEADER, ["Content-type: audio/mp3", "X-Auth-Token: {}".format(self.kazooCli.auth_token)])
                 c.setopt(pycurl.POSTFIELDSIZE, os.path.getsize(fh.name))
 
-                logging.info('Uploading file %s to url %s' % (fh.name, toUrl))
+                logging.info(u'Uploading file %s to url %s' % (fh.name, toUrl))
 
                 c.perform()
 
@@ -355,7 +399,7 @@ class KazooClient(object):
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
     def addMedia(self, accountId, url, name):
-        logging.info('Adding media {}-{} to account {} on Kazoo'.format(name, url, accountId))
+        logging.info(u'Adding media {}-{} to account {} on Kazoo'.format(name, url, accountId))
 
         if self.authToken is None:
             authenticated = self.authenticate()
@@ -380,7 +424,7 @@ class KazooClient(object):
         return result
 
     def addTtsMedia(self, accountId, tts, name):
-        logging.info('Adding tts media {}-{} to account {} on Kazoo'.format(name, tts, accountId))
+        logging.info(u'Adding tts media {}-{} to account {} on Kazoo'.format(name, tts, accountId))
 
         if self.authToken is None:
             authenticated = self.authenticate()
@@ -465,7 +509,7 @@ class KazooClient(object):
         email: Email address for this account (will be set to a unique-bogus email if not specified as kazoo requires it)
         '''
 
-        logging.info('createUser invoked with {},{},{},{},{},{},{},{}'.format(accountId, name, userId, password, enterpriseId, sipUsername, softPhoneNumber, cellPhoneNumbers))
+        logging.info(u'createUser invoked with {},{},{},{},{},{},{},{}'.format(accountId, name, userId, password, enterpriseId, sipUsername, softPhoneNumber, cellPhoneNumbers))
 
 
         if self.authToken is None:
@@ -482,8 +526,12 @@ class KazooClient(object):
             'softphoneId':None,
             'cellphoneIds':[],
             'callFlowId':None,
-            'autoAttendantMenuId':None
+            'softPhoneGroupId':None,
+            'autoAttendantMenuId':None,
+            'temporalRuleId':None
         }
+
+        shortSoftPhoneNumber = None
 
         if authenticated:
 
@@ -505,19 +553,28 @@ class KazooClient(object):
                 )
 
                 if createUserResult['status'] == 'success':
+                    userDetails['id'] = createUserResult['data']['id']
+                    userDetails['name'] = createUserResult['data']['first_name']
+                    userDetails['username'] = createUserResult['data']['username']
+                    userDetails['enterpriseId'] = createUserResult['data']['enterprise_id']
 
-                    callFlow = DEFAULT_KAZOO_CALL_FLOW
+                    callFlow = deepcopy(DEFAULT_KAZOO_CALL_FLOW)
                     callFlow['numbers'].append(str(userId))
 
                     softPhoneDeviceResult = None
                     if softPhoneNumber is not None:
-                        shortNumber = softPhoneNumber[2:] if softPhoneNumber.startswith("+1") else softPhoneNumber
-                        self.kazooCli.create_phone_number(accountId, shortNumber)
+                        shortSoftPhoneNumber = softPhoneNumber[2:] if softPhoneNumber.startswith("+1") else softPhoneNumber
+                        createNumberResult = self.createPhoneNumber(accountId, shortSoftPhoneNumber)
+
+                        if 'data' not in createNumberResult or 'id' not in createNumberResult['data']:
+                            raise exceptions.KazooApiError(u'Unable to create phone number: {}'.format(shortSoftPhoneNumber))
 
                         callFlow['numbers'].append(softPhoneNumber)
 
                         softPhoneDeviceResult = self.createDevice(type=u'softphone', accountId=accountId, userId=userId, enterpriseId=enterpriseId,
-                                          ownerId=createUserResult['data']['id'], number=shortNumber, username=sipUsername, password=sipPassword)
+                                          ownerId=userDetails['id'], number=shortSoftPhoneNumber, username=sipUsername, password=sipPassword)
+
+                        userDetails['softphoneId'] = softPhoneDeviceResult['data']['id'] if softPhoneDeviceResult is not None else None
 
                         softPhoneGroupResult = self.kazooCli.create_group(
                             accountId,
@@ -526,7 +583,7 @@ class KazooClient(object):
                                 u"name": str(userId),
                                 u"resources": {},
                                 u"endpoints": {
-                                    softPhoneDeviceResult['data']['id']: {
+                                    userDetails['softphoneId']: {
                                         u"type": u"device"
                                     }
                                 },
@@ -542,11 +599,12 @@ class KazooClient(object):
                                 u"endpoints": {},
                             }
                         )
+                    userDetails['softPhoneGroupId'] = softPhoneGroupResult['data']['id']
 
                     callFlow['flow']['data']['endpoints'].append(
                         {
                             "endpoint_type":"group",
-                            "id":str(softPhoneGroupResult['data']['id']),
+                            "id":str(userDetails['softPhoneGroupId']),
                             "delay":"0",
                             "timeout": '{}'.format(DEFAULT_RING_TIMEOUT),
                             "strategy": "simultaneous"
@@ -557,8 +615,11 @@ class KazooClient(object):
                     for number in cellPhoneNumbers:
                         if number is not None:
                             shortNumber = number[2:] if number.startswith("+1") else number
-                            cellPhoneResults.append(self.createDevice(type=u'cellphone', accountId=accountId, userId=userId, enterpriseId=enterpriseId,
-                                          ownerId=createUserResult['data']['id'], number=shortNumber))
+                            cellPhoneResult = self.createDevice(type=u'cellphone', accountId=accountId, userId=userId, enterpriseId=enterpriseId,
+                                          ownerId=userDetails['id'], number=shortNumber)
+                            if cellPhoneResult is not None:
+                                cellPhoneResults.append(cellPhoneResult)
+                    userDetails['cellphoneIds'] = [{'id':cellPhoneResult['data']['id'], 'number':'+1{}'.format(cellPhoneResult['data']['call_forward']['number'])} for cellPhoneResult in cellPhoneResults]
 
 
                     # the following requires that the schema be changed on kazoo.
@@ -571,12 +632,14 @@ class KazooClient(object):
                             'require_pin':False,
                             'name':str(userId),
                             'check_if_owner': True,
-                            'owner_id':str(createUserResult['data']['id'])
+                            'owner_id':str(userDetails['id'])
                         }
                     )
-                    callFlow['flow']['children']['_']['data']['id'] = vmBoxObj['data']['id']
+                    userDetails['voicemailId'] = vmBoxObj['data']['id']
+                    callFlow['flow']['children']['_']['data']['id'] = userDetails['voicemailId']
 
                     callFlowResult = self.kazooCli.create_callflow(accountId, callFlow)
+                    userDetails['callFlowId'] = callFlowResult['data']['id']
 
                     autoAttendantMenuResult = self.kazooCli.create_menu(
                         accountId,
@@ -587,6 +650,7 @@ class KazooClient(object):
                             'max_extension_length':'1'
                         }
                     )
+                    userDetails['autoAttendantMenuId'] = autoAttendantMenuResult['data']['id']
 
                     temporalRuleResult = self.kazooCli.create_temporal_rule(
                         accountId,
@@ -611,16 +675,6 @@ class KazooClient(object):
                         }
                     )
 
-                    userDetails['id'] = createUserResult['data']['id']
-                    userDetails['name'] = createUserResult['data']['first_name']
-                    userDetails['username'] = createUserResult['data']['username']
-                    userDetails['enterpriseId'] = createUserResult['data']['enterprise_id']
-                    userDetails['voicemailId'] = vmBoxObj['data']['id']
-                    userDetails['softphoneId'] = softPhoneDeviceResult['data']['id']
-                    userDetails['cellphoneIds'] = [{'id':cellPhoneResult['data']['id'], 'number':'+1{}'.format(cellPhoneResult['data']['call_forward']['number'])} for cellPhoneResult in cellPhoneResults]
-                    userDetails['softPhoneGroupId'] = softPhoneGroupResult['data']['id']
-                    userDetails['callFlowId'] = callFlowResult['data']['id']
-                    userDetails['autoAttendantMenuId'] = autoAttendantMenuResult['data']['id']
                     userDetails['temporalRuleId'] = temporalRuleResult['data']['id']
 
             except Exception as e:
@@ -633,8 +687,9 @@ class KazooClient(object):
                 # we can try again
                 if createUserResult is not None and createUserResult['status'] == 'success':
                     logging.error(u'Deleting partially created user')
-                    self.deleteUser(accountId, createUserResult['data']['id'], shortNumber, userDetails['cellphoneIds'].extend([userDetails['softphoneId']]),
-                                    userDetails['voicemailId'], userDetails['callFlowId'], userDetails['autoAttendantMenuId'])
+                    self.deleteUser(accountId, userDetails['id'], shortSoftPhoneNumber, userDetails['cellphoneIds'].extend([userDetails['softphoneId']]),
+                                    userDetails['voicemailId'], userDetails['callFlowId'], userDetails['softPhoneGroupId'], userDetails['autoAttendantMenuId'],
+                                    userDetails['temporalRuleId'])
                 raise
 
         else:
@@ -643,7 +698,7 @@ class KazooClient(object):
         return userDetails
 
     def deleteAccount(self, accountId):
-        logging.info('Deleting account {} on Kazoo'.format(accountId))
+        logging.info(u'Deleting account {} on Kazoo'.format(accountId))
 
         if self.authToken is None:
             authenticated = self.authenticate()
@@ -659,8 +714,8 @@ class KazooClient(object):
         else:
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
-    def deleteUser(self, accountId, userId, phoneNumber=None, deviceIds=[], voicemailId=None, callFlowId=None, groupId=None, menuId=None):
-        logging.info('Deleting user on Kazoo with account {} and user {}'.format(accountId, userId))
+    def deleteUser(self, accountId, userId, phoneNumber=None, deviceIds=[], voicemailId=None, callFlowId=None, groupId=None, menuId=None, temporalRuleId=None):
+        logging.info(u'Deleting user on Kazoo with account {} and user {}'.format(accountId, userId))
 
 
         if self.authToken is None:
@@ -674,37 +729,44 @@ class KazooClient(object):
                 try:
                     self.kazooCli.delete_menu(accountId, menuId)
                 except Exception as e:
-                    logging.error('Unable to delete menu: {}'.format(menuId))
-                    logging.error(e)
+                    logging.warning('Unable to delete menu: {}'.format(menuId))
+                    logging.warning(e)
+
+            if temporalRuleId is not None:
+                try:
+                    self.kazooCli.delete_temporal_rule(accountId, temporalRuleId)
+                except Exception as e:
+                    logging.warning('Unable to delete temporal rule: {}'.format(temporalRuleId))
+                    logging.warning(e)
 
             if groupId is not None:
                 try:
                     self.kazooCli.delete_group(accountId, groupId)
                 except Exception as e:
-                    logging.error('Unable to delete group: {}'.format(groupId))
-                    logging.error(e)
+                    logging.warning('Unable to delete group: {}'.format(groupId))
+                    logging.warning(e)
 
             if callFlowId is not None:
                 try:
                     self.kazooCli.delete_callflow(accountId, callFlowId)
                 except Exception as e:
-                    logging.error('Unable to delete callflow: {}'.format(callFlowId))
-                    logging.error(e)
+                    logging.warning('Unable to delete callflow: {}'.format(callFlowId))
+                    logging.warning(e)
 
             if voicemailId is not None:
                 try:
                     self.kazooCli.delete_voicemail_box(accountId, voicemailId)
                 except Exception as e:
-                    logging.error('Unable to delete vm: {}'.format(voicemailId))
-                    logging.error(e)
+                    logging.warning('Unable to delete vm: {}'.format(voicemailId))
+                    logging.warning(e)
 
             if deviceIds:
                 for deviceId in deviceIds:
                     try:
                         self.kazooCli.delete_device(accountId, deviceId)
                     except Exception as e:
-                        logging.error('Unable to delete device: {}'.format(deviceId))
-                        logging.error(e)
+                        logging.warning('Unable to delete device: {}'.format(deviceId))
+                        logging.warning(e)
 
 
             if phoneNumber is not None:
@@ -712,13 +774,13 @@ class KazooClient(object):
                     phoneNumber = phoneNumber[2:] if phoneNumber.startswith("+1") else phoneNumber
                     self.kazooCli.delete_phone_number(accountId, phoneNumber)
                 except Exception as e:
-                    logging.error('Unable to delete phone number: {}'.format(phoneNumber))
-                    logging.error(e)
+                    logging.warning('Unable to delete phone number: {}'.format(phoneNumber))
+                    logging.warning(e)
 
             try:
                 self.kazooCli.delete_user(accountId, userId)
             except Exception as e:
-                logging.error('Unable to delete userId: {}'.format(userId))
-                logging.error(e)
+                logging.warning('Unable to delete userId: {}'.format(userId))
+                logging.warning(e)
         else:
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')

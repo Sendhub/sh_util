@@ -47,8 +47,8 @@ def validatePhoneNumber(number):
                 )
                 valid = True
     except phonenumbers.NumberParseException as e:
-        logging.error('Detected invalid phone number: {0}-{1}'.format(
-            number, e))
+        logging.warning('Detected invalid phone number: {0} - {1}'.format(number, e))
+
     return valid
 
 
