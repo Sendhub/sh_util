@@ -284,6 +284,61 @@ class KazooClient(object):
         else:
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
+    def listDevices(self, accountId, ownerId):
+        from kazoo.client import KazooRequest
+
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        if not authenticated:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+        request = KazooRequest("/accounts/{account_id}/devices", get_params={
+            "filter_owner_id": ownerId
+        })
+
+        return self.kazooCli._execute_request(request, account_id=accountId)
+
+    def updateDevice(self, accountId, deviceId, updateData):
+        '''
+        Update a device on Kazoo within an given account
+        updateData is a dictionary of optional (specific) overwrites over current device data in Kazoo
+        '''
+        if self.authToken is None:
+            authenticated = self.authenticate()
+        else:
+            authenticated = True
+
+        if authenticated:
+
+            if accountId is None or deviceId is None or updateData is None:
+                raise exceptions.KazooApiError(u'accountId {} and kazooDeviceId {} and updateData {} must be provided'.
+                                               format(accountId, deviceId, updateData))
+
+            currentDeviceRes = self.kazooCli.get_device(accountId, deviceId)
+            if currentDeviceRes['status'] != 'success':
+                raise exceptions.KazooApiError(u'Failed to get user: accountId {}, kazooDeviceId {}'.format(accountId, deviceId))
+
+            deviceData = currentDeviceRes['data']
+            deviceData.update(updateData)
+            result = self.kazooCli.update_device(accountId, deviceId, deviceData)
+        else:
+            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
+
+        return result
+
+    def updateUserDevicesCallerIds(self, accountId, userId, callerIdNumber):
+        listDevices = self.listDevices(accountId, userId)
+        for device in listDevices['data']:
+            if device['device_type'] == "softphone":
+                shortNumber = callerIdNumber[2:] if callerIdNumber.startswith("+1") else callerIdNumber
+                updateData = {u'caller_id':
+                                  {u'internal': {u'name': u'', u'number': shortNumber},
+                                   u'external': {u'name': u'', u'number': shortNumber}}}
+                self.updateDevice(accountId, device['id'], updateData)
+
     def provisionPhoneNumberAndAddToCallFlow(self, accountId, callFlowId, number):
 
         logging.info(u'provisionPhoneNumberAndAddToCallFlow invoked with {},{},{}'.format(accountId, callFlowId, number))
