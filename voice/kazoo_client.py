@@ -194,24 +194,6 @@ class KazooClient(object):
             u'forwarding_number':number
         }
 
-    def listDevices(self, accountId, ownerId):
-        from kazoo.client import KazooRequest
-
-        if self.authToken is None:
-            authenticated = self.authenticate()
-        else:
-            authenticated = True
-
-        if not authenticated:
-            raise exceptions.KazooApiError(u'Kazoo Authentication Error')
-
-        request = KazooRequest("/accounts/{account_id}/devices", get_params={
-            "filter_owner_id": ownerId
-        })
-        request.auth_required = True
-
-        return self.kazooCli._execute_request(request, account_id=accountId)
-
     def createDevice(self, type, accountId, userId, enterpriseId, ownerId, number, username=u'', password=u''):
         assert type in (u'softphone', u'cellphone', u'landline')
         from sh_util.tel import validatePhoneNumber
