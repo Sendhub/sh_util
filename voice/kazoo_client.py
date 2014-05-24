@@ -365,7 +365,11 @@ class KazooClient(object):
             self.kazooCli.update_callflow(accountId, callFlowId, callFlow['data'])
 
             shortNumber = number[2:] if number.startswith("+1") else number
-            self.kazooCli.delete_phone_number(accountId, shortNumber)
+            try:
+                self.kazooCli.delete_phone_number(accountId, shortNumber)
+            except Exception as e:
+                # could not delete phone number, but nevermind anyway
+                logging.error('Could not delete phone number: {}, Exception message is {}'.format(shortNumber, e.message))
         else:
             raise exceptions.KazooApiError(u'Kazoo Authentication Error')
 
