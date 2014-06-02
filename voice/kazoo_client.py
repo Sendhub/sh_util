@@ -186,9 +186,39 @@ class KazooClient(object):
 
         return self.kazooCli._execute_request(request, account_id=accountId)
 
+    def updateDevice(self, accountId, deviceId, updateData):
+        '''
+        Update a device on Kazoo within an given account
+        updateData is a dictionary of optional (specific) overwrites over current device data in Kazoo
+        '''
+
+        if accountId is None or deviceId is None or updateData is None:
+            raise exceptions.KazooApiError(u'accountId {} and kazooDeviceId {} and updateData {} must be provided'.
+                                           format(accountId, deviceId, updateData))
+
+        currentDeviceRes = self.kazooCli.get_device(accountId, deviceId)
+        if currentDeviceRes['status'] != 'success':
+            raise exceptions.KazooApiError(u'Failed to get user: accountId {}, kazooDeviceId {}'.format(accountId, deviceId))
+
+        deviceData = currentDeviceRes['data']
+        deviceData.update(updateData)
+        result = self.kazooCli.update_device(accountId, deviceId, deviceData)
+
+        return result
+
+    def updateUserDevicesCallerIds(self, accountId, userId, callerIdNumber):
+        listDevices = self.listDevices(accountId, userId)
+        for device in listDevices['data']:
+            if device['device_type'] == "softphone":
+                shortNumber = callerIdNumber[2:] if callerIdNumber.startswith("+1") else callerIdNumber
+                updateData = {u'caller_id':
+                                  {u'internal': {u'name': u'', u'number': shortNumber},
+                                   u'external': {u'name': u'', u'number': shortNumber}}}
+                self.updateDevice(accountId, device['id'], updateData)
+
     def createDevice(self, type, accountId, userId, enterpriseId, ownerId, number, username=u'', password=u''):
         assert type in (u'softphone', u'cellphone', u'landline')
-        from sh_util.tel import validatePhoneNumber
+        from tel import validatePhoneNumber
 
         logging.info(u'createDevice invoked with {},{},{},{},{},{},{}'.format(type, accountId, userId, enterpriseId, ownerId, number, username))
 
@@ -239,6 +269,16 @@ class KazooClient(object):
         shortNumber = number[2:] if number.startswith("+1") else number
         _wrappedNumberCreation(result, shortNumber)
         return result
+
+    def updateUserDevicesCallerIds(self, accountId, userId, callerIdNumber):
+        listDevices = self.listDevices(accountId, userId)
+        for device in listDevices['data']:
+            if device['device_type'] == "softphone":
+                shortNumber = callerIdNumber[2:] if callerIdNumber.startswith("+1") else callerIdNumber
+                updateData = {u'caller_id':
+                                  {u'internal': {u'name': u'', u'number': shortNumber},
+                                   u'external': {u'name': u'', u'number': shortNumber}}}
+                self.updateDevice(accountId, device['id'], updateData)
 
     def provisionPhoneNumberAndAddToCallFlow(self, accountId, callFlowId, number):
 
