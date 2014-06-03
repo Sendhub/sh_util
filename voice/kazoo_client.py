@@ -484,13 +484,15 @@ class KazooClient(object):
             if softPhoneNumber is not None:
                 shortSoftPhoneNumber = softPhoneNumber[2:] if softPhoneNumber.startswith("+1") else softPhoneNumber
                 callerId = {
-                    u'internal' : {
-                        u'name' : name,
-                        u'number' : shortSoftPhoneNumber
-                    },
-                    u'external' : {
-                        u'name' : name,
-                        u'number' : shortSoftPhoneNumber
+                    u'caller_id' : {
+                        u'internal' : {
+                            u'name' : name,
+                            u'number' : shortSoftPhoneNumber
+                        },
+                        u'external' : {
+                            u'name' : name,
+                            u'number' : shortSoftPhoneNumber
+                        }
                     }
                 }
                 userSettings.update(callerId)
