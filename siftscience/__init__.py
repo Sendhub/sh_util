@@ -8,7 +8,7 @@ SIFTSCIENCE_CHOICES = (
     ('$spam', 'spam'),
     ('$spam', 'nigeria'),
     ('$spam', 'high block rate'),
-    ('$spam', '3k first 24 hours'),
+    ('$spam', '2k first 24 hours'),
     ('$duplicate_account', 'duplicate'),
     ('$chargeback', 'chargeback'),
     ('$chargeback', 'suspicious payment'),
