@@ -24,6 +24,10 @@ def cleanupPhoneNumber(number, region='US'):
         phonenumbers.PhoneNumberFormat.E164
     )
 
+def isSpecialTwilioNumber(number):
+    specialNumbers = ['+7378742833', '+2562533', '+8656696', '+266696687']
+    return number in specialNumbers
+
 def validatePhoneNumber(number):
     valid = False
 

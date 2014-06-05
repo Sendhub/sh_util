@@ -5,7 +5,7 @@
 import re
 import logging
 
-from .cleanup import cleanupPhoneNumber, validatePhoneNumber, displayNumber
+from .cleanup import cleanupPhoneNumber, validatePhoneNumber, displayNumber, isSpecialTwilioNumber
 from .twilio_util import findNumberInAreaCode
 from .twilio_util import buyPhoneNumber
 from .twilio_util import AreaCodeUnavailableError
@@ -46,5 +46,6 @@ __all__ = [
     'validatePhoneNumber',
     'displayNumber',
     'isSendHubNumber',
+    'isSpecialTwilioNumber'
 ]
 
