@@ -34,7 +34,11 @@ def sqlAndArgsToText(sql, args=None):
 
 def connections():
     """Infer and return appropriate set of connections."""
-    from app import app
+    try:
+        from app import app
+    except ImportError:
+        from src.app import app
+
     #from flask.globals import current_app
     return app.engines
 
@@ -69,7 +73,10 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     @param force boolean Defaults to False. Whether or not to force the named connection to be used.
     """
     from ..import DEBUG
-    from app import ScopedSessions
+    try:
+        from app import ScopedSessions
+    except ImportError:
+        from src.app import ScopedSessions
 
     if args is None:
         args = tuple()
@@ -97,7 +104,11 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
     """
     from sqlalchemy.exc import InvalidRequestError
     from ..import DEBUG
-    from app import ScopedSessions
+
+    try:
+        from app import ScopedSessions
+    except ImportError:
+        from src.app import ScopedSessions
 
     if args is None:
         args = tuple()
