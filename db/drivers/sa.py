@@ -84,7 +84,7 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     if force is False:
         using = getRealShardConnectionName(using)
 
-    if 1 or DEBUG is True or debug is True:
+    if DEBUG is True or debug is True:
         logging.info(u'-- [DEBUG] DB_QUERY, using={0} ::\n{1} {2}'.format(using, sql, args))
 
     #resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args).execution_options(autocommit=False))

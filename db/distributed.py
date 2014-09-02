@@ -693,8 +693,9 @@ def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, 
 
     #finishedTs = time.time()
     #logging.info(u'distributedSelect took {0}'.format(finishedTs - startedTs))
-    logging.debug(u'IN: {0}'.format(sql))
-    logging.debug(u'OUT: {0}'.format(distributedSql))
+    if settings.DEBUG is True:
+        logging.debug(u'IN: {0}'.format(sql))
+        logging.debug(u'OUT: {0}'.format(distributedSql))
 
     #from django_util.log_errors import print_stack
     #logging.debug('[distributedSelect stack]')
