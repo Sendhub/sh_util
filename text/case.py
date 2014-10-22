@@ -68,6 +68,8 @@ def dictKeysToSnakeCase(struct):
     """
     t = type(struct)
 
+    from nose.tools import set_trace; set_trace()
+
     if t is str or t is unicode or t is int or t is bool:
         return struct
 
@@ -83,6 +85,31 @@ def dictKeysToSnakeCase(struct):
     else:
         raise Exception(
             '_dictKeysToSnakeCase: unsupported type `{0}\''.format(t)
+        )
+
+def dictKeysToCamelCase(struct):
+    """
+    Recursively convert all snake_case dict keys to be CamelCase.
+    """
+    t = type(struct)
+
+    if t is str or t is unicode or t is int or t is bool:
+        return struct
+
+    elif t is dict:
+        for k, v in struct.items():
+            del struct[k]
+            struct[snakeToCamel(k)] = dictKeysToCamelCase(v)
+        return struct
+
+    elif t is list or hasattr(struct, '__iter__'):
+        return [dictKeysToCamelCase(item) for item in struct]
+
+    elif struct is None:
+        return None
+    else:
+        raise Exception(
+            'dictKeysToCamelCase: unsupported type `{0}\''.format(t)
         )
 
 
