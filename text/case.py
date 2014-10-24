@@ -73,7 +73,13 @@ def dictKeysToSnakeCase(struct):
     if t is str or t is unicode or t is int or t is bool:
         return struct
 
-    elif t is dict:
+    elif t is dict or hasattr(struct, 'to_dict'):
+
+        # if the object is not a dictionary but knows how to transform
+        # into a dict, then do so
+        if t is not dict:
+            struct = struct.to_dict()
+            
         for k, v in struct.items():
             del struct[k]
             struct[camelToSnake(k)] = dictKeysToSnakeCase(v)
@@ -96,7 +102,13 @@ def dictKeysToCamelCase(struct):
     if t is str or t is unicode or t is int or t is bool:
         return struct
 
-    elif t is dict:
+    elif t is dict or hasattr(struct, 'to_dict'):
+
+        # if the object is not a dictionary but knows how to transform
+        # into a dict, then do so
+        if t is not dict:
+            struct = struct.to_dict()
+
         for k, v in struct.items():
             del struct[k]
             struct[snakeToCamel(k)] = dictKeysToCamelCase(v)
