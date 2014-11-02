@@ -68,8 +68,6 @@ def dictKeysToSnakeCase(struct):
     """
     t = type(struct)
 
-    from nose.tools import set_trace; set_trace()
-
     if t is str or t is unicode or t is int or t is bool:
         return struct
 
