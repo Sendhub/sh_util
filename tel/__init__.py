@@ -9,22 +9,22 @@ from .cleanup import cleanupPhoneNumber, validatePhoneNumber, displayNumber, isS
 from .twilio_util import findNumberInAreaCode
 from .twilio_util import buyPhoneNumber
 from .twilio_util import AreaCodeUnavailableError
-from ..db.distributed import \
-    evaluatedDistributedSelect as _evaluatedDistributedSelect
-from ..functional import distMemoizeWithExpiry as _distMemoizeWithExpiry
-
+from ..db import \
+    db_query as _db_query
 
 _contactNumberCleaner = re.compile(r'^[+0-9]*$')
 
 # @TODO MEMOIZATION TEMPORARILY DISABLED
 #@_distMemoizeWithExpiry(180)
+
+
 def isSendHubNumber(number):
     """@return True is the number is a sendhub number, False otherwise."""
     if _contactNumberCleaner.match(number) is None:
         logging.warning(u'Refusing to run query with invalid input')
         return False
 
-    res = _evaluatedDistributedSelect(
+    res = _db_query(
         '''
             SELECT "pn"."number" "number" FROM "main_phonenumber" "pn"
             JOIN "main_extendeduser" "eu"
@@ -32,7 +32,7 @@ def isSendHubNumber(number):
             WHERE "pn"."number" = %s
         ''',
         (number,),
-        asDict=True
+        as_dict=True
     )
     return len(res) > 0 and len(res[0].get('number', '')) > 0
 
@@ -48,4 +48,3 @@ __all__ = [
     'isSendHubNumber',
     'isSpecialTwilioNumber'
 ]
-
