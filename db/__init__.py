@@ -12,11 +12,16 @@ DEBUG = False
 _useDjangoDriver =  lambda: settings.SH_UTIL_DB_DRIVER.lower() == 'django'
 _useSqlAlchemyDriver = lambda: settings.SH_UTIL_DB_DRIVER.lower() in ('sqlalchemy', 'sa')
 
-if _useDjangoDriver():
+if settings.SH_UTIL_DB_DRIVER is None:
+    from .drivers.none import *
+
+elif _useDjangoDriver():
     from .drivers.dj import *
 
 elif _useSqlAlchemyDriver():
     from .drivers.sa import *
+
+
 
 else:
     raise Exception('Unrecognized sh_util db driver: {0}'.format(settings.SH_UTIL_DB_DRIVER))
