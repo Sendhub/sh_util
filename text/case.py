@@ -125,7 +125,7 @@ def dictKeysToCamelCase(struct):
     """
     t = type(struct)
 
-    if t is str or t is unicode or t is int or t is bool:
+    if t is str or t is unicode or t is int or t is bool or t is float:
         return struct
 
     elif t is dict or hasattr(struct, 'to_dict'):
