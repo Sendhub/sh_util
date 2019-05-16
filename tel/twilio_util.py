@@ -5,21 +5,28 @@
 import logging
 from . import cleanupPhoneNumber
 
+
 class AreaCodeUnavailableError(Exception):
     """Exception when requested area code is unavailable."""
 
 
-def findNumberInAreaCode(twilioClient, areaCode, countryCode='US'):
+def twilioFindNumberInAreaCode(twilioClient, areaCode, countryCode='US'):
     """Find a number within an area code."""
-    return twilioClient.phone_numbers.search(area_code=areaCode, country=countryCode)
+    return twilioClient.phone_numbers.search(
+        area_code=areaCode,
+        country=countryCode
+    )
 
 
-def buyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US', phoneNumber=None):
+def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
+                         phoneNumber=None):
     """Buy a phone number from twilio."""
-    # NB: This could probably actually just use the twilioClient.phone_numbers.purchase(area_code=xxx) method, and
-    # it'd be faster.
-    numbers = twilioClient.phone_numbers.search(area_code=areaCode, country=countryCode) if areaCode is not None \
-        else False
+    # NB: This could probably actually just use the
+    # twilioClient.phone_numbers.purchase(area_code=xxx) method, and it'd be
+    # faster.
+    numbers = twilioClient.phone_numbers.search(area_code=areaCode,
+                                                country=countryCode) \
+        if areaCode is not None else False
 
     if numbers:
         # Attempt to buy twillio number up to 5 times before giving up and
@@ -28,22 +35,26 @@ def buyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US', phoneN
         for index in xrange(0, 5):
             try:
                 logging.info('buy_phone_number(): buying new number.')
-                newNumber = numbers[0].purchase(sms_application_sid=appSid, voice_application_sid=appSid)
+                newNumber = numbers[0].purchase(sms_application_sid=appSid,
+                                                voice_application_sid=appSid)
                 return newNumber
 
             except Exception as e:
-                logging.warning(u'buy_phone_number(): Failed Buying number. Attempt count is: {0}'.format(index))
-                logging.warning(u'buy_phone_number() error was: {0}'.format(e))
+                logging.error(u'buy_phone_number(): Failed Buying number. '
+                              u'Attempt count is: {0}'.format(index))
+                logging.error(u'buy_phone_number() error was: {0}'.format(e))
         else:
             # If we've exhaused our iteration, and we did not break, this else
             # block will run. For more info on for...else see:
-            # http://docs.python.org/tutorial/controlflow.html#break-and-continue-statements-and-else-clauses-on-loops
+            # http://docs.python.org/tutorial/controlflow.html#break-and-
+            #   continue-statements-and-else-clauses-on-loops
             #
             # If we didn't get the number, throw an error
-            logging.warning(u'buy_phone_number(): Exhausted MAX tries. Throwing an error.')
+            logging.error(u'buy_phone_number(): Exhausted MAX tries. '
+                          u'Throwing an error.')
             raise AreaCodeUnavailableError(
-                'We are currently having problemsbuying phone numbers from  our carrier. Please wait a ' \
-                'moment and try again.'
+                'We are currently having problems buying phone numbers from  '
+                'our carrier. Please wait a moment and try again.'
             )
 
     elif phoneNumber is not None:
@@ -62,5 +73,5 @@ def buyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US', phoneN
                 traceback.print_exc()
 
     else:
-        raise AreaCodeUnavailableError('No available numbers left in that area code')
-
+        raise AreaCodeUnavailableError('No available numbers left in that '
+                                       'area code')
