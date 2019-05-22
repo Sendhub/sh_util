@@ -11,6 +11,19 @@ from .bw_util import BandwidthAvailablePhoneNumber
 from .twilio_util import twilioBuyPhoneNumber, twilioFindNumberInAreaCode
 
 
+class SHBoughtNumberObject:
+    """
+       returns an object with number and sid
+          (sid is not used)
+       to be compatible with twilio number object
+       to minimize changes
+    """
+    def __init__(self, number, sid, gateway):
+        self.phone_number = number
+        self.sid = sid
+        self.gateway = gateway
+
+
 class ReleaseNumberSafely:
     """
         wrapper that releases numbers back to the carrier.
@@ -90,7 +103,7 @@ class BuyPhoneNumberFromCarrier:
            specific driver.
         """
         if gateway == settings.SMS_GATEWAY_TWILIO:
-            return twilioBuyPhoneNumber(
+            nbr_obj = twilioBuyPhoneNumber(
                 twilioClient=settings.TWILIO_CLIENT,
                 appSid=sid,
                 areaCode=area_code,
@@ -98,12 +111,15 @@ class BuyPhoneNumberFromCarrier:
                 phoneNumber=phone_number
             )
         elif gateway == settings.SMS_GATEWAY_BANDWIDTH:
-            return self._bandwidth_buy_number(area_code, country_code,
-                                              phone_number, toll_free,
-                                              user)
+            nbr_obj = self._bandwidth_buy_number(area_code, country_code,
+                                                 phone_number, toll_free,
+                                                 user)
         else:
             logging.info('Invalid gateway {} to buy a number'.
                          format(gateway))
+            return
+
+        return SHBoughtNumberObject(nbr_obj.number, nbr_obj.sid, gateway)
 
     def _bandwidth_buy_number(self, area_code, country_code='US',
                               phone_number=None, toll_free=False,

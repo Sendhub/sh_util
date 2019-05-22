@@ -1,7 +1,9 @@
+import os
 import sys
 import logging
 import phonenumbers
 import json
+import requests
 
 try:
     import settings
@@ -51,6 +53,7 @@ class BandwidthAvailablePhoneNumber:
     def __init__(self, number):
         self.friendly_name = displayNumber(number)
         self.phone_number = number
+        self.gateway = settings.SMS_GATEWAY_BANDWIDTH
 
 
 def phonenumber_as_e164(number, country_code='US'):
@@ -102,6 +105,15 @@ class SHBandwidthClient(object):
             username = settings.BW_USERNAME
         if not password:
             password = settings.BW_PASSWORD
+
+        # saving these as part of object as media get
+        # operations are done here.... BW SDK when
+        # released, may not support it.
+        self.userid = userid
+        self.token = token
+        self.secret = secret
+        self.username = username
+        self.password = password
 
         if not userid or not token or not secret \
            or not username or not password:
@@ -522,6 +534,51 @@ class SHBandwidthClient(object):
             raise
 
         return json.loads(json.dumps(number_info))
+
+    def get_media(self, url, out_filename=None, raw_data=False):
+        """
+            fetches media file that was part of a MMS.
+            returns out filename or None if unable to
+
+            :set raw_data to True if requires reading data in memory
+        """
+        if not raw_data:
+            if not out_filename:
+                out_filename = os.path.join(settings.BW_MMS_DIRECTORY,
+                                            url.split('/')[-1])
+
+            if not os.path.isdir(os.path.dirname(out_filename)):
+                raise ValueError('Invalid output directory: {} - '
+                                 'unable to download MMS'.
+                                 format(os.path.dirname(out_filename)))
+
+            if os.path.isfile(out_filename):
+                logging.info('filename {}, already exists - will be '
+                             'overwritten.....'.format(out_filename))
+
+        try:
+            resp = requests.get(url, auth=(self.token, self.secret))
+        except requests.exceptions.RequestException as e:
+            logging.info('Error while fetching media: {}'.format(e))
+            return
+
+        if resp.status_code == requests.codes.ok:
+            try:
+                if raw_data:
+                    return resp.content
+                else:
+                    with open(out_filename, 'wb') as fd:
+                        fd.write(resp.content)
+
+                    return out_filename
+            except Exception as e:
+                logging.info('Error: {} while writing file: {}'.
+                             format(e, out_filename))
+                return
+
+        logging.info('Invalid URI or an error occured, response: {}, '
+                     'response content: {}'.format(resp.status_code,
+                                                   resp.text))
 
 
 if __name__ == '__main__':

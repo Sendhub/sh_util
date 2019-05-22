@@ -495,6 +495,30 @@ class GetNumberInfoTestCases(unittest.TestCase):
                           '+19254797926')
 
 
+class DownloadMediaTestCases(unittest.TestCase):
+    """
+       tests valid/invalid cases for downloading MMS file.
+    """
+    def setUp(self):
+        self.bw_client = SHBandwidthClient(debug=ENABLE_BW_DEBUGGING)
+
+    # call this proper URI
+    def download(self, url):
+        self.bw_client.get_media(url)
+
+    def test_download_empty_uri(self):
+        self.assertIsNone(self.bw_client.get_media(''))
+
+    def test_download_invalid_uri(self):
+        self.assertIsNone(self.bw_client.get_media('https://messaging.bandwidth.com/api/v2/users/5004525/media/abcself.jpg'))  # noqa
+
+    def test_download_invalid_hostdir(self):
+        self.assertRaises(ValueError,
+                          self.bw_client.get_media,
+                          '',
+                          '/home/ubuntu/aaaabbbbbccccssss/')
+
+
 # for independently testing delete test cases
 class BandwidthTollFreeSimpleTestCase:
     def setUp(self):
@@ -617,8 +641,8 @@ class SearchBuyPhoneNumber:
 
 def run_specific_tests():
     """ runs specific tests in suites defined in test classes """
-    test_classes_to_run = [BWMessagingTestCases]
-    # test_classes_to_run = [PhoneNumberCountTestCases]
+    # test_classes_to_run = [BWMessagingTestCases]
+    test_classes_to_run = [DownloadMediaTestCases]
     loader = unittest.TestLoader()
     runner = unittest.TextTestRunner()
     test_list = []

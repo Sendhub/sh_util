@@ -13,7 +13,8 @@ from .bw_util import SHBandwidthClient, \
     BWNumberUnavailableError, BWTollFreeUnavailableError, \
     phonenumber_as_e164
 from .tel_util import BuyPhoneNumberFromCarrier, \
-    ReleaseNumberSafely, FindPhoneNumberInAreaCode
+    ReleaseNumberSafely, FindPhoneNumberInAreaCode, \
+    SHBoughtNumberObject
 
 _contactNumberCleaner = re.compile(r'^[+0-9]*$')
 
@@ -54,6 +55,7 @@ __all__ = [
     'BWTollFreeUnavailableError',
     'phonenumber_as_e164',
     'BuyPhoneNumberFromCarrier',
+    'SHBoughtNumberObject',
     'ReleaseNumberSafely',
     'FindPhoneNumberInAreaCode'
 ]
