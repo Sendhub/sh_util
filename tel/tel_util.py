@@ -1,7 +1,7 @@
 # encoding: utf-8
 
 """
-Phone number manipulation tools.
+Phone number management abstraction layer
 """
 
 import settings
@@ -46,7 +46,7 @@ class ReleaseNumberSafely:
             return self._bandwidth_safe_number_release()
         else:
             logging.info('Invalid Carrier {} for number release'.
-                         format(self))
+                         format(self.gateway))
         return False
 
     def _twilio_safe_number_release(self):
@@ -119,7 +119,7 @@ class BuyPhoneNumberFromCarrier:
                          format(gateway))
             return
 
-        return SHBoughtNumberObject(nbr_obj.number, nbr_obj.sid, gateway)
+        return SHBoughtNumberObject(nbr_obj.phone_number, nbr_obj.sid, gateway)
 
     def _bandwidth_buy_number(self, area_code, country_code='US',
                               phone_number=None, toll_free=False,
