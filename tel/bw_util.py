@@ -88,7 +88,8 @@ class BandwidthNumberObject:
 class SHBandwidthClient(object):
     NUMBER_UNAVAILABLE_MSG = \
         'We are currently having problems buying phone numbers from  ' \
-        'our carrier. Please wait a moment and try again.'
+        'our carrier. Please wait a moment and try again or choose a ' \
+        'different area code.'
 
     def __init__(self, userid=None, token=None,
                  secret=None, username=None, password=None,
@@ -248,9 +249,9 @@ class SHBandwidthClient(object):
           : returns: phone number bought, None if invalid parameters
           :          or Exception if there is one.
         """
-        if country_code != 'US':
-            raise ValueError('Only numbers in US are supported, requested '
-                             'country: {}'.format(country_code))
+        if country_code not in ('US', 'CA'):
+            logging.info('Only numbers in US or CA are supported, requested '
+                         'country: {}'.format(country_code))
 
         site_id = site_id if site_id else settings.BW_SITE_ID
 
@@ -332,9 +333,9 @@ class SHBandwidthClient(object):
                                  quantity=1,
                                  country_code='US'):
         """Find a number within an area code."""
-        if country_code != 'US':
-            raise ValueError('Only numbers in US are supported, requested '
-                             'country: {}'.format(country_code))
+        if country_code not in ('US', 'CA'):
+            logging.info('Only numbers in US/CA are supported, requested '
+                         'country: {}'.format(country_code))
 
         if quantity < 1:
             raise ValueError('Quantity can not be < 1 - passed: {}'.
@@ -383,7 +384,7 @@ class SHBandwidthClient(object):
 
         else:
             if not toll_free_numbers:
-                raise AreaCodeUnavailableError(
+                raise BWTollFreeUnavailableError(
                     SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
                 )
             return self._cleanup_and_return_numbers(toll_free_numbers,
@@ -423,7 +424,7 @@ class SHBandwidthClient(object):
 
         else:
             if not toll_free_numbers:
-                raise AreaCodeUnavailableError(
+                raise BWTollFreeUnavailableError(
                     SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
                 )
             return self._cleanup_and_return_numbers(toll_free_numbers,

@@ -58,13 +58,16 @@ class BandwidthAccountHelpers:
 
         return bought_number
 
-    def _search_phonenumber_with_areacode(self, area_code, quantity=1):
+    def _search_phonenumber_with_areacode(self, area_code,
+                                          quantity=1,
+                                          country_code='US'):
         """ searches for one phone number within given area code """
         search_number = None
         try:
             search_number = self.bw_client.find_number_in_area_code(
                 area_code=area_code,
-                quantity=quantity
+                quantity=quantity,
+                country_code=country_code
             )
         except AreaCodeUnavailableError as e:
             logging.info("Exception as {}".format(e))
@@ -154,6 +157,14 @@ class BandwidthAccountTestCases(unittest.TestCase):
         self.assertIsNotNone(number)
         self.assertIsInstance(number, list)
         self.assertEqual(len(number), quantity)
+
+    def test_search_canadian_country_number(self):
+        number = self.helper._search_phonenumber_with_areacode(
+            '647',
+            country_code='CA'
+        )
+        logging.info('number: {}'.format(number))
+        self.assertIsNone(number)
 
     def test_search_invalid_qty_tollfree_number(self):
         self.assertRaises(ValueError,
