@@ -130,7 +130,7 @@ class BuyPhoneNumberFromCarrier:
 
     def __call__(self, gateway, sid, area_code=None,
                  country_code='US', phone_number=None,
-                 toll_free=False, user=None):
+                 toll_free=False, user=None, alt_gateway=False):
         '''
             cycles through supported gateways.. tries preferred gateway
             first and then tries alternate gateway
@@ -160,6 +160,11 @@ class BuyPhoneNumberFromCarrier:
             exception_msg = e
             logging.info('Unable to buy a number, exception: {}, '
                          'gateway: {}'.format(exception_msg, gateway))
+
+            # if backup GW should be tried
+            if not alt_gateway:
+                raise
+
             for a_gateway in alternate_gateways:
                 logging.info('trying alternate gateway: {}'.format(a_gateway))
                 try:

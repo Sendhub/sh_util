@@ -25,7 +25,7 @@ class TelUtilTestCases(unittest.TestCase):
         dummy_sid = 'dummysid'
         area_code = '919'
         phone_number = '+19193456789'
-        mock_twilio_buy.return_value = SHBoughtNumberObject(phone_number, dummy_sid, '')  # noqa
+        mock_twilio_buy.return_value = SHBoughtNumberObject(phone_number, dummy_sid, 'twilio')  # noqa
         bought_num = BuyPhoneNumberFromCarrier()(
             settings.SMS_GATEWAY_TWILIO,
             dummy_sid,
@@ -53,7 +53,7 @@ class TelUtilTestCases(unittest.TestCase):
         """
         dummy_sid = 'dummysid'
         phone_number = '+19193456789'
-        mock_twilio_buy.return_value = SHBoughtNumberObject(phone_number, dummy_sid, '')  # noqa
+        mock_twilio_buy.return_value = SHBoughtNumberObject(phone_number, dummy_sid, 'twilio')  # noqa
         bought_num = BuyPhoneNumberFromCarrier()(
             settings.SMS_GATEWAY_TWILIO,
             dummy_sid,
@@ -323,7 +323,8 @@ class TelUtilTestCases(unittest.TestCase):
             settings.SMS_GATEWAY_TWILIO,
             dummy_sid,
             area_code=area_code,
-            user=dummy_user
+            user=dummy_user,
+            alt_gateway=True
         )
 
         mock_twilio_buy.assert_called_with(
@@ -349,6 +350,46 @@ class TelUtilTestCases(unittest.TestCase):
     @patch.object(SHBandwidthClient, 'buy_phone_number')
     @patch.object(SHBandwidthClient, 'buy_toll_free_number')
     @patch('sh_util.tel.tel_util.twilioBuyPhoneNumber')
+    def test_buy_number_twilio_failure_no_alternate(
+        self,
+        mock_twilio_buy,
+        mock_bw_tf_buy,
+        mock_bw_buy
+    ):
+        """
+           tests invalid gateway when buying a number
+           should return an error.
+        """
+        dummy_sid = 'dummysid'
+        area_code = '919'
+        phone_number = '+19193456789'
+        dummy_user = 'dummy_user'
+        mock_twilio_buy.side_effect = AreaCodeUnavailableError('Area Code is not available')  # noqa
+        mock_bw_buy.return_value = phone_number
+
+        self.assertRaises(
+            AreaCodeUnavailableError,
+            BuyPhoneNumberFromCarrier(),
+            settings.SMS_GATEWAY_TWILIO,
+            dummy_sid,
+            area_code=area_code,
+            user=dummy_user
+        )
+
+        mock_twilio_buy.assert_called_with(
+            twilioClient=settings.TWILIO_CLIENT,
+            appSid=dummy_sid,
+            areaCode=area_code,
+            countryCode='US',
+            phoneNumber=None
+        )
+
+        mock_bw_buy.assert_not_called()
+        mock_bw_tf_buy.assert_not_called()
+
+    @patch.object(SHBandwidthClient, 'buy_phone_number')
+    @patch.object(SHBandwidthClient, 'buy_toll_free_number')
+    @patch('sh_util.tel.tel_util.twilioBuyPhoneNumber')
     def test_buy_number_bw_then_twilio(
         self,
         mock_twilio_buy,
@@ -370,7 +411,8 @@ class TelUtilTestCases(unittest.TestCase):
             settings.SMS_GATEWAY_BANDWIDTH,
             dummy_sid,
             area_code=area_code,
-            user=dummy_user
+            user=dummy_user,
+            alt_gateway=True
         )
 
         mock_bw_buy.assert_called_with(
@@ -391,7 +433,44 @@ class TelUtilTestCases(unittest.TestCase):
         mock_bw_tf_buy.assert_not_called()
         self.assertEqual(bought_num.phone_number, phone_number)
         self.assertEqual(bought_num.sid, dummy_sid)
-        self.assertEqual(bought_num.gateway, settings.SMS_GATEWAY_TWILIO)
+
+    @patch.object(SHBandwidthClient, 'buy_phone_number')
+    @patch.object(SHBandwidthClient, 'buy_toll_free_number')
+    @patch('sh_util.tel.tel_util.twilioBuyPhoneNumber')
+    def test_buy_number_bw_failure_no_alternate(
+        self,
+        mock_twilio_buy,
+        mock_bw_tf_buy,
+        mock_bw_buy
+    ):
+        """
+           tests bandwidth first which fails and then
+           tries alternate gateway to get a number
+        """
+        dummy_sid = 'dummysid'
+        area_code = '919'
+        phone_number = '+19193456789'
+        dummy_user = 'dummy_user'
+        mock_twilio_buy.return_value = SHBoughtNumberObject(phone_number, dummy_sid, '')  # noqa
+        mock_bw_buy.side_effect = AreaCodeUnavailableError('Area Code is not available')  # noqa
+
+        self.assertRaises(
+            AreaCodeUnavailableError,
+            BuyPhoneNumberFromCarrier(),
+            settings.SMS_GATEWAY_BANDWIDTH,
+            dummy_sid,
+            area_code=area_code,
+            user=dummy_user
+        )
+
+        mock_bw_buy.assert_called_with(
+            phone_number=None,
+            area_code=area_code,
+            user_id=dummy_user,
+            country_code='US'
+        )
+        mock_twilio_buy.assert_not_called()
+        mock_bw_tf_buy.assert_not_called()
 
     @patch.object(SHBandwidthClient, 'buy_phone_number')
     @patch.object(SHBandwidthClient, 'buy_toll_free_number')
@@ -418,7 +497,8 @@ class TelUtilTestCases(unittest.TestCase):
             settings.SMS_GATEWAY_TWILIO,
             dummy_sid,
             area_code=area_code,
-            user=dummy_user
+            user=dummy_user,
+            alt_gateway=True
         )
 
         mock_twilio_buy.assert_called_with(
@@ -463,7 +543,8 @@ class TelUtilTestCases(unittest.TestCase):
             settings.SMS_GATEWAY_BANDWIDTH,
             dummy_sid,
             area_code=area_code,
-            user=dummy_user
+            user=dummy_user,
+            alt_gateway=True
         )
 
         mock_bw_buy.assert_called_with(
@@ -481,6 +562,44 @@ class TelUtilTestCases(unittest.TestCase):
             phoneNumber=None
         )
 
+    @patch.object(SHBandwidthClient, 'buy_phone_number')
+    @patch.object(SHBandwidthClient, 'buy_toll_free_number')
+    @patch('sh_util.tel.tel_util.twilioBuyPhoneNumber')
+    def test_buy_number_bw_other_exception(
+        self,
+        mock_twilio_buy,
+        mock_bw_tf_buy,
+        mock_bw_buy
+    ):
+        """
+            tests other exception than AreaCode unavailable error...
+            should not try
+        """
+        dummy_sid = 'dummysid'
+        phone_number = '+12345678999'
+        area_code = '919'
+        dummy_user = 'dummy_user'
+        mock_bw_buy.side_effect = BWNumberUnavailableError('phone number is not available')  # noqa
+
+        self.assertRaises(
+            BWNumberUnavailableError,
+            BuyPhoneNumberFromCarrier(),
+            settings.SMS_GATEWAY_BANDWIDTH,
+            dummy_sid,
+            area_code=area_code,
+            phone_number=phone_number,
+            user=dummy_user,
+            alt_gateway=True
+        )
+
+        mock_bw_buy.assert_called_with(
+            phone_number=phone_number,
+            area_code=area_code,
+            user_id=dummy_user,
+            country_code='US'
+        )
+
+        mock_twilio_buy.assert_not_called()
         mock_bw_tf_buy.assert_not_called()
 
     @patch.object(ReleaseNumberSafely, '_twilio_safe_number_release')
