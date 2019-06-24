@@ -270,9 +270,15 @@ class SHBandwidthClient(object):
                     siteid=site_id
                 )
             except BandwidthOrderPendingException as order_id:
-                logging.info('Order is pending - schedule celery task to '
-                             'check the status again..')
-                raise
+                logging.warn('Order {} is pending for phone number: {}, '
+                             'user: {}, looks like bandwidth service is '
+                             'slow. Error out for now and nightly cleanup '
+                             'task will release the number.'.
+                             format(order_id, phone_number, user_id))
+                raise BWNumberUnavailableError(
+                    'Pending Number Order: ' +
+                    SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
+                )
             except BandwidthAccountAPIException as e:
                 # If we didn't get the number, throw an error
                 err_resp = u'We could not get number {} from our carrier. ' \
@@ -295,9 +301,16 @@ class SHBandwidthClient(object):
                 )
 
             except BandwidthOrderPendingException as order_id:
-                logging.info('Order {} is pending - schedule celery task to '
-                             'check the status again.'.format(order_id))
-                raise
+                logging.warn('Order {} is pending for a number in '
+                             'area code: {}, user_id: {}, qty: 1, '
+                             'looks like bandwidth service is slow. '
+                             'Error out for now and nightly cleanup task '
+                             'will release the number.'.
+                             format(order_id, area_code, user_id))
+                raise AreaCodeUnavailableError(
+                    'Pending Area Code Order: ' +
+                    SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
+                )
             except BandwidthAccountAPIException as e:
                 # If we didn't get the number, throw an error
                 logging.error(u'buy_phone_number(): could not get number. '
@@ -409,9 +422,15 @@ class SHBandwidthClient(object):
                                  name='SendHub Customer: {}'.format(user_id),
             )
         except BandwidthOrderPendingException as order_id:
-            logging.info('Order {} is pending - schedule celery task to '
-                         'check the status again..'.format(order_id))
-            raise
+            logging.warn('Order {} is pending for a toll-free number for '
+                         'user: {}. Looks like bandwidth service is slow. '
+                         'Error out for now and nightly cleanup task '
+                         'will release the number.'.
+                         format(order_id, user_id))
+            raise BWTollFreeUnavailableError(
+                'Toll Free Number Order Pending: ' +
+                SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
+            )
 
         except BandwidthAccountAPIException as e:
             # If we didn't get the number, throw an error

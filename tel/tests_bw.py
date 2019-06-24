@@ -4,7 +4,9 @@ import logging
 import unittest
 import inspect
 import datetime
+from mock import patch
 from bandwidth.account import BandwidthAccountAPIException
+import settings
 
 try:
     from sh_util.tel import AreaCodeUnavailableError
@@ -12,7 +14,9 @@ except:
     sys.path.append('/opt/sendhub/inforeach/app')
     from sh_util.tel import AreaCodeUnavailableError
 
-from bw_util import SHBandwidthClient, BWTollFreeUnavailableError
+from bw_util import SHBandwidthClient
+from bw_util import BWTollFreeUnavailableError, BWNumberUnavailableError
+from bw_util import BandwidthOrderPendingException
 from bw_util import phonenumber_as_e164
 
 SUCCESS_AREA_CODE = '919'
@@ -33,7 +37,17 @@ class BandwidthAccountHelpers:
     def __init__(self):
         self.bw_client = SHBandwidthClient(debug=ENABLE_BW_DEBUGGING)
 
-    def _buy_phonenumber_with_areacode(self, area_code, country_code='US'):
+    def _buy_phonenumber_with_areacode_passthru(self, area_code,
+                                                country_code='US'):
+        return self._buy_phonenumber_with_areacode(
+            area_code,
+            country_code,
+            reraise=True
+        )
+
+    def _buy_phonenumber_with_areacode(self, area_code,
+                                       country_code='US',
+                                       reraise=False):
         search_number = None
         try:
             search_number = self.bw_client.buy_phone_number(
@@ -43,10 +57,12 @@ class BandwidthAccountHelpers:
             logging.info("available number: {}".format(search_number))
         except AreaCodeUnavailableError as e:
             logging.info("Exception as {}".format(e))
+            if reraise:
+                raise
 
         return search_number
 
-    def _buy_phonenumber_with_phonenum(self, phone_num):
+    def _buy_phonenumber_with_phonenum(self, phone_num, reraise=False):
         bought_number = None
         try:
             bought_number = self.bw_client.buy_phone_number(
@@ -55,6 +71,8 @@ class BandwidthAccountHelpers:
             logging.info("available number: {}".format(bought_number))
         except AreaCodeUnavailableError as e:
             logging.info("Exception as {}".format(e))
+            if reraise:
+                raise
 
         return bought_number
 
@@ -74,7 +92,7 @@ class BandwidthAccountHelpers:
 
         return search_number
 
-    def _buy_tollfree_phonenumber(self, quantity=1):
+    def _buy_tollfree_phonenumber(self, quantity=1, reraise=False):
         search_number = None
         try:
             search_number = self.bw_client.buy_toll_free_number(
@@ -83,6 +101,8 @@ class BandwidthAccountHelpers:
             logging.info("available number: {}".format(search_number))
         except BWTollFreeUnavailableError as e:
             logging.info("Exception as {}".format(e))
+            if reraise:
+                raise
 
         return search_number
 
@@ -259,10 +279,97 @@ class BandwidthAccountTestCases(unittest.TestCase):
                               re_raise=True)
 
     def test_invalid_country_code(self):
-        self.assertRaises(ValueError,
+        self.assertRaises(AreaCodeUnavailableError,
                           self.helper._buy_phonenumber_with_areacode,
                           area_code='186',
-                          country_code='IND')
+                          country_code='IND',
+                          reraise=True)
+
+    @patch('bandwidth.account.client_module.Client.order_phone_number')
+    @patch('bandwidth.account.client_module.Client.search_and_order_local_numbers')  # noqa
+    @patch('bandwidth.account.client_module.Client.search_and_order_toll_free_numbers')  # noqa
+    def test_areacode_order_pending_exception(
+        self,
+        mock_buy_tf_number,
+        mock_area_code_number,
+        mock_buy_number
+    ):
+        '''
+            tests pending order exception when ordering
+            area code for phone number
+        '''
+        area_code = 'abc'
+        user_id = None
+        mock_area_code_number.side_effect = BandwidthOrderPendingException('Area Code is not available')  # noqa
+        self.assertRaises(
+            AreaCodeUnavailableError,
+            self.helper._buy_phonenumber_with_areacode_passthru,
+            area_code=area_code
+        )
+        mock_area_code_number.assert_called_with(
+            area_code=area_code,
+            quantity=1,
+            name='SendHub Customer: {}'.format(user_id),
+            siteid=settings.BW_SITE_ID
+        )
+
+    @patch('bandwidth.account.client_module.Client.order_phone_number')
+    @patch('bandwidth.account.client_module.Client.search_and_order_local_numbers')  # noqa
+    @patch('bandwidth.account.client_module.Client.search_and_order_toll_free_numbers')  # noqa
+    def test_number_order_pending_exception(
+        self,
+        mock_buy_tf_number,
+        mock_area_code_number,
+        mock_buy_number
+    ):
+        '''
+            tests pending order exception when ordering
+            specific phone number
+        '''
+        phone_number = '+12345678999'
+        user_id = None
+        mock_buy_number.side_effect = BandwidthOrderPendingException('Order is pending, phone number not available')  # noqa
+        self.assertRaises(
+            BWNumberUnavailableError,
+            self.helper._buy_phonenumber_with_phonenum,
+            phone_number,
+            reraise=True
+        )
+        mock_buy_number.assert_called_with(
+            number='2345678999',
+            name='SendHub Customer: {}'.format(user_id),
+            quantity=1,
+            siteid=settings.BW_SITE_ID
+        )
+
+        pass
+
+    @patch('bandwidth.account.client_module.Client.order_phone_number')
+    @patch('bandwidth.account.client_module.Client.search_and_order_local_numbers')  # noqa
+    @patch('bandwidth.account.client_module.Client.search_and_order_toll_free_numbers')  # noqa
+    def test_tollfree_order_pending_exception(
+        self,
+        mock_buy_tf_number,
+        mock_area_code_number,
+        mock_buy_number
+    ):
+        '''
+            tests pending order exception when ordering
+            a toll-free number
+        '''
+        user_id = None
+        mock_buy_tf_number.side_effect = BandwidthOrderPendingException('Order is pending, phone number not available')  # noqa
+        self.assertRaises(
+            BWTollFreeUnavailableError,
+            self.helper._buy_tollfree_phonenumber,
+            reraise=True
+        )
+        mock_buy_tf_number.assert_called_with(
+            quantity=1,
+            pattern=None,
+            siteid=settings.BW_SITE_ID,
+            name='SendHub Customer: {}'.format(user_id)
+        )
 
 
 class BWMessagingTestCases(unittest.TestCase):
