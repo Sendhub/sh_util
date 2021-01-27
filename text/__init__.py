@@ -2,12 +2,12 @@
 
 import unicodedata, re
 from .format_string_to_fit_in_n_chars import squeeze_sms_message, format_string_to_fit_in_n_chars
-from ec2HostnameToIp import ec2HostnameToIp
-from split import splitString
+from .ec2HostnameToIp import ec2HostnameToIp
+from .split import splitString
 from . import case
 
 def ensureAscii(text):
-    if type(text) == unicode:
+    if type(text) == str:
         encodedText = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore')
     else:
         encodedText = text
@@ -28,7 +28,7 @@ def stringify(obj):
             obj[stringify(k)] = stringify(v)
     elif type(obj) is list:
         return map(stringify, obj)
-    elif type(obj) is int or type(obj) is long:
+    elif type(obj) is int:
         return str(obj)
     return obj
 

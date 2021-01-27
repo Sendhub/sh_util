@@ -6,8 +6,8 @@ import tempfile
 from sh_util.http.wget import wget
 import pycurl
 import os
-import cStringIO
-from urlparse import urlparse
+from io import StringIO
+import urllib.parse
 from os.path import basename
 from copy import deepcopy
 
@@ -164,9 +164,10 @@ class KazooClient(object):
         }
 
     def listDevices(self, accountId, ownerId):
-        from kazoo.client import KazooRequest
+        # from kazoo.client import KazooRequest
+        from kazoo.client import KazooClient
 
-        request = KazooRequest("/accounts/{account_id}/devices", get_params={
+        request = KazooClient("/accounts/{account_id}/devices", get_params={
             "filter_owner_id": ownerId
         })
         request.auth_required = True
@@ -320,7 +321,7 @@ class KazooClient(object):
             c.setopt(pycurl.POST, 1)
             c.setopt(pycurl.HTTPHEADER, ["Content-type: audio/mp3", "X-Auth-Token: {}".format(self.kazooCli.auth_token)])
             c.setopt(pycurl.POSTFIELDSIZE, os.path.getsize(fh.name))
-            response = cStringIO.StringIO()
+            response = StringIO()
             c.setopt(c.WRITEFUNCTION, response.write)
 
             logging.info(u'Uploading file %s to url %s' % (fh.name, toUrl))
@@ -343,7 +344,7 @@ class KazooClient(object):
         result = None
 
         try:
-            filename = basename(urlparse(url).path)
+            filename = basename(urllib.parse.urlparse(url).path)
             result = self.kazooCli.create_media(accountId, {'streamable':True, 'name':name, 'description':'C:\\fakepath\\{}'.format(filename)})
 
             self.copyMedia(accountId, result['data']['id'], url)

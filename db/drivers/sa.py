@@ -54,7 +54,7 @@ def getRealShardConnectionName(using):
         if hasattr(settings, 'DATABASE_DEFAULT_SHARD'):
             using = settings.DATABASE_DEFAULT_SHARD
         else:
-            using = connections().keys()[0]
+            using = list(connections().keys())[0]
 
     return using
 
@@ -153,7 +153,8 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = 'sslmode=require' if secure is True else ''
 
-    psqlTuples = map(lambda (key, param, default): '{0}={1}'.format(param, getattr(engine.url, key) or default), _saAttrsToPsql)
+    psqlTuples = map(lambda key, param, default: '{0}={1}'.format(
+        param, getattr(engine.url, key) or default), _saAttrsToPsql)
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out

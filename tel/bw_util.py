@@ -13,12 +13,12 @@ except ImportError:
     import settings
 
 try:
-    from tel import validatePhoneNumber, AreaCodeUnavailableError
-    from tel import displayNumber
+    from sh_util.tel import validatePhoneNumber, AreaCodeUnavailableError
+    from sh_util.tel import displayNumber
 except ImportError:
     sys.path.append('/opt/sendhub/inforeach/app')
-    from tel import validatePhoneNumber, AreaCodeUnavailableError
-    from tel import displayNumber
+    from sh_util.tel import validatePhoneNumber, AreaCodeUnavailableError
+    from sh_util.tel import displayNumber
 
 import bandwidth
 from bandwidth.account import BandwidthAccountAPIException

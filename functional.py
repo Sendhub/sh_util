@@ -9,7 +9,7 @@ import logging
 from inspect import getfullargspec
 from copy import deepcopy
 from time import time
-from memcache import get_memcache_client as cli
+from sh_util.memcache import get_memcache_client as cli
 import pylibmc
 try:
     import pickle as _pickle
@@ -198,7 +198,7 @@ def safer_hash(obj):
     """
     def tuplify_dicts(obj):
         """Recursively turn dicts into sorted tuples."""
-        if not hasattr(obj, '__iter__'):
+        if not type(obj) == str and type(obj) == tuple:
             return obj
         if isinstance(obj, dict):
             return tuple(sorted(map(tuplify_dicts, list(obj.items()))))

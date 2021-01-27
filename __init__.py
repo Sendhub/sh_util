@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 """Things which don't seem to cleanly fit anywhere else."""
+from functools import reduce
+
 
 def lineno():
     """Returns the current line number from the invoker's context."""
@@ -10,7 +12,7 @@ def lineno():
 
 def toId(x):
     """Get an id out of the object if possible."""
-    if isinstance(x, int) or isinstance(x, long):
+    if isinstance(x, int):
         return x
     if hasattr(x, 'id'):
         return x.id
@@ -24,7 +26,7 @@ def findVariableByNameInFrame(name, depth=1):
     """
     import sys
     frame = sys._getframe(2)
-    selfSearch = filter(lambda (k, v): k == 'self', frame.f_locals.items())
+    selfSearch = filter(lambda k: k == 'self', frame.f_locals.items())
     return selfSearch[0][1] if len(selfSearch) > 0 else None
 
 

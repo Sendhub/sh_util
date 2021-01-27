@@ -6,6 +6,7 @@ import calendar
 import datetime
 import simplejson
 
+
 def default_encoder(obj):
     """Default JSON serializer with datetime support."""
     if hasattr(obj, 'timetuple'):
@@ -16,8 +17,7 @@ def default_encoder(obj):
         millis = int(calendar.timegm(obj.timetuple()) * 1000 + (
             obj.microsecond if hasattr(obj, 'microsecond') else 0) / 1000)
         return str(millis)
-
-    return obj
+    return list(obj)
 
 
 def encode(obj):
