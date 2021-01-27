@@ -6,22 +6,26 @@ __author__ = 'Jay Taylor [@jtaylor]'
 
 import collections as _collections
 import logging
-
+from inspect import getfullargspec
+from copy import deepcopy
+from time import time
+from memcache import get_memcache_client as cli
+import pylibmc
 try:
-    import cPickle as _pickle
+    import pickle as _pickle
 except ImportError:
     import pickle as _pickle
 
 
-def flatten(l, generator=True):
+def flatten(array):
     """Flatten an arbitrarily nested sequence of iterables."""
-    for el in l:
-        if isinstance(el, _collections.Iterable) and \
-           not isinstance(el, basestring):
-            for sub in flatten(el):
+    for arr in array:
+        if isinstance(arr, _collections.Iterable) and \
+           not isinstance(arr, str):
+            for sub in flatten(arr):
                 yield sub
         else:
-            yield el
+            yield arr
 
 
 def distinct(seq):
@@ -36,130 +40,91 @@ def distinct(seq):
 
 # Filter an interable to elements of a particular class.
 filterByClass = \
-    lambda clazz, iterable: filter(lambda x: isinstance(x, clazz), iterable)
+    lambda clazz, iterable: [x for x in iterable if isinstance(x, clazz)]
 
 
-def curry(x, argc=None):
+def curry(arg1, argc=None):
     """Curry decorator."""
     if argc is None:
-        argc = x.__code__.co_argcount
+        argc = arg1.__code__.co_argcount
 
-    def p(*a):
+    def wrapper1(*array):
         """@return curried function."""
-        if len(a) == argc:
-            return x(*a)
+        if len(array) == argc:
+            return arg1(*array)
 
-        def q(*b):
+        def wrapper2(*arr_list):
             """."""
-            return x(*(a + b))
+            return arg1(*(array + arr_list))
 
-        return curry(q, argc - len(a))
+        return curry(wrapper2, argc - len(array))
 
-    return p
+    return wrapper1
 
 
-def memoize(fn):
+def memoize(function):
     """Memoization decorator wraps Memoize class."""
-    class Memoize(object):
+    class Memoize():
         """Class to abstract away the details for method memoization."""
-        def __init__(self, f):
-            """@param f Function to memoize."""
-            from inspect import getargspec
-
-            self.f = f
+        def __init__(self, func):
+            """@param func Function to memoize."""
+            self.func = func
             self._cached = {}
 
             # Determine whether or not the function accepts keyword arguments.
             # NB: getargspec return format is: args, varargs, varkw, defaults
-            self._acceptsKw = getargspec(self.f)[2] is not None
+            self._accepts_kw = getfullargspec(self.func)[2] is not None
 
         def __call__(self, *args, **kw):
-            """Generate the unique key and rtrieve the memoized result."""
-            from copy import deepcopy
-
-            #import collections
-            #
-            ## The key can't contain anything mutable (no lists! convert to
-            ## tuples).
-            #key = (
-            #    tuple(map(
-            #        lambda x: tuple(x) if x is not None and \
-            #            hasattr(x, '__iter__') \
-            #            else (x.keys(), x.values()) if isinstance(x, dict) \
-            #            else x,
-            #        args
-            #    )),
-            #    (tuple(kw.keys()), tuple(kw.values()))
-            #)
-            ##print 'f=%s key=%s' % (self.f, key)
-
-            # That was too messy and anything w/o serialization which does
-            # conversion/coercion can produce potentially incorrect results,
-            # just use pickle instead:
-
+            """
+            Generate the unique key and rtrieve the memoized result.
+            That was too messy and anything w/o serialization which does
+            conversion/coercion can produce potentially incorrect results,
+            just use pickle instead:
+            """
             key = _pickle.dumps((args, kw))
-            #print 'key=%s' % key
-
             if key not in self._cached:
-                self._cached[key] = self.f(*args, **kw) \
-                    if self._acceptsKw is True else self.f(*args)
+                self._cached[key] = self.func(*args, **kw) \
+                    if self._accepts_kw is True else self.func(*args)
 
             # Return a copy because we don't want the invoker to then modify the
             # result that will be returned forever.
             return deepcopy(self._cached[key])
 
-    return Memoize(fn)
+    return Memoize(function)
 
 
-class memoizeWithExpiry(object):
+class Memoizewithexpiry():
     """Memoization decorator wraps Memoize class."""
 
-    def __init__(self, ttlSeconds):
-        """@param ttlSeconds Number of seconds to cache results for."""
-        self.ttlSeconds = ttlSeconds
+    def __init__(self, ttl_seconds):
+        """@param ttl_seconds Number of seconds to cache results for."""
+        self.ttl_seconds = ttl_seconds
         self._cached = {}
 
-    def _cleanCache(self):
+    def _clean_cache(self):
         """Clean expired items from the cache."""
-        from time import time
-
-        #maxTime = time() - self.ttlSeconds
         now = time()
+        expired = [tup[0] for tup in [tup for tup in list(self._cached.items()) if
+                                      tup[1][0] - now > self.ttl_seconds]]
+        logging.info('Cleaning expired items: %s', expired)
+        for key in expired:
+            del self._cached[key]
 
-        expired = map(
-            lambda tup: tup[0],
-            filter(
-                lambda tup: tup[1][0] - now > self.ttlSeconds,
-                self._cached.items()
-            )
-        )
-
-        logging.info('Cleaning expired items: {0}'.format(expired))
-
-        for k in expired:
-            del self._cached[k]
-
-    def __call__(self, fn):
+    def __call__(self, func):
         """Call override."""
-        from inspect import getargspec
-
-        self._cleanCache()
+        self._clean_cache()
 
         # Determine whether or not the function accepts keyword arguments.
         # NB: getargspec return format is: args, varargs, varkw, defaults
-        acceptsKw = getargspec(fn)[2] is not None
+        accepts_kw = getfullargspec(func)[2] is not None
 
         def wrapped(*args, **kw):
             """Inner function"""
-            from copy import deepcopy
-            from time import time
-
             key = _pickle.dumps((args, kw))
 
-            if key not in self._cached or \
-                time() - self._cached[key][0] > self.ttlSeconds:
-                result = fn(*args, **kw) \
-                    if acceptsKw is True else fn(*args)
+            if key not in self._cached or time() - self._cached[key][0] > self.ttl_seconds:
+                result = func(*args, **kw) if accepts_kw is True else func(*args)
                 self._cached[key] = (time(), result)
 
             # Return a copy because we don't want the invoker to then modify the
@@ -169,69 +134,55 @@ class memoizeWithExpiry(object):
         return wrapped
 
 
-class distMemoizeWithExpiry(memoizeWithExpiry):
+class Distmemoizewithexpiry(Memoizewithexpiry):
     """Memoization decorator wraps Memoize class."""
 
-    def __init__(self, ttlSeconds):
-        """@param ttlSeconds Number of seconds to cache results for."""
-        super(distMemoizeWithExpiry, self).__init__(ttlSeconds)
+    def __init__(self, ttl_seconds):
+        """@param ttl_seconds Number of seconds to cache results for."""
+        super().__init__(ttl_seconds)
 
-    def __call__(self, fn):
+    def __call__(self, func):
         """Call override."""
-        from inspect import getargspec
-
-        self._cleanCache()
+        self._clean_cache()
 
         # Determine whether or not the function accepts keyword arguments.
         # NB: getargspec return format is: args, varargs, varkw, defaults
-        acceptsKw = getargspec(fn)[2] is not None
+        accepts_kw = getfullargspec(func)[2] is not None
 
         def wrapped(*args, **kw):
             """Inner function"""
-            from copy import deepcopy
-            from time import time
-            from .memcache import getMemcacheClient as cli
-            import pylibmc
-
             key = _pickle.dumps((args, kw))
             now = time()
 
             if key not in self._cached or \
-                now - self._cached[key][0] > self.ttlSeconds:
+                now - self._cached[key][0] > self.ttl_seconds:
                 # Memcache key.
-                mcKey = 'memoize.{0}:{1}'.format(fn.__name__, key)
+                mc_key = 'memoize.{0}:{1}'.format(func.__name__, key)
 
                 result = None
                 try:
-                    test = cli().get(mcKey)
+                    test = cli().get(mc_key)
                     if test is not None:
-                        setTs, result = test
-                        #logging.debug(
-                        #    'result is {0} seconds old'.format(now - setTs)
-                        #)
-                        if now - setTs > self.ttlSeconds:
-                            #logging.debug('result was too old')
+                        set_ts, result = test
+                        if now - set_ts > self.ttl_seconds:
                             result = None
-                        #else:
-                        #    logging.info('found mcKey={0}'.format(mcKey))
 
-                except pylibmc.Error, e:
-                    logging.error('distMemoizeWithExpiry caught {0}'.format(e))
+                except pylibmc.Error as err:
+                    logging.error('Distmemoizewithexpiry caught %s', str(err))
 
                 if result is None:
                     # Calculate result.
-                    result = fn(*args, **kw) if acceptsKw is True else fn(*args)
+                    result = func(*args, **kw) if accepts_kw is True else func(*args)
 
                 # Store result locally.
                 self._cached[key] = (time(), result)
 
                 try:
                     # Store result in memcache.
-                    cli().set(mcKey, self._cached[key], time=self.ttlSeconds)
+                    cli().set(mc_key, self._cached[key], time=self.ttl_seconds)
 
-                except pylibmc.Error, e:
-                    logging.error('distMemoizeWithExpiry caught {0}'.format(e))
-
+                except pylibmc.Error as err:
+                    logging.error('Distmemoizewithexpiry caught %s', str(err))
 
             # Return a copy because we don't want the invoker to then modify the
             # result that will be returned forever.
@@ -240,14 +191,16 @@ class distMemoizeWithExpiry(memoizeWithExpiry):
         return wrapped
 
 
-def saferHash(o):
-    """Get a consistent hash for objects, even when they are a dictionary or contain dictionaries."""
-    def tuplifyDicts(o):
+def safer_hash(obj):
+    """
+    Get a consistent hash for objects, even when they are
+    a dictionary or contain dictionaries.
+    """
+    def tuplify_dicts(obj):
         """Recursively turn dicts into sorted tuples."""
-        if not hasattr(o, '__iter__'):
-            return o
-        if isinstance(o, dict):
-            return tuple(sorted(map(tuplifyDicts, o.items())))
-        return tuple(sorted(map(tuplifyDicts, o)))
-    return hash(tuplifyDicts(o))
-
+        if not hasattr(obj, '__iter__'):
+            return obj
+        if isinstance(obj, dict):
+            return tuple(sorted(map(tuplify_dicts, list(obj.items()))))
+        return tuple(sorted(map(tuplify_dicts, obj)))
+    return hash(tuplify_dicts(obj))

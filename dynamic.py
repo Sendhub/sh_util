@@ -7,7 +7,7 @@ Real-world use case:
 
 class MyModel(
     MainModel,
-    DynamicallyGenerateTransformedAttributes(str, '_str', 'id', 'user_id')
+    dynamically_generate_transformed_attributes(str, '_str', 'id', 'user_id')
 ):
     def __init__(self, id, user_id):
         self.id = id
@@ -28,13 +28,13 @@ in manually.
 __author__ = 'Jay Taylor [@jtaylor]'
 
 
-def DynamicallyGenerateTransformedAttributes(transformFn, suffix, *attributes):
+def dynamically_generate_transformed_attributes(transform_fn, suffix, *attributes):
     """
     Function which dynamically generates a class with "foo_<suffix>" properties
     which apply and return the transformed value of "foo" after passing it
     through the mapping function.
 
-    @param transformFn Function which takes the value of a given instance
+    @param transform_fn Function which takes the value of a given instance
         attribute and returns the transformed value.
 
     @param suffix String to append to attribute name to form new attribute name,
@@ -56,7 +56,7 @@ def DynamicallyGenerateTransformedAttributes(transformFn, suffix, *attributes):
 
     # Test case where the ``suffix`` is a string ('_str'):
     >>> class TestStringSuffix(
-    ...     DynamicallyGenerateTransformedAttributes(str, '_str', 'id', 'foo')
+    ...     dynamically_generate_transformed_attributes(str, '_str', 'id', 'foo')
     ... ):
     ...     def __init__(self, id, foo):
     ...         self.id = id
@@ -82,7 +82,7 @@ def DynamicallyGenerateTransformedAttributes(transformFn, suffix, *attributes):
     >>> txFn = lambda x: str(x)[::-1] # Output is reversed string of input.
 
     >>> class TestFunctionSuffix(
-    ...     DynamicallyGenerateTransformedAttributes(txFn, suffixFn, 'id', 'foo')
+    ...     dynamically_generate_transformed_attributes(txFn, suffixFn, 'id', 'foo')
     ... ):
     ...     def __init__(self, id, foo):
     ...         self.id = id
@@ -103,39 +103,37 @@ def DynamicallyGenerateTransformedAttributes(transformFn, suffix, *attributes):
     foo: bar/<type 'str'>, oof: rab/<type 'str'>
     """
 
-    class GeneratedClass(object):
+    class GeneratedClass():
         """Class which will have properties dynamically set on it."""
         pass
 
-    def generateTransformedProperty(attr):
+    def generate_transformed_property(attr):
         """
         Generate and return a property function to access the transformation of
         the named attribute.
         """
         @property
-        def f(self):
+        def wrapper(self):
             """Generated property function to alias attribute."""
-            return transformFn(getattr(self, attr))
-        return f
+            return transform_fn(getattr(self, attr))
+        return wrapper
 
     # Generate and attach "suffix" property alias for each specified attribute.
-    for a in attributes:
+    for attr in attributes:
         setattr(
             GeneratedClass,
-            '{0}{1}'.format(a, suffix) if isinstance(suffix, str) or \
-                isinstance(suffix, unicode) else suffix(a),
-            generateTransformedProperty(a)
+            '{0}{1}'.format(attr, suffix) if isinstance(suffix, str) else
+            suffix(attr), generate_transformed_property(attr)
         )
 
     return GeneratedClass
 
 
-def WithStrAttrs(*attributes):
+def with_str_attrs(*attributes):
     """Convenience method."""
-    return DynamicallyGenerateTransformedAttributes(str, '_str', *attributes)
+    return dynamically_generate_transformed_attributes(str, '_str', *attributes)
 
 
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
-

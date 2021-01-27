@@ -9,9 +9,9 @@ import logging
 import settings
 from sh_util.db import connections
 from .singleton import Singleton
-from .memcache import getMemcacheClient
+from .memcache import get_memcache_client
 from .retry import retry
-#from .functional import memoizeWithExpiry
+#from .functional import Memoizewithexpiry
 
 
 def coerceIdToShardName(shardOrShardId):
@@ -32,7 +32,7 @@ class ShardedConnection(object):
     """Shard connection resoure for `with` statements."""
     def __init__(self, connectionNameOrId):
         """
-        @param connectionName str or int Name or id of database connection
+        @param connection_name str or int Name or id of database connection
             to use.
         """
         self.connectionName = 'shard_{0}'.format(connectionNameOrId) if \
@@ -161,7 +161,7 @@ class ShardedResource(object):
     def _cacheSet(key, value):
         """Set a value in the cache."""
         try:
-            cli = getMemcacheClient()
+            cli = get_memcache_client()
             value = cli.set(key, value)
 
         except pylibmc.Error, e:
@@ -171,7 +171,7 @@ class ShardedResource(object):
     def _cacheGet(key):
         """Get a value from the cache."""
         try:
-            cli = getMemcacheClient()
+            cli = get_memcache_client()
             return cli.get(key)
 
         except pylibmc.Error, e:
@@ -184,7 +184,7 @@ class ShardedResource(object):
         prefix = ShardedResource.shardCachePrefix(model, column)
 
         try:
-            cli = getMemcacheClient()
+            cli = get_memcache_client()
 
             for shard in _shards:
                 shardId = str(ShardedResource.shardNameToId(shard))
@@ -210,7 +210,7 @@ class ShardedResource(object):
         Explicitly set the location for a model/column/value in the cache.
         """
         try:
-            cli = getMemcacheClient()
+            cli = get_memcache_client()
             key = ShardedResource.shardCacheKey(model, column, value)
             cli.set(key, str(shardId))
 
@@ -273,14 +273,14 @@ class ShardedResource(object):
         from sh_util.db import db_query
 
         res = db_query(
-            'SELECT "physicalShardId" FROM "LogicalShard" WHERE "id" = {0}' \
+            'SELECT "physical_shard_id" FROM "LogicalShard" WHERE "id" = {0}' \
                 .format(userIdToLogicalShardId(userId)),
             using='shard_1'
         )
 
         if len(res) == 0 or len(res[0]) == 0:
             raise ShardLookupFailure(
-                'Unable to find shard for userId={0}'.format(userId)
+                'Unable to find shard for user_id={0}'.format(userId)
             )
 
         physicalShardId = res[0][0]
@@ -289,19 +289,19 @@ class ShardedResource(object):
 
     @staticmethod
     # @TODO MEMOIZATION TEMPORARILY DISABLED
-    #@memoizeWithExpiry(180)
+    #@Memoizewithexpiry(180)
     def _cachingUserIdToPhysicalShardId(userId):
         """Memoizing function to algorythmically resolve user-id to shard-id."""
         logicalShardId = userIdToLogicalShardId(userId)
 
         try:
             key = 'logicalShard:{0}'.format(logicalShardId)
-            value = getMemcacheClient().get(key)
+            value = get_memcache_client().get(key)
             if value is not None:
                 return value
 
             shardId = ShardedResource._realUserIdToPhysicalShardId(userId)
-            getMemcacheClient().set(key, shardId, time=180)
+            get_memcache_client().set(key, shardId, time=180)
 
         except pylibmc.Error:
             if 'shardId' not in vars():
@@ -334,7 +334,7 @@ class ShardedResource(object):
             from django.contrib.auth.models import User
             from main.models import ExtendedUser, PhoneNumber
 
-            userId = data['userId']
+            userId = data['user_id']
             shardId = str(data['shardId'])
 
             ShardedResource.setShardId(User, 'user_id', userId, shardId)
@@ -385,7 +385,7 @@ class ShardedAuthenticationMiddleware(object):
             shardId = ShardedResource().userIdToPhysicalShardId(userId)
 
             logging.info(
-                u'[SHARD-SELECTOR] Selecting shard #{0} for userId={1}' \
+                u'[SHARD-SELECTOR] Selecting shard #{0} for user_id={1}' \
                 .format(shardId, userId)
             )
 

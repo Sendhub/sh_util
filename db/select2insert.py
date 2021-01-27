@@ -39,9 +39,9 @@ def select2insert(table, description, whereClause=None):
     'SELECT \\'INSERT INTO "auth_user" ("id","username","first_name","last_name","email","password","is_staff","is_active","is_superuser","last_login","date_joined") VALUES (\\' || quote_nullable("id") || \\',\\' || quote_nullable("username") || \\',\\' || quote_nullable("first_name") || \\',\\' || quote_nullable("last_name") || \\',\\' || quote_nullable("email") || \\',\\' || quote_nullable("password") || \\',\\' || quote_nullable("is_staff") || \\',\\' || quote_nullable("is_active") || \\',\\' || quote_nullable("is_superuser") || \\',\\' || quote_nullable("last_login") || \\',\\' || quote_nullable("date_joined") || \\');\\' FROM "auth_user";'
 
     """
-    columns = ','.join(map(lambda tup: '"{0}"'.format(tup[0]), description))
+    columns = ','.join(['"{0}"'.format(tup[0]) for tup in description])
 
-    values = " || ',' || ".join(map(lambda tup: 'quote_nullable("{0}")'.format(tup[0]), description))
+    values = " || ',' || ".join(['quote_nullable("{0}")'.format(tup[0]) for tup in description])
 
     if whereClause is not None and not whereClause.lower().strip().startswith('where '):
         whereClause = 'WHERE {0}'.format(whereClause)
@@ -59,7 +59,7 @@ def select2multiInsert(using, table, description, whereClause=None):
     """Evaluates intermediate SQL and returns combined multi-insert statement."""
     from . import db_query
 
-    values = " || ',' || ".join(map(lambda tup: 'quote_nullable("{0}")'.format(tup[0]), description))
+    values = " || ',' || ".join(['quote_nullable("{0}")'.format(tup[0]) for tup in description])
 
     if whereClause is not None and not whereClause.lower().strip().startswith('where '):
         whereClause = 'WHERE {0}'.format(whereClause)
@@ -67,15 +67,15 @@ def select2multiInsert(using, table, description, whereClause=None):
     where = '{0}'.format(whereClause) if whereClause is not None else ''
 
     intermediateSql = \
-        u'''SELECT '(' || {values} || ')' FROM "{table}"{where};'''.format(values=values, table=table, where=where)
+        '''SELECT '(' || {values} || ')' FROM "{table}"{where};'''.format(values=values, table=table, where=where)
 
-    actualValues = ','.join(map(lambda tup: tup[0], db_query(intermediateSql, using=using)))
+    actualValues = ','.join([tup[0] for tup in db_query(intermediateSql, using=using)])
     if len(actualValues) == 0:
         return None
 
-    columns = ','.join(map(lambda tup: '"{0}"'.format(tup[0]), description))
+    columns = ','.join(['"{0}"'.format(tup[0]) for tup in description])
 
-    finalSql = u'INSERT INTO "{table}" ({columns}) VALUES {actualValues};' \
+    finalSql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};' \
         .format(table=table, columns=columns, actualValues=actualValues)
 
     return finalSql

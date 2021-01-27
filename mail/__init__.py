@@ -1,35 +1,36 @@
-# encoding: utf-8
-
 """E-mail utilities."""
 
+# encoding: utf-8
+
+import sys
+import traceback
+import logging
 from django.conf import settings
 from django.core.mail import send_mail
 from django.views.debug import get_exception_reporter_filter
-from .smtp import sendHtmlEmail
-import logging
-import sys, traceback
+from smtp import send_html_email
 
-def sendEmail(subject, body, fromAddress, toAddress):
-    """Sends an email."""
-    logging.info('Sending email, subject={subject}, body={body}, ' \
-        'fromAddress={fromAddress}, toAddress={toAddress}'.format(
-        subject=subject,
-        body=body,
-        fromAddress=fromAddress,
-        toAddress=toAddress
-    ))
-    if type(toAddress) is str:
-        toAddress = (toAddress,)
+
+def send_email(subject, body, from_address, to_address):
+    """
+    Sends an email.
+    """
+    logging.info('Sending email, subject=%s, body=%s, from_address=%s, to_address=%s',
+                 subject, body, from_address, to_address)
+    if isinstance(to_address, str):
+        to_address = (to_address,)
     if settings.REALLY_SEND_EMAIL is True:
-        send_mail(subject, body, fromAddress, toAddress, fail_silently=False)
+        send_mail(subject, body, from_address, to_address, fail_silently=False)
     else:
-        logging.info('NOTICE: Didn\'t really send e-mail, disabled by configuration')
+        logging.info('NOTICE: Didn\'t really send e-mail, '
+                     'disabled by configuration')
 
 
-def sendErrorEmail(e, request=None):
-
-    info = {'error': str(e.message)}
-
+def send_error_email(error, request=None):
+    """
+    send error email
+    """
+    info = {'error': str(error.message)}
     if hasattr(settings, 'DEBUG') and settings.DEBUG:
         # Development:
         info['stacktrace'] = map(
@@ -39,9 +40,10 @@ def sendErrorEmail(e, request=None):
 
     if request is not None:
         try:
-            filter = get_exception_reporter_filter(request)
-            request_repr = filter.get_request_repr(request)
-        except Exception:
+            filtr = get_exception_reporter_filter(request)
+            request_repr = filtr.get_request_repr(request)
+        except Exception as err:
+            logging.warning("found exception while processing : %s", str(err))
             request_repr = "Request repr() unavailable."
     else:
         request_repr = "Request repr() unavailable."
@@ -69,9 +71,9 @@ def sendErrorEmail(e, request=None):
 
         mail_admins(subject, message, fail_silently=True)
 
-__all__ = [
-    'sendEmail',
-    'sendHtmlEmail',
-    'sendErrorEmail'
-]
 
+__all__ = [
+    'send_email',
+    'send_html_email',
+    'send_error_email'
+]

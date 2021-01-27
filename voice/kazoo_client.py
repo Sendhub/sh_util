@@ -177,7 +177,7 @@ class KazooClient(object):
         assert type in (u'softphone', u'cellphone')
         from sh_util.tel import validatePhoneNumber
 
-        logging.info(u'createDevice invoked with type={},accountId={},userId={},ownerId={},username={},password={}'.format(type, accountId, userId, ownerId, number, username))
+        logging.info(u'createDevice invoked with type={},accountId={},user_id={},ownerId={},username={},password={}'.format(type, accountId, userId, ownerId, number, username))
 
         if validatePhoneNumber(number) is False:
             logging.warning(u'Phone number validation failed for {}-{}-{}'.format(accountId, userId, number))
@@ -440,7 +440,7 @@ class KazooClient(object):
 
         accountId: Account on kazoo which this user will be created under
         name: ShUser name
-        userId: Id of the user
+        user_id: Id of the user
         password: Password to set on kazoo
         enterpriseId: The id of the enterprise account. The account must already exist on kazoo.
         sipUsername: SIP device username for the web device
@@ -467,7 +467,7 @@ class KazooClient(object):
         shortSoftPhoneNumber = None
 
         if name is None or userId is None or password is None:
-            raise exceptions.KazooApiError(u'userId () and Name () must be provided'.format(userId, name))
+            raise exceptions.KazooApiError(u'user_id () and Name () must be provided'.format(userId, name))
 
         createUserResult = None
         try:
@@ -691,5 +691,5 @@ class KazooClient(object):
             if userId is not None:
                 self.kazooCli.delete_user(accountId, userId)
         except Exception as e:
-            logging.warning('Unable to delete userId: {}'.format(userId))
+            logging.warning('Unable to delete user_id: {}'.format(userId))
             logging.warning(e)

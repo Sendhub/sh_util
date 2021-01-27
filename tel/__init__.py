@@ -22,10 +22,10 @@ _contactNumberCleaner = re.compile(r'^[+0-9]*$')
 # @_distMemoizeWithExpiry(180)
 
 
-def isSendHubNumber(number):
+def is_send_hub_number(number):
     """@return True is the number is a sendhub number, False otherwise."""
     if _contactNumberCleaner.match(number) is None:
-        logging.warn(u'Refusing to run query with invalid input')
+        logging.warning(u'Refusing to run query with invalid input')
         return False
 
     res = _db_query(
@@ -44,10 +44,10 @@ def isSendHubNumber(number):
 __all__ = [
     'cleanupPhoneNumber',
     'AreaCodeUnavailableError',
-    'isSendHubNumber',
+    'is_send_hub_number',
     'validatePhoneNumber',
     'displayNumber',
-    'isSendHubNumber',
+    'is_send_hub_number',
     'isSpecialTwilioNumber',
     'isTollFreeNumber',
     'SHBandwidthClient',

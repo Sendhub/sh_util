@@ -93,7 +93,7 @@ def isNullable(table, column, using='default'):
 
     result = db_query(sql, using=using)
 
-    logging.info(u'ISNULLABLE: {0} {1} => {2}'.format(table, column, len(result) > 0 and result[0][0] == 'YES'))
+    logging.info('ISNULLABLE: {0} {1} => {2}'.format(table, column, len(result) > 0 and result[0][0] == 'YES'))
     return len(result) > 0 and result[0][0] == 'YES'
 
 
@@ -172,14 +172,14 @@ def listTables(using='default'):
         WHERE "table_schema"='public'
     ''', using=using)
 
-    return map(lambda row: row[0], rows)
+    return [row[0] for row in rows]
 
 
 _userIdRe = re.compile(r'''.*user_?id.*''', re.I)
 
 def findUserIdColumnFromDescription(description):
     """
-    NB: columns which contain a 'userId' or 'user_id' but also contain the
+    NB: columns which contain a 'user_id' or 'user_id' but also contain the
         string 'parent' will not count towards user id columns.
 
     @param description list of Tuple2(column, type).
@@ -190,25 +190,25 @@ def findUserIdColumnFromDescription(description):
     >>> print findUserIdColumnFromDescription((('id',), ('user_id',)))
     user_id
 
-    >>> print findUserIdColumnFromDescription((('userId',), ('userId',)))
-    userId
+    >>> print findUserIdColumnFromDescription((('user_id',), ('user_id',)))
+    user_id
 
-    >>> print findUserIdColumnFromDescription((('userId',), ('someOtherId',)))
-    userId
+    >>> print findUserIdColumnFromDescription((('user_id',), ('someOtherId',)))
+    user_id
 
     >>> print findUserIdColumnFromDescription((
-    ...     ('userId',),
+    ...     ('user_id',),
     ...     ('someOtherId',),
     ...     ('parentUserId',),
     ... ))
-    userId
+    user_id
 
     >>> print findUserIdColumnFromDescription((
-    ...     ('userId',),
+    ...     ('user_id',),
     ...     ('parentUserId',),
     ...     ('someOtherId',),
     ... ))
-    userId
+    user_id
 
     >>> print findUserIdColumnFromDescription((
     ...     ('parentUserId',),
@@ -226,7 +226,7 @@ def findUserIdColumnFromDescription(description):
     >>> print findUserIdColumnFromDescription((('id',), ('parent_user_id',),))
     None
     """
-    for column in map(lambda row: row[0], description):
+    for column in [row[0] for row in description]:
         if 'parent' not in column.lower() and \
             _userIdRe.match(column) is not None:
             return column
@@ -236,7 +236,7 @@ def findUserIdColumnFromDescription(description):
 @memoize
 def findTablesWithUserIdColumn(using='default'):
     """
-    Dynamically find all tables with a userId or user_id column.
+    Dynamically find all tables with a user_id or user_id column.
 
     @return list of tuples of (table, userIdColumn).
     """
@@ -280,14 +280,14 @@ def discoverDependencies(tables, using='default', discovered=None):
         discovered = {}
 
     for table in tables:
-        related = filter(lambda ref: ref[0] not in tables, referencedByTables(table))
+        related = [ref for ref in referencedByTables(table) if ref[0] not in tables]
 
         if len(related) > 0:
             discovered[table] = list(discovered.get(table, []))
 
             startLength = len(discovered[table])
 
-            map(discovered[table].append, related)
+            list(map(discovered[table].append, related))
 
             discovered[table] = set(discovered[table])
 
