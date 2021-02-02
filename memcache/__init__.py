@@ -43,11 +43,11 @@ def get_memcache_client(new_connection=False):
 def attempt_memcache_flush():
     """Attempt to flush the memcache server."""
     try:
-        logging.info(u'[MEMCACHE] Attempting to flush all')
+        logging.info('[MEMCACHE] Attempting to flush all')
         get_memcache_client().flush_all()
-        logging.info(u'[MEMCACHE] Flush completed')
+        logging.info('[MEMCACHE] Flush completed')
     except Exception as err:
-        logging.error(u'[MEMCACHE] Flush failed, %s', str(err))
+        logging.error('[MEMCACHE] Flush failed, %s', str(err))
 
 
 __all__ = ['get_memcache_client', 'attempt_memcache_flush']

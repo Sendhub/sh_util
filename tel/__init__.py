@@ -25,7 +25,7 @@ _contactNumberCleaner = re.compile(r'^[+0-9]*$')
 def is_send_hub_number(number):
     """@return True is the number is a sendhub number, False otherwise."""
     if _contactNumberCleaner.match(number) is None:
-        logging.warning(u'Refusing to run query with invalid input')
+        logging.warning('Refusing to run query with invalid input')
         return False
 
     res = _db_query(

@@ -27,7 +27,7 @@ def stringify(obj):
         for k, v in list(obj.items()):
             obj[stringify(k)] = stringify(v)
     elif type(obj) is list:
-        return map(stringify, obj)
+        return list(map(stringify, obj))
     elif type(obj) is int:
         return str(obj)
     return obj

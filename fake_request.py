@@ -167,7 +167,7 @@ class FakeRequest():
             else:
                 setattr(self, attr,
                     dict(
-                        (k, v) for k, v in getattr(request, attr).items()
+                        (k, v) for k, v in list(getattr(request, attr).items())
                     ))
 
     def is_secure(self):

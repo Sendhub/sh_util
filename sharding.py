@@ -37,7 +37,7 @@ class ShardedConnection(object):
         """
         self.connectionName = 'shard_{0}'.format(connectionNameOrId) if \
             isinstance(connectionNameOrId, int) or \
-            isinstance(connectionNameOrId, long) or \
+            isinstance(connectionNameOrId, int) or \
             connectionNameOrId.isdigit() is True else connectionNameOrId
 
         # Keey a reference to the original connection so it can be restored
@@ -111,7 +111,7 @@ class ShardEvent(Singleton):
 
 
 # Prune connection keys down to only shard connections.
-_shards = filter(lambda c: c.startswith('shard_'), connections())
+_shards = [c for c in connections() if c.startswith('shard_')]
 
 class ShardedResource(object):
     """Determine which shard a given resource lives on."""
@@ -164,8 +164,8 @@ class ShardedResource(object):
             cli = get_memcache_client()
             value = cli.set(key, value)
 
-        except pylibmc.Error, e:
-            logging.info(u'ShardedResource._cacheSet error: {0}'.format(e))
+        except pylibmc.Error as e:
+            logging.info('ShardedResource._cacheSet error: {0}'.format(e))
 
     @staticmethod
     def _cacheGet(key):
@@ -174,8 +174,8 @@ class ShardedResource(object):
             cli = get_memcache_client()
             return cli.get(key)
 
-        except pylibmc.Error, e:
-            logging.info(u'ShardedResource._cacheSet error: {0}'.format(e))
+        except pylibmc.Error as e:
+            logging.info('ShardedResource._cacheSet error: {0}'.format(e))
             return None
 
     @staticmethod
@@ -192,14 +192,14 @@ class ShardedResource(object):
                 values = model.objects.using(shard) \
                     .only(column).values_list(column, flat=True)
 
-                mapping = dict(map(lambda v: (str(v), shardId), values))
+                mapping = dict([(str(v), shardId) for v in values])
 
                 if len(mapping) > 0:
                     cli.set_multi(mapping, key_prefix=prefix)
 
-        except pylibmc.Error, e:
+        except pylibmc.Error as e:
             logging.info(
-                u'ShardedResource.warmShardCache :: memcache error: {0}' \
+                'ShardedResource.warmShardCache :: memcache error: {0}' \
                     .format(e)
             )
 
@@ -216,8 +216,8 @@ class ShardedResource(object):
 
             return True
 
-        except pylibmc.Error, e:
-            logging.error(u'memcache error: {0}'.format(e))
+        except pylibmc.Error as e:
+            logging.error('memcache error: {0}'.format(e))
             return False
 
     @staticmethod
@@ -247,7 +247,7 @@ class ShardedResource(object):
                 if useCache is True:
                     ShardedResource._cacheSet(key, str(shardId))
                 logging.info(
-                    u'FOUND {0}.{1}={2} on shardId={3}'.format(
+                    'FOUND {0}.{1}={2} on shardId={3}'.format(
                         model.__name__,
                         column,
                         value,
@@ -385,7 +385,7 @@ class ShardedAuthenticationMiddleware(object):
             shardId = ShardedResource().userIdToPhysicalShardId(userId)
 
             logging.info(
-                u'[SHARD-SELECTOR] Selecting shard #{0} for user_id={1}' \
+                '[SHARD-SELECTOR] Selecting shard #{0} for user_id={1}' \
                 .format(shardId, userId)
             )
 
@@ -394,7 +394,7 @@ class ShardedAuthenticationMiddleware(object):
 
         else:
             logging.info(
-                u'[SHARD-SELECTOR] USER DOES NOT LOOK LOGGED IN RIGHT NOW'
+                '[SHARD-SELECTOR] USER DOES NOT LOOK LOGGED IN RIGHT NOW'
             )
 
         request.user = SimpleLazyObject(lambda: get_user(request))

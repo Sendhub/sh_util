@@ -23,7 +23,7 @@ def switchDefaultDatabase(name):
 def _dictfetchall(cursor):
     """Returns all rows from a cursor as a dict."""
     desc = cursor.description
-    return [dict(zip([col[0] for col in desc], row)) for row in cursor.fetchall()]
+    return [dict(list(zip([col[0] for col in desc], row))) for row in cursor.fetchall()]
 
 
 def getRealShardConnectionName(using):
@@ -57,7 +57,7 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     cursor = connections()[using].cursor()
 
     if DEBUG is True or debug is True:
-        logging.info(u'-- [DEBUG] DB_QUERY, using={0} ::\n{1}'.format(using, sql))
+        logging.info('-- [DEBUG] DB_QUERY, using={0} ::\n{1}'.format(using, sql))
 
     cursor.execute(sql, args)
 
@@ -81,7 +81,7 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
         using = getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
-        logging.info(u'-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
+        logging.info('-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
 
     cursor = connections()[using].cursor()
     result = cursor.execute(sql, args)
@@ -107,12 +107,9 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = 'sslmode=require' if secure is True else ''
 
-    filtered = filter(
-        lambda (key, _): key in dbConfig and dbConfig[key] is not None and dbConfig[key] != '',
-        _djangoConfigToPsql
-    )
+    filtered = [key__ for key__ in _djangoConfigToPsql if key__[0] in dbConfig and dbConfig[key__[0]] is not None and dbConfig[key__[0]] != '']
 
-    psqlTuples = map(lambda (key, param): '{0}={1}'.format(param, dbConfig[key]), filtered)
+    psqlTuples = ['{0}={1}'.format(key_param[1], dbConfig[key_param[0]]) for key_param in filtered]
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out

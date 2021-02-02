@@ -8,6 +8,7 @@ __author__ = 'Jay Taylor [@jtaylor]'
 
 
 import math
+from functools import reduce
 
 
 def squeeze_sms_message(string, *args):
@@ -106,10 +107,10 @@ def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
             top = sorted(unique_tokens, key=lambda x: len(x), reverse=True)[0:n]
             #print 'top=',top
 
-            transformed = dict(map(lambda t: (t, _trim_percentage_off_tail(t, pct)), top))
+            transformed = dict([(t, _trim_percentage_off_tail(t, pct)) for t in top])
 
             # Reintegrate with original list.
-            shrunk = map(lambda t: transformed.get(t, t), tokens)
+            shrunk = [transformed.get(t, t) for t in tokens]
 
             # The doubling strategy here yields reasonable results and cuts
             # down on the number of iterations by quite a bit.

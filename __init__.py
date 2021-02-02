@@ -26,7 +26,7 @@ def findVariableByNameInFrame(name, depth=1):
     """
     import sys
     frame = sys._getframe(2)
-    selfSearch = filter(lambda k: k == 'self', frame.f_locals.items())
+    selfSearch = [k for k in list(frame.f_locals.items()) if k == 'self']
     return selfSearch[0][1] if len(selfSearch) > 0 else None
 
 

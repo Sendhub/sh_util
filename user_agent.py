@@ -32,7 +32,7 @@ def get_sendhub_user_agent_props(request):
         # split on "::" and append to the list
         [props_serial.extend(pair.split('::')) for pair in prop_pairs]
         # grouper recipe: http://docs.python.org/2/library/itertools.html#recipes
-        props = dict(itertools.izip_longest(*[iter(props_serial)] * 2, fillvalue=""))
+        props = dict(itertools.zip_longest(*[iter(props_serial)] * 2, fillvalue=""))
     return props
 
 

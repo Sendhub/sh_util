@@ -32,7 +32,7 @@ def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
         # Attempt to buy twillio number up to 5 times before giving up and
         # showing an error. Sometimes twilio will advertise numbers that
         # cannot be bought.
-        for index in xrange(0, 5):
+        for index in range(0, 5):
             try:
                 logging.info('buy_phone_number(): buying new number.')
                 newNumber = numbers[0].purchase(sms_application_sid=appSid,
@@ -40,9 +40,9 @@ def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
                 return newNumber
 
             except Exception as e:
-                logging.error(u'buy_phone_number(): Failed Buying number. '
-                              u'Attempt count is: {0}'.format(index))
-                logging.error(u'buy_phone_number() error was: {0}'.format(e))
+                logging.error('buy_phone_number(): Failed Buying number. '
+                              'Attempt count is: {0}'.format(index))
+                logging.error('buy_phone_number() error was: {0}'.format(e))
         else:
             # If we've exhaused our iteration, and we did not break, this else
             # block will run. For more info on for...else see:
@@ -50,15 +50,15 @@ def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
             #   continue-statements-and-else-clauses-on-loops
             #
             # If we didn't get the number, throw an error
-            logging.error(u'buy_phone_number(): Exhausted MAX tries. '
-                          u'Throwing an error.')
+            logging.error('buy_phone_number(): Exhausted MAX tries. '
+                          'Throwing an error.')
             raise AreaCodeUnavailableError(
                 'We are currently having problems buying phone numbers from  '
                 'our carrier. Please wait a moment and try again.'
             )
 
     elif phoneNumber is not None:
-        for index in xrange(0, 5):
+        for index in range(0, 5):
             try:
                 newNumber = twilioClient.phone_numbers.purchase(
                     sms_application_sid=appSid,

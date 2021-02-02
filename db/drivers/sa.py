@@ -61,8 +61,8 @@ def getRealShardConnectionName(using):
 
 def _dictfetchall(resultProxy):
     """Returns all rows from a cursor as a dict."""
-    desc = resultProxy.keys()
-    return [dict(zip([col for col in desc], row)) for row in resultProxy.fetchall()]
+    desc = list(resultProxy.keys())
+    return [dict(list(zip([col for col in desc], row))) for row in resultProxy.fetchall()]
 
 
 def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=False):
@@ -85,7 +85,7 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
         using = getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
-        logging.info(u'-- [DEBUG] DB_QUERY, using={0} ::\n{1} {2}'.format(using, sql, args))
+        logging.info('-- [DEBUG] DB_QUERY, using={0} ::\n{1} {2}'.format(using, sql, args))
 
     #resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args).execution_options(autocommit=False))
     resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
@@ -117,7 +117,7 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
         using = getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
-        logging.info(u'-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
+        logging.info('-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
 
     txCandidate = sql.strip().rstrip(';').strip().lower()
     if txCandidate == 'begin':
@@ -153,8 +153,8 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = 'sslmode=require' if secure is True else ''
 
-    psqlTuples = map(lambda key, param, default: '{0}={1}'.format(
-        param, getattr(engine.url, key) or default), _saAttrsToPsql)
+    psqlTuples = list(map(lambda key, param, default: '{0}={1}'.format(
+        param, getattr(engine.url, key) or default), _saAttrsToPsql))
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out

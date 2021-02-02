@@ -54,7 +54,7 @@ def upload_file(destination_file_path, data, content_type='plain/text',
 
     destination_file_path = _fileNameCleanerRe.sub('', destination_file_path)
 
-    logging.info(u'Uploading fileName=%s to S3 bucketName=%s', destination_file_path, _BUCKETNAME)
+    logging.info('Uploading fileName=%s to S3 bucketName=%s', destination_file_path, _BUCKETNAME)
 
     key.content_type = content_type
     key.cache_control = cache_contraol
@@ -75,7 +75,7 @@ def get_signed_url(s3_file_path, secure=True, expires_in=60, include_signature=T
         return signed_url
 
     unsigned_url = signed_url[0:signed_url.rindex('?')]
-    logging.info(u'Unsigned url=%s', unsigned_url)
+    logging.info('Unsigned url=%s', unsigned_url)
     return unsigned_url
 
 

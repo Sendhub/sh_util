@@ -24,10 +24,7 @@ def _generateSubject(
     line.
     """
     out = default
-    pruned = filter(
-        lambda line: line.startswith('File '),
-        map(lambda line: line.strip(), stackTraceStr.split('\n'))
-    )
+    pruned = [line for line in [line.strip() for line in stackTraceStr.split('\n')] if line.startswith('File ')]
     if len(pruned) > 0:
         m = _fileLineFunctionExtractor.match(pruned[-1])
         if m is not None:

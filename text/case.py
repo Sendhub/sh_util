@@ -102,7 +102,7 @@ def dictKeysToSnakeCase(struct):
         if t is not dict:
             struct = struct.to_dict()
 
-        for k, v in struct.items():
+        for k, v in list(struct.items()):
             del struct[k]
             struct[camelToSnake(k)] = dictKeysToSnakeCase(v)
         return struct
@@ -135,7 +135,7 @@ def dictKeysToCamelCase(struct):
         if t is not dict:
             struct = struct.to_dict()
 
-        for k, v in struct.items():
+        for k, v in list(struct.items()):
             del struct[k]
             struct[snakeToCamel(k)] = dictKeysToCamelCase(v)
         return struct

@@ -33,10 +33,7 @@ def send_error_email(error, request=None):
     info = {'error': str(error.message)}
     if hasattr(settings, 'DEBUG') and settings.DEBUG:
         # Development:
-        info['stacktrace'] = map(
-            lambda s: s.strip(),
-            traceback.format_exception(*sys.exc_info())
-        )
+        info['stacktrace'] = [s.strip() for s in traceback.format_exception(*sys.exc_info())]
 
     if request is not None:
         try:
@@ -48,10 +45,7 @@ def send_error_email(error, request=None):
     else:
         request_repr = "Request repr() unavailable."
 
-    stacktrace = map(
-        lambda s: s.strip(),
-        traceback.format_exception(*sys.exc_info())
-    )
+    stacktrace = [s.strip() for s in traceback.format_exception(*sys.exc_info())]
 
     message = "%s\n\n%s" % (stacktrace, request_repr)
 
