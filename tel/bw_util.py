@@ -385,7 +385,6 @@ class SHBandwidthClient(object):
                                        quantity=quantity,
                                        pattern=pattern
             )
-
         except BandwidthAccountAPIException as e:
             # If we didn't get the number, throw an error
             logging.error(u'search_tollfree(): could not get toll '

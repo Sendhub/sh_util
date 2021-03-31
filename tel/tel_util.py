@@ -223,7 +223,7 @@ class FindPhoneNumberInAreaCode:
 
     def __call__(self, gateway, area_code=None,
                  country_code='US', quantity=4,
-                 toll_free=False):
+                 toll_free=False, toll_free_area_code=None):
         """
            router that routes calls to appropriate carrier
            specific driver.
@@ -240,7 +240,8 @@ class FindPhoneNumberInAreaCode:
                 # TODO: add support for pattern via portal
                 try:
                     avail_numbers = SHBandwidthClient().search_available_toll_free_number(  # noqa
-                        quantity=quantity
+                        quantity=quantity,
+                        pattern=str(toll_free_area_code[:-1])+'*'
                     )
                 except BWTollFreeUnavailableError as e:
                     logging.info('exception {} while searching for toll-free '
