@@ -223,7 +223,7 @@ class FindPhoneNumberInAreaCode:
 
     def __call__(self, gateway, area_code=None,
                  country_code='US', quantity=4,
-                 toll_free=False, toll_free_area_code=None):
+                 toll_free=False, toll_free_area_code='8**'):
         """
            router that routes calls to appropriate carrier
            specific driver.

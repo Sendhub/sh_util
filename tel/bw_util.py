@@ -381,10 +381,9 @@ class SHBandwidthClient(object):
 
         try:
             pattern = pattern if pattern else '8**'
-            toll_free_numbers = self.account_client.search_available_toll_free_numbers(  # noqa
-                                       quantity=quantity,
-                                       pattern=pattern
-            )
+            toll_free_numbers = self.account_client.\
+                search_available_toll_free_numbers(quantity=quantity,
+                                                   pattern=pattern)
         except BandwidthAccountAPIException as e:
             # If we didn't get the number, throw an error
             logging.error(u'search_tollfree(): could not get toll '
