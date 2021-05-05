@@ -6,7 +6,7 @@ Date and time helper facilities.
 
 __author__ = 'Jay Taylor [@jtaylor]'
 
-
+# pylint: disable=C0103
 import time
 from datetime import datetime, timedelta
 
@@ -17,8 +17,9 @@ def epoch():
 
 
 def parse_ISO8601_UTC_datestring(date_string):
-    #check input schedule time is the correct length: 24
-    # format = 2010-04-13T15:29:40+0000
+    """check input schedule time is the correct length: 24
+    format = 2010-04-13T15:29:40+0000
+    """
     if len(date_string) != 24:
         raise Exception(
             'Timestamps must be 24 characters long, e.g.:'
@@ -33,17 +34,17 @@ def parse_ISO8601_UTC_datestring(date_string):
     if neg == '+':
         hours, minutes = hours * -1, minutes * -1
 
-    #convert str to timestamp in the form of: 2010-04-13T15:29:40+0000
+    # convert str to timestamp in the form of: 2010-04-13T15:29:40+0000
     date_obj = datetime.strptime(date_string, '%Y-%m-%dT%H:%M')
 
-    #add in timezone info
+    # add in timezone info
     date_obj += timedelta(hours=hours, minutes=minutes)
     return date_obj
 
 
-def pretty_utc_timestamp(ts=None):
+def pretty_utc_timestamp(_ts=None):
     """Nicely formatted UTC timestamp."""
-    return (ts if ts is not None else datetime.utcnow()) \
+    return (_ts if _ts is not None else datetime.utcnow()) \
         .strftime('%Y-%m-%d %H:%M:%S UTC')
 
 

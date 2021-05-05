@@ -3,14 +3,15 @@
 """Extracts any nested lists."""
 
 __author__ = 'Jay Taylor [@jtaylor]'
+# pylint: disable=R0903,W0235,E1101,C0123
 
 import collections as _collections
 import logging
 from inspect import getfullargspec
 from copy import deepcopy
 from time import time
-from sh_util.memcache import get_memcache_client as cli
 import pylibmc
+from sh_util.memcache import get_memcache_client as cli
 try:
     import pickle as _pickle
 except ImportError:
@@ -39,8 +40,8 @@ def distinct(seq):
 
 
 # Filter an interable to elements of a particular class.
-filterByClass = \
-    lambda clazz, iterable: [x for x in iterable if isinstance(x, clazz)]
+filterByClass = \  # noqa
+    lambda clazz, iterable: [x for x in iterable if isinstance(x, clazz)]  # noqa
 
 
 def curry(arg1, argc=None):
@@ -87,8 +88,8 @@ def memoize(function):
                 self._cached[key] = self.func(*args, **kw) \
                     if self._accepts_kw is True else self.func(*args)
 
-            # Return a copy because we don't want the invoker to then modify the
-            # result that will be returned forever.
+            # Return a copy because we don't want the invoker to
+            # then modify the result that will be returned forever.
             return deepcopy(self._cached[key])
 
     return Memoize(function)
@@ -105,7 +106,7 @@ class Memoizewithexpiry():
     def _clean_cache(self):
         """Clean expired items from the cache."""
         now = time()
-        expired = [tup[0] for tup in [tup for tup in list(self._cached.items()) if
+        expired = [tup[0] for tup in [tup for tup in list(self._cached.items()) if  # noqa
                                       tup[1][0] - now > self.ttl_seconds]]
         logging.info('Cleaning expired items: %s', expired)
         for key in expired:
@@ -123,12 +124,14 @@ class Memoizewithexpiry():
             """Inner function"""
             key = _pickle.dumps((args, kw))
 
-            if key not in self._cached or time() - self._cached[key][0] > self.ttl_seconds:
-                result = func(*args, **kw) if accepts_kw is True else func(*args)
+            if key not in self._cached or \
+                    time() - self._cached[key][0] > self.ttl_seconds:
+                result = func(*args, **kw) \
+                    if accepts_kw is True else func(*args)
                 self._cached[key] = (time(), result)
 
-            # Return a copy because we don't want the invoker to then modify the
-            # result that will be returned forever.
+            # Return a copy because we don't want the invoker to then modify
+            # the result that will be returned forever.
             return deepcopy(self._cached[key][1])
 
         return wrapped
@@ -155,7 +158,7 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
             now = time()
 
             if key not in self._cached or \
-                now - self._cached[key][0] > self.ttl_seconds:
+                    now - self._cached[key][0] > self.ttl_seconds:
                 # Memcache key.
                 mc_key = 'memoize.{0}:{1}'.format(func.__name__, key)
 
@@ -172,7 +175,8 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
 
                 if result is None:
                     # Calculate result.
-                    result = func(*args, **kw) if accepts_kw is True else func(*args)
+                    result = func(*args, **kw) \
+                        if accepts_kw is True else func(*args)
 
                 # Store result locally.
                 self._cached[key] = (time(), result)
@@ -184,8 +188,8 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
                 except pylibmc.Error as err:
                     logging.error('Distmemoizewithexpiry caught %s', str(err))
 
-            # Return a copy because we don't want the invoker to then modify the
-            # result that will be returned forever.
+            # Return a copy because we don't want the invoker to then modify
+            # the result that will be returned forever.
             return deepcopy(self._cached[key][1])
 
         return wrapped

@@ -27,8 +27,10 @@ in manually.
 
 __author__ = 'Jay Taylor [@jtaylor]'
 
+# pylint: disable=W0107,R0903
 
-def dynamically_generate_transformed_attributes(transform_fn, suffix, *attributes):
+
+def dynamically_generate_transformed_attributes(transform_fn, suffix, *attributes):  # noqa
     """
     Function which dynamically generates a class with "foo_<suffix>" properties
     which apply and return the transformed value of "foo" after passing it
@@ -37,9 +39,9 @@ def dynamically_generate_transformed_attributes(transform_fn, suffix, *attribute
     @param transform_fn Function which takes the value of a given instance
         attribute and returns the transformed value.
 
-    @param suffix String to append to attribute name to form new attribute name,
-        or a function which when provided with an attr name produces another
-        string.
+    @param suffix String to append to attribute name to form new attribute
+        name, or a function which when provided with an attr name produces
+        another string.
 
     @param *attributes Attribute names to dynamically generate field transforms
         for.
@@ -56,7 +58,8 @@ def dynamically_generate_transformed_attributes(transform_fn, suffix, *attribute
 
     # Test case where the ``suffix`` is a string ('_str'):
     >>> class TestStringSuffix(
-    ...     dynamically_generate_transformed_attributes(str, '_str', 'id', 'foo')
+    ...     dynamically_generate_transformed_attributes
+    ...        (str, '_str', 'id', 'foo')
     ... ):
     ...     def __init__(self, id, foo):
     ...         self.id = id
@@ -82,7 +85,8 @@ def dynamically_generate_transformed_attributes(transform_fn, suffix, *attribute
     >>> txFn = lambda x: str(x)[::-1] # Output is reversed string of input.
 
     >>> class TestFunctionSuffix(
-    ...     dynamically_generate_transformed_attributes(txFn, suffixFn, 'id', 'foo')
+    ...     dynamically_generate_transformed_attributes
+    ...        (txFn, suffixFn, 'id', 'foo')
     ... ):
     ...     def __init__(self, id, foo):
     ...         self.id = id
@@ -131,7 +135,11 @@ def dynamically_generate_transformed_attributes(transform_fn, suffix, *attribute
 
 def with_str_attrs(*attributes):
     """Convenience method."""
-    return dynamically_generate_transformed_attributes(str, '_str', *attributes)
+    return dynamically_generate_transformed_attributes(
+                                                        str,
+                                                        '_str',
+                                                        *attributes
+                                                        )
 
 
 if __name__ == '__main__':

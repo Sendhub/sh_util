@@ -40,6 +40,7 @@ def connections():
         from src.app import app
 
     #from flask.globals import current_app
+    print(app.engines,"engines")
     return app.engines
 
 
@@ -99,7 +100,7 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
 def db_exec(sql, args=None, using='default', force=False, debug=False):
     """
     Execute a raw query on the requested database connection.
-    
+
     @param force boolean Defaults to False. Whether or not to force the named connection to be used.
     """
     from sqlalchemy.exc import InvalidRequestError
@@ -158,4 +159,3 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out
-

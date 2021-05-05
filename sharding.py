@@ -3,9 +3,9 @@
 """Sharding resources."""
 
 __author__ = 'Jay Taylor [@jtaylor]'
-
-import pylibmc
+# pylint: disable=C0415,W0212,W1202,R0903,R1711,E0402,C0301,C0103,E1101
 import logging
+import pylibmc
 import settings
 from sh_util.db import connections
 from .singleton import Singleton
@@ -401,4 +401,3 @@ class ShardedAuthenticationMiddleware(object):
         #print 'request.user = %s' % auth.get_user(request)
 
         return None
-

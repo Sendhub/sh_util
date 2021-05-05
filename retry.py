@@ -8,11 +8,12 @@ Pulled from
 
 __author__ = 'Jay Taylor [@jtaylor]'
 
+# pylint: disable=W0613
+import math as _math
+import time as _time
 
-import math as _math, time as _time
 
-
-def retry(tries, delay=3, backoff=2, desiredOutcome=True, failValue=None):
+def retry(tries, delay=3, backoff=2, desired_outcome=True, fail_value=None):
     """
     Retry decorator with exponential backoff
     Retries a function or method until it produces a desired outcome.
@@ -21,10 +22,10 @@ def retry(tries, delay=3, backoff=2, desiredOutcome=True, failValue=None):
         factor by which the delay should lengthen after each failure.
     @param backoff int Must be greater than 1, or else it isn't really a
         backoff.  Tries must be at least 0, and delay greater than 0.
-    @param desiredOutcome Can be a value or a callable.  If it is a callable the
-        produced value will be passed and success is presumed if the invocation
-        returns True.
-    @param failValue Value to return in the case of failure.
+    @param desired_outcome Can be a value or a callable.  If it is a
+        callable the produced value will be passed and success is presumed
+        if the invocation returns True.
+    @param fail_value Value to return in the case of failure.
     """
 
     if backoff <= 1:
@@ -37,21 +38,21 @@ def retry(tries, delay=3, backoff=2, desiredOutcome=True, failValue=None):
     if delay <= 0:
         raise ValueError('delay must be greater than 0')
 
-    def wrappedRetry(fn):
+    def wrapped_retry(_fn):
         """Decorative wrapper."""
-        def retryFn(*args, **kwargs):
+        def retry_fn(*args, **kwargs):
             """The function which does the actual retrying."""
             # Make mutable:
             mtries, mdelay = tries, delay
 
             # First attempt.
-            rv = fn(*args, **kwargs)
+            _rv = _fn(*args, **kwargs)
 
             while mtries > 0:
-                if rv == desiredOutcome or \
-                    (callable(desiredOutcome) and desiredOutcome(rv) is True):
+                if _rv == desired_outcome or \
+                    (callable(desired_outcome) and desired_outcome(_rv) is True):  # noqa
                     # Success.
-                    return rv
+                    return _rv
 
                 # Consume an attempt.
                 mtries -= 1
@@ -63,14 +64,13 @@ def retry(tries, delay=3, backoff=2, desiredOutcome=True, failValue=None):
                 mdelay *= backoff
 
                 # Try again.
-                rv = fn(*args, **kwargs)
+                _rv = _fn(*args, **kwargs)
 
             # Ran out of tries :-(
             return False
 
         # True decorator -> decorated function.
-        return retryFn
+        return retry_fn
 
     # @retry(arg[, ...]) -> decorator.
-    return wrappedRetry
-
+    return wrapped_retry

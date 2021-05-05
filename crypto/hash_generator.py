@@ -4,7 +4,7 @@
 
 __author__ = 'Jay Taylor [@jtaylor]'
 
-
+# pylint: disable=R0903,R1718
 import datetime
 import random
 import string

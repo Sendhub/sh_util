@@ -1,7 +1,7 @@
 """E-mail utilities."""
 
 # encoding: utf-8
-
+# pylint: disable=E0401,W0703,C0415
 import sys
 import traceback
 import logging
@@ -15,7 +15,7 @@ def send_email(subject, body, from_address, to_address):
     """
     Sends an email.
     """
-    logging.info('Sending email, subject=%s, body=%s, from_address=%s, to_address=%s',
+    logging.info('Sending email, subject=%s, body=%s, from_address=%s, to_address=%s',  # noqa
                  subject, body, from_address, to_address)
     if isinstance(to_address, str):
         to_address = (to_address,)
@@ -33,7 +33,7 @@ def send_error_email(error, request=None):
     info = {'error': str(error.message)}
     if hasattr(settings, 'DEBUG') and settings.DEBUG:
         # Development:
-        info['stacktrace'] = [s.strip() for s in traceback.format_exception(*sys.exc_info())]
+        info['stacktrace'] = [s.strip() for s in traceback.format_exception(*sys.exc_info())]  # noqa
 
     if request is not None:
         try:
@@ -45,7 +45,7 @@ def send_error_email(error, request=None):
     else:
         request_repr = "Request repr() unavailable."
 
-    stacktrace = [s.strip() for s in traceback.format_exception(*sys.exc_info())]
+    stacktrace = [s.strip() for s in traceback.format_exception(*sys.exc_info())]  # noqa
 
     message = "%s\n\n%s" % (stacktrace, request_repr)
 

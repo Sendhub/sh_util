@@ -3,7 +3,7 @@ Shortcuts to perform common tasks on S3.
 """
 
 # -*- coding: utf-8 -*-
-
+# pylint: disable=E0401,C0103,E1101
 import re
 from io import BytesIO
 import logging
@@ -20,7 +20,8 @@ def get_s3_client():
     Returns a new S3 connection.
     """
     s3 = boto.s3.connection.S3Connection(settings.AWS_ACCESS_KEY_ID,
-                                         settings.AWS_SECRET_ACCESS_KEY, is_secure=True)
+                                         settings.AWS_SECRET_ACCESS_KEY,
+                                         is_secure=True)
     return s3
 
 
@@ -50,11 +51,11 @@ def upload_file(destination_file_path, data, content_type='plain/text',
     else:
         method = key.set_contents_from_file
         data = BytesIO(data.read()) if hasattr(data, 'read') and \
-                                       callable(data.read) else BytesIO(data)
+            callable(data.read) else BytesIO(data)
 
     destination_file_path = _fileNameCleanerRe.sub('', destination_file_path)
 
-    logging.info('Uploading fileName=%s to S3 bucketName=%s', destination_file_path, _BUCKETNAME)
+    logging.info('Uploading fileName=%s to S3 bucketName=%s',destination_file_path, _BUCKETNAME)  # noqa
 
     key.content_type = content_type
     key.cache_control = cache_contraol
@@ -65,7 +66,7 @@ def upload_file(destination_file_path, data, content_type='plain/text',
     return get_signed_url(destination_file_path, True)
 
 
-def get_signed_url(s3_file_path, secure=True, expires_in=60, include_signature=True):
+def get_signed_url(s3_file_path, secure=True, expires_in=60, include_signature=True):  # noqa
     """Generate a signed url for an S3 file."""
     signed_url = get_s3_client().generate_url(expires_in, 'GET',
                                               bucket=_BUCKETNAME,

@@ -6,6 +6,8 @@ objects around.
 """
 
 __author__ = 'Jay Taylor [@jtaylor]'
+# pylint: disable=E0307,R1705
+
 
 try:
     from django.contrib.auth.models import AnonymousUser
@@ -143,9 +145,11 @@ class FakeRequest():
             attribute value is callable, the attribute will be invoked and the
             value returned.
             """
-            if (request is not None and hasattr(request, attribute_name)) or attribute_name in kw:
+            if (request is not None and hasattr(request, attribute_name)) or \
+                    attribute_name in kw:
                 attribute = getattr(request, attribute_name) if \
-                    hasattr(request, attribute_name) else kw.get(attribute_name)
+                    hasattr(request, attribute_name) else \
+                    kw.get(attribute_name)
                 if callable(attribute):
                     return attribute()
                 else:
@@ -166,7 +170,7 @@ class FakeRequest():
                 setattr(self, attr, {})
             else:
                 setattr(self, attr,
-                    dict(
+                    dict(  # noqa
                         (k, v) for k, v in list(getattr(request, attr).items())
                     ))
 

@@ -3,6 +3,7 @@ Django HTTP Utilities
 """
 __author__ = 'Jay Taylor [@jtaylor]'
 
+
 def extract_parameters(query_dict, parameters, empty_value=None):
     """
     Parses out a tuple of the the specified parameters from the passed

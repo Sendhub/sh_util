@@ -1,4 +1,6 @@
-import types
+"""types utils """
+# pylint: disable=C0103,W0611
+import types  # noqa
 
 IntTypes = (int, int)
 NumberTypes = (int, int,
@@ -6,6 +8,7 @@ NumberTypes = (int, int,
 
 
 def isNumber(maybe_num):
+    """ check if the argument is number"""
     ret = (maybe_num is not None and
            (isinstance(maybe_num, NumberTypes) or
             (isinstance(maybe_num, str) and maybe_num.isdigit())))
@@ -20,6 +23,7 @@ def isNumber(maybe_num):
 
 
 def isInteger(maybe_num):
+    """ check if the argument is integer"""
     ret = False
 
     if maybe_num:
@@ -28,6 +32,6 @@ def isInteger(maybe_num):
         if not ret and isinstance(maybe_num, str):
             maybe_num = maybe_num.strip()
             ret = maybe_num.isdigit() or \
-                  (maybe_num[0] in "+-" and maybe_num[1:].isdigit())
+                (maybe_num[0] in "+-" and maybe_num[1:].isdigit())
 
     return ret
