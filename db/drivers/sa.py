@@ -3,24 +3,29 @@
 """SqlAlchemy sh_util db driver."""
 
 __author__ = 'Jay Taylor [@jtaylor]'
-
-import logging, re, settings
+# pylint: disable=C0415,C0103
+import logging
+import re
+import settings
 from sqlalchemy.sql.expression import bindparam, text
 
-
 _argRe = re.compile(r'([^%])%s')
+
 
 def sqlAndArgsToText(sql, args=None):
     """
     Convert plain old combination of sql/args to SqlAlchemy `text` instance.
 
-    It seems ridiculous to have to do this, but I really want to use the `text` instances to turn off auto-commit.
+    It seems ridiculous to have to do this, but I really want to use the
+    `text` instances to turn off auto-commit.
     """
     if not args:
         return text(sql)
 
     bindparams = []
-    i = [-1] # Using a list since we need to mutate the variable which isn't allowed with a direct variable reference.
+    i = [-1]
+    # Using a list since we need to mutate the variable
+    # which isn't allowed with a direct variable reference.
 
     def nextBindSub(match):
         i[0] += 1
@@ -39,7 +44,8 @@ def connections():
     except ImportError:
         from src.app import app
 
-    #from flask.globals import current_app
+    # from flask.globals import current_app
+    print(app.engines, "engines")
     return app.engines
 
 
@@ -62,15 +68,17 @@ def getRealShardConnectionName(using):
 def _dictfetchall(resultProxy):
     """Returns all rows from a cursor as a dict."""
     desc = list(resultProxy.keys())
-    return [dict(list(zip([col for col in desc], row))) for row in resultProxy.fetchall()]
+    return [dict(list(zip([col for col in desc], row))) for row in resultProxy.fetchall()]  # noqa
 
 
-def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=False):
+def db_query(sql, args=None, as_dict=False, using='default',
+             force=False, debug=False):
     """
     Execute raw select queries.  Not tested or guaranteed to work with any
     other type of query.
 
-    @param force boolean Defaults to False. Whether or not to force the named connection to be used.
+    @param force boolean Defaults to False. Whether or not to force the
+    named connection to be used.
     """
     from ..import DEBUG
     try:
@@ -85,13 +93,15 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
         using = getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_QUERY, using={0} ::\n{1} {2}'.format(using, sql, args))
+        logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s %s',
+                     str(using), str(sql), str(args))
 
-    #resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args).execution_options(autocommit=False))
+    # resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args)
+    # .execution_options(autocommit=False))
     resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
-    #resultProxy = ScopedSessions[using]().execute(sql, args)
+    # resultProxy = ScopedSessions[using]().execute(sql, args)
 
-    res = _dictfetchall(resultProxy) if as_dict is True else resultProxy.fetchall()
+    res = _dictfetchall(resultProxy) if as_dict is True else resultProxy.fetchall()  # noqa
     resultProxy.close()
     return res
 
@@ -99,8 +109,9 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
 def db_exec(sql, args=None, using='default', force=False, debug=False):
     """
     Execute a raw query on the requested database connection.
-    
-    @param force boolean Defaults to False. Whether or not to force the named connection to be used.
+
+    @param force boolean Defaults to False. Whether or not to force the
+    named connection to be used.
     """
     from sqlalchemy.exc import InvalidRequestError
     from ..import DEBUG
@@ -117,7 +128,8 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
         using = getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_EXEC, using={0} ::\n{1}'.format(using, sql))
+        logging.info('-- [DEBUG] DB_EXEC, using=%s ::\n%s',
+                     str(using), str(sql))
 
     txCandidate = sql.strip().rstrip(';').strip().lower()
     if txCandidate == 'begin':
@@ -130,10 +142,11 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
     elif txCandidate == 'commit':
         ScopedSessions[using]().commit()
     else:
-        #statement = sqlAndArgsToText(sql, args).execution_options(autocommit=False)
-        #ScopedSessions[using]().execute(statement)
+        # statement = sqlAndArgsToText(sql, args)
+        # .execution_options(autocommit=False)
+        # ScopedSessions[using]().execute(statement)
         ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
-        #ScopedSessions[using]().execute(sql, args)
+        # ScopedSessions[using]().execute(sql, args)
 
 
 _saAttrsToPsql = (
@@ -158,4 +171,3 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out
-

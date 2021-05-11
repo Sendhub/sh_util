@@ -3,7 +3,7 @@ Memcache lazy initialization.
 """
 # encoding: utf-8
 __author__ = 'Jay Taylor [@jtaylor]'
-
+# pylint: disable=E1101,W0703
 import os as _os
 import logging
 import threading as _threading
@@ -15,8 +15,8 @@ def get_memcache_client(new_connection=False):
     """
     Lazily access a memcache client instance.
 
-    @param new_connection boolean Defaults to False.  When True, will force a new
-        client to be created.
+    @param new_connection boolean Defaults to False.  When True, will
+        force a new client to be created.
     """
     pid = _os.getpid()
     tid = _threading.current_thread().ident
@@ -24,7 +24,7 @@ def get_memcache_client(new_connection=False):
 
     if _settings.MEMCACHE_CLIENTS.get(key, None) is None or \
             new_connection is True:
-        logging.info('[MEMCACHE] pid:%d threadid:%d Getting new memcache client connection',
+        logging.info('[MEMCACHE] pid:%d threadid:%d Getting new memcache client connection',  # noqa
                      pid, tid)
         _settings.MEMCACHE_CLIENTS[key] = _pylibmc.Client(
             _settings.MEMCACHE_SERVERS.split(','),

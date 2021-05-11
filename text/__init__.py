@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 
-import unicodedata, re
-from .format_string_to_fit_in_n_chars import squeeze_sms_message, format_string_to_fit_in_n_chars
+import unicodedata
+import re
+from .format_string_to_fit_in_n_chars import squeeze_sms_message
+from .format_string_to_fit_in_n_chars import format_string_to_fit_in_n_chars
 from .ec2HostnameToIp import ec2HostnameToIp
 from .split import splitString
 from . import case
 
+
 def ensureAscii(text):
     if type(text) == str:
-        encodedText = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore')
+        encodedText = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore')  # noqa
     else:
         encodedText = text
 
@@ -18,7 +21,7 @@ def ensureAscii(text):
 # Used to cleanup SQL queries sometimes (not always guaranteed to be safe
 # WRT messing up your SQL query, discretion required).
 _spacesRe = re.compile(r'\s+', re.M)
-toSingleLine = lambda s: _spacesRe.sub(' ', s).strip()
+toSingleLine = lambda s: _spacesRe.sub(' ', s).strip()  # noqa
 
 
 def stringify(obj):
@@ -42,4 +45,3 @@ __all__ = [
     'case',
     'stringify',
 ]
-

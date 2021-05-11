@@ -5,11 +5,16 @@
 
 Originally found here: http://code.activestate.com/recipes/52558/
 """
-
+# pylint: disable=W1202,E1101,R0903,R0205,C0202,W0107
 __author__ = 'Jay Taylor [@jtaylor]'
 
 
 class Singleton(object):
+    """
+    Check to see if a __single exists already for this class
+    Compare class types instead of just looking for None so
+    that subclasses will create their own __single objects.
+    """
     # The one, true Singleton.
     __single = None
 
@@ -19,7 +24,7 @@ class Singleton(object):
         Compare class types instead of just looking for None so
         that subclasses will create their own __single objects.
         """
-        if classtype != type(classtype.__single):
+        if classtype != type(classtype.__single):  # noqa
             classtype.__single = object.__new__(classtype, *args, **kwargs)
 
         return classtype.__single
@@ -32,6 +37,7 @@ if __name__ == '__main__':
     import logging
 
     class Subsingleton(Singleton):
+        """ sub singleton"""
         pass
 
     o1 = Singleton('foo')
@@ -47,6 +53,5 @@ if __name__ == '__main__':
     logging.info('o3 = o4: {0}'.format(o3 == o4))
     logging.info('o1 is a singleton? {0}'.format(isinstance(o1, Singleton)))
     logging.info('o3 is a singleton? {0}'.format(isinstance(o3, Singleton)))
-    logging.info('o1 is a subsingleton? {0}'.format(isinstance(o1, Subsingleton)))
-    logging.info('o3 is a subsingleton? {0}'.format(isinstance(o3, Subsingleton)))
-
+    logging.info('o1 is a subsingleton? {0}'.format(isinstance(o1, Subsingleton)))  # noqa
+    logging.info('o3 is a subsingleton? {0}'.format(isinstance(o3, Subsingleton)))  # noqa

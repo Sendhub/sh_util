@@ -5,13 +5,14 @@ Please describe me
 """
 
 __author__ = 'Jay Taylor [@jtaylor]'
-
+# pylint: disable=W0231,R0901,W0715
 
 from collections import MutableMapping
 
+
 class OrderedDict(dict, MutableMapping):
 
-    # Methods with direct access to underlying attributes
+    """Methods with direct access to underlying attributes"""
 
     def __init__(self, *args, **kwds):
         if len(args) > 1:
@@ -69,14 +70,17 @@ class OrderedDict(dict, MutableMapping):
         return self.__class__(self)
 
     def sort(self):
+        """sorting method """
         self._keys.sort()
 
     def reverse(self):
+        """ reverse method"""
         self._keys.reverse()
 
     @classmethod
     def fromkeys(cls, iterable, value=None):
-        d = cls()
+        """class method to make dict """
+        _d = cls()
         for key in iterable:
-            d[key] = value
-        return d
+            _d[key] = value
+        return _d

@@ -1,13 +1,14 @@
 __author__ = 'brock'
 import re
 
+
 def splitString(strToSplit, fragmentLength=160, maxFragments=-1):
     '''returns a list of strings after splitting on max fragment length
     (160 is the max sms length) or the word boundary before that
     '''
-    def reverse(l):
+    def reverse(r_list):
         """reverse a list"""
-        temp = l[:]
+        temp = r_list[:]
         temp.reverse()
         return temp
 
@@ -15,7 +16,7 @@ def splitString(strToSplit, fragmentLength=160, maxFragments=-1):
 
     i = 0
     s = 0
-    wordBoundaryRe = re.compile(r'(\s)',re.DOTALL|re.IGNORECASE|re.M)
+    wordBoundaryRe = re.compile(r'(\s)', re.DOTALL|re.IGNORECASE|re.M)  # noqa
 
     # if maxFragments is -1 then make as many fragments as necessary
     while i < maxFragments or maxFragments == -1:

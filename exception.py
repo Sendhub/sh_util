@@ -11,7 +11,7 @@ class ErrorResponse():
     """
     Error Response class implementation
     """
-    def __init__(self, message, dev_message ='', code ='', more_info =''):
+    def __init__(self, message, dev_message='', code='', more_info=''):
         self.message = message
         self.dev_message = dev_message
         self.code = code

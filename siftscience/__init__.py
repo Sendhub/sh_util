@@ -1,7 +1,7 @@
 """
 siftscience
 """
-
+# pylint: disable=E0611,E0401,E1101,W0703
 from http.wget import wget
 import logging
 import settings
@@ -81,7 +81,7 @@ def label_user(user_id, is_bad, reason):
     def do_label_with_retry():
         """POST labeled user to SiftScience."""
         try:
-            wget('{0}users/{1}/labels'.format(siftscience_203_api_url, user_id),
+            wget('{0}users/{1}/labels'.format(siftscience_203_api_url, user_id),  # noqa
                  request_type='POST', body=post_data)
             return True
 

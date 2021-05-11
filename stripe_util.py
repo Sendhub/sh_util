@@ -1,32 +1,32 @@
+"""stripe utils """
 __author__ = 'brock'
-
+# pylint: disable=C0415,E1101,E0611,W0212
 import ast
 import stripe as _stripe
 
-def stripe_object_to_dict(stripeObj):
 
+def stripe_object_to_dict(stripe_obj):
+    """converts stripe object to python dictionary """
     from stripe import StripeObject
 
-    def _serialize(o):
-        if isinstance(o, StripeObject):
-            return stripe_object_to_dict(o)
-        if isinstance(o, list):
-            return [_serialize(i) for i in o]
-        return o
+    def _serialize(_o):
+        if isinstance(_o, StripeObject):
+            return stripe_object_to_dict(_o)
+        if isinstance(_o, list):
+            return [_serialize(i) for i in _o]
+        return _o
 
-    d = dict()
-    for k in sorted(stripeObj._values):
-        v = getattr(stripeObj, k)
-        v = _serialize(v)
-        d[k] = v
-    return d
+    _d = dict()
+    for k in sorted(stripe_obj._values):
+        _v = getattr(stripe_obj, k)
+        _v = _serialize(_v)
+        _d[k] = _v
+    return _d
 
 
 def dict_to_stripe_object(data):
+    """converts python dictionary to stripe object"""
+    data_dict = ast.literal_eval(data)
 
-    dataDict = ast.literal_eval(data)
-
-    stripeObj = _stripe.convert_to_stripe_object(dataDict,
-                                               _stripe.api_key)
-
-    return stripeObj
+    stripe_obj = _stripe.convert_to_stripe_object(data_dict, _stripe.api_key)
+    return stripe_obj

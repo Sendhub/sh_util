@@ -55,15 +55,25 @@ def updatePrimaryKeyId(table, currentId, newId, using):
     """Update a primary-key id to a new value everywhere it is referenced."""
     from . import db_exec
     pkColumns = getPrimaryKeyColumns(table)
-    assert len(pkColumns) == 1, 'updatePrimaryKeyId can only operate on tables with 1 primary key, but table "{0}" had {1}'.format(table, len(pkColumns))
+    assert len(pkColumns) == 1, \
+        'updatePrimaryKeyId can only operate on tables with 1 primary key, ' \
+        'but table "{0}" had {1}'.format(table, len(pkColumns))
     discoveredRelations = discoverDependencies([table])
-    # NB: If the table is not in the returned dict, then there are no dependencies.
+    # NB: If the table is not in the returned dict,
+    # then there are no dependencies.
     if table in discoveredRelations:
         relations = discoveredRelations[table]
         db_exec('SET CONSTRAINTS ALL DEFERRED', using=using)
         for _, relTable, relColumn in relations:
-            db_exec('UPDATE "{relTable}" SET "{relColumn}" = {newId} WHERE "{relColumn}" = {currentId}'.format(relTable=relTable, relColumn=relColumn, newId=newId, currentId=currentId), using=using)
-    db_exec('UPDATE "{table}" SET "{pkColumn}" = {newId} WHERE "{pkColumn}" = {currentId}'.format(table=table, pkColumn=pkColumns[0], newId=newId, currentId=currentId), using=using)
+            db_exec('UPDATE "{relTable}" SET "{relColumn}" = {newId} '
+                    'WHERE "{relColumn}" = {currentId}'
+                    .format(relTable=relTable,
+                            relColumn=relColumn, newId=newId,
+                            currentId=currentId), using=using)
+    db_exec('UPDATE "{table}" SET "{pkColumn}" = {newId} WHERE '
+            '"{pkColumn}" = {currentId}'
+            .format(table=table, pkColumn=pkColumns[0], newId=newId,
+                    currentId=currentId), using=using)
 
 
 @memoize
@@ -93,7 +103,9 @@ def isNullable(table, column, using='default'):
 
     result = db_query(sql, using=using)
 
-    logging.info('ISNULLABLE: {0} {1} => {2}'.format(table, column, len(result) > 0 and result[0][0] == 'YES'))
+    logging.info('ISNULLABLE: %s %s => %s',
+                 str(table), str(column),
+                 str(len(result) > 0 and result[0][0] == 'YES'))
     return len(result) > 0 and result[0][0] == 'YES'
 
 
@@ -118,7 +130,8 @@ def describePublic(using='default'):
             "a"."attrelid" IN (
                 SELECT "c"."oid"
                 FROM "pg_catalog"."pg_class" "c"
-                LEFT JOIN "pg_catalog"."pg_namespace" "n" ON "n"."oid" = "c"."relnamespace"
+                LEFT JOIN "pg_catalog"."pg_namespace" "n" ON
+                "n"."oid" = "c"."relnamespace"
                 WHERE
                     "n"."nspname" = 'public' AND
                     "pg_catalog".pg_table_is_visible("c"."oid")
@@ -140,11 +153,12 @@ def describePublic(using='default'):
 def describe(table, using='default'):
     """Describe a table's columns/types."""
     return describePublic().get(table, [])
-    #from . import db_query
-    #sql = '''
+    # from . import db_query
+    # sql = '''
     #    SELECT
     #        "a"."attname" AS "column",
-    #        "pg_catalog".format_type("a"."atttypid", "a"."atttypmod") AS "type"
+    #        "pg_catalog".format_type("a"."atttypid", "a"."atttypmod")
+    # AS "type"
     #    FROM "pg_catalog"."pg_attribute" "a"
     #    WHERE
     #        NOT "a"."attisdropped" AND
@@ -158,7 +172,7 @@ def describe(table, using='default'):
     #                "c"."relname" = '{table}' AND
     #                "pg_catalog".pg_table_is_visible("c"."oid")
     #      )'''.format(table=table)
-    #return db_query(sql, using=using)
+    # return db_query(sql, using=using)
 
 
 @memoize
@@ -176,6 +190,7 @@ def listTables(using='default'):
 
 
 _userIdRe = re.compile(r'''.*user_?id.*''', re.I)
+
 
 def findUserIdColumnFromDescription(description):
     """
@@ -228,7 +243,7 @@ def findUserIdColumnFromDescription(description):
     """
     for column in [row[0] for row in description]:
         if 'parent' not in column.lower() and \
-            _userIdRe.match(column) is not None:
+                _userIdRe.match(column) is not None:
             return column
     return None
 
@@ -269,10 +284,10 @@ def discoverDependencies(tables, using='default', discovered=None):
 
     e.g.:
     main_usermessage referenced by ._____ main_usermessage_contacts
-                                    \____ main_usermessage_groups
-                                     \___ main_receipt
-                                      \__ main_block .___ etc..
-                                                      \__ etc..
+                                    \____ main_usermessage_groups  # noqa
+                                     \___ main_receipt  # noqa
+                                      \__ main_block .___ etc..  # noqa
+                                                      \__ etc..  # noqa
     NB: That textual image is inaccurate -JT
     """
     foundAny = False
@@ -280,7 +295,7 @@ def discoverDependencies(tables, using='default', discovered=None):
         discovered = {}
 
     for table in tables:
-        related = [ref for ref in referencedByTables(table) if ref[0] not in tables]
+        related = [ref for ref in referencedByTables(table) if ref[0] not in tables]  # noqa
 
         if len(related) > 0:
             discovered[table] = list(discovered.get(table, []))
@@ -296,7 +311,8 @@ def discoverDependencies(tables, using='default', discovered=None):
     from pprint import pformat
     logging.debug(pformat(discovered))
 
-    return discovered if foundAny is False else discoverDependencies(tables, using, discovered)
+    return discovered if foundAny is False \
+        else discoverDependencies(tables, using, discovered)
 
 
 @memoize
@@ -369,4 +385,3 @@ def referencedByTables(table, using='default', recurse=False):
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
-

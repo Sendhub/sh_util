@@ -3,16 +3,16 @@
 """Extended Celery task decorators with the ability to send error emails."""
 
 __author__ = 'Jay Taylor [@jtaylor]'
-
+# pylint: disable=C0103,C0415,R0913
+import logging
+import re
 from celery import current_app
 from celery.task.base import Task
-import logging
-
-import re
 
 _fileLineFunctionExtractor = re.compile(
     r'^File "(?:\/app\/?)?(?P<file>[^"]+)".*? (?P<line>[0-9]+), in (?P<fn>.*)$'
 )
+
 
 def _generateSubject(
     stackTraceStr,
@@ -24,7 +24,7 @@ def _generateSubject(
     line.
     """
     out = default
-    pruned = [line for line in [line.strip() for line in stackTraceStr.split('\n')] if line.startswith('File ')]
+    pruned = [line for line in [line.strip() for line in stackTraceStr.split('\n')] if line.startswith('File ')]  # noqa
     if len(pruned) > 0:
         m = _fileLineFunctionExtractor.match(pruned[-1])
         if m is not None:
@@ -57,6 +57,7 @@ einfo: {einfo}
         fromAddress='devops@sendhub.com',
         toAddress='devops@sendhub.com'
     )
+
 
 class ShTask(Task):
     """Decorator class which implements on_failure callback handler."""
@@ -124,7 +125,7 @@ def shTask(*args, **kwargs):
         )
     )
 
+
 def shPeriodicTask(*args, **options):
     """Periodic task decorator."""
     return current_app.task(**dict({'base': ShPeriodicTask}, **options))
-

@@ -4,6 +4,7 @@
 
 Copyright Jay Taylor 2010
 """
+# pylint: disable=W0107,R0913,R0914,R1721,R0123,W1201,C0415,W0707,R0912
 import socket
 import logging
 
@@ -98,12 +99,12 @@ def wget(
         headers['Referer'] = referer
 
     opener = urllib.request.build_opener()
-    opener.addheaders = [(header, value) for header, value in list(headers.items())]
+    opener.addheaders = [(header, value) for header, value in list(headers.items())]  # noqa
 
     try:
         url = normalize_url(url)
         logging.info('w\'%sting %s' % (request_type.lower(), url))
-        if request_type is 'GET':
+        if request_type is 'GET':  # noqa
             res = opener.open(url, timeout=timeout)
 
             if as_dict:
@@ -151,7 +152,7 @@ def wget(
 
         return received_data
 
-    except urllib.error.URLError as e:
+    except urllib.error.URLError as _e:
         if num_tries > 1:
             return wget(
                 url=url,
@@ -159,4 +160,4 @@ def wget(
                 headers=headers,
                 num_tries=num_tries - 1
             )
-        raise WgetError(url + b' failed, ' + str(e))
+        raise WgetError(url + b' failed, ' + str(_e))

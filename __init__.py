@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """Things which don't seem to cleanly fit anywhere else."""
+# pylint: disable=C0415,C0103,W0613,C0123,W0108,W0212
 from functools import reduce
 
 
@@ -10,13 +11,13 @@ def lineno():
     return inspect.currentframe().f_back.f_lineno
 
 
-def toId(x):
+def toId(_x):
     """Get an id out of the object if possible."""
-    if isinstance(x, int):
-        return x
-    if hasattr(x, 'id'):
-        return x.id
-    return x
+    if isinstance(_x, int):
+        return _x
+    if hasattr(_x, 'id'):
+        return _x.id
+    return _x
 
 
 def findVariableByNameInFrame(name, depth=1):
@@ -34,7 +35,8 @@ def uniq(seq):
     """
     @see http://stackoverflow.com/a/480227/293064
 
-    @return list containing only the unique elements with the original ordering preserved.
+    @return list containing only the unique elements with the original
+    ordering preserved.
     """
     seen = set()
     seen_add = seen.add
@@ -51,9 +53,8 @@ def getFullyQualifiedClassName(o):
 
 
 # Dynamically import a module resource.
-dynImport = lambda path: reduce(
+dynImport = lambda path: reduce(  # noqa
     lambda module, next: getattr(module, next),
     path.split('.')[1:],
     __import__(path[0:path.index('.')])
 )
-

@@ -1,3 +1,5 @@
+"""test bw"""
+
 import sys
 import os
 import logging
@@ -10,7 +12,7 @@ import settings
 
 try:
     from sh_util.tel import AreaCodeUnavailableError
-except:
+except:  # noqa
     sys.path.append('/opt/sendhub/inforeach/app')
     from sh_util.tel import AreaCodeUnavailableError
 
@@ -26,14 +28,17 @@ ENABLE_BW_DEBUGGING = os.getenv('ENABLE_BW_DEBUGGING', False) == 'True'
 
 
 def is_local_devenv():
+    """is local dev environment"""
     return os.getenv('PERSONAL_DEV_ENV', False) == 'True'
 
 
 def verify_orderinfo(bw_client, order_id):
+    """verify order info"""
     return bw_client.get_phoneorder_info(order_id)
 
 
 class BandwidthAccountHelpers:
+    """band width account helpers"""
     def __init__(self):
         self.bw_client = SHBandwidthClient(debug=ENABLE_BW_DEBUGGING)
 
@@ -54,9 +59,9 @@ class BandwidthAccountHelpers:
                 area_code=area_code,
                 country_code=country_code
             )
-            logging.info("available number: {}".format(search_number))
+            logging.info("available number: %s", str(search_number))
         except AreaCodeUnavailableError as e:
-            logging.info("Exception as {}".format(e))
+            logging.info("Exception as %s", str(e))
             if reraise:
                 raise
 
@@ -68,9 +73,9 @@ class BandwidthAccountHelpers:
             bought_number = self.bw_client.buy_phone_number(
                 phone_number=phone_num
             )
-            logging.info("available number: {}".format(bought_number))
+            logging.info("available number: %s", str(bought_number))
         except AreaCodeUnavailableError as e:
-            logging.info("Exception as {}".format(e))
+            logging.info("Exception as %s", str(e))
             if reraise:
                 raise
 
@@ -87,8 +92,8 @@ class BandwidthAccountHelpers:
                 quantity=quantity,
                 country_code=country_code
             )
-        except AreaCodeUnavailableError as e:
-            logging.info("Exception as {}".format(e))
+        except AreaCodeUnavailableError as exp_err:
+            logging.info("Exception as %s", str(exp_err))
 
         return search_number
 
@@ -98,9 +103,9 @@ class BandwidthAccountHelpers:
             search_number = self.bw_client.buy_toll_free_number(
                 quantity=quantity
             )
-            logging.info("available number: {}".format(search_number))
-        except BWTollFreeUnavailableError as e:
-            logging.info("Exception as {}".format(e))
+            logging.info("available number: %s", str(search_number))
+        except BWTollFreeUnavailableError as exp_err:
+            logging.info("Exception as %s", str(exp_err))
             if reraise:
                 raise
 
@@ -113,26 +118,26 @@ class BandwidthAccountHelpers:
                 pattern='8**',
                 quantity=quantity
             )
-            logging.info("available numbers: {}".format(search_number))
-        except BWTollFreeUnavailableError as e:
-            logging.info("Exception as {}".format(e))
+            logging.info("available numbers: %s", str(search_number))
+        except BWTollFreeUnavailableError as exp_err:
+            logging.info("Exception as %s", str(exp_err))
 
         return search_number
 
     def _delete_phonenumber(self, phone_no, re_raise=True):
-        logging.info("Deleting phonenumber: {}".format(phone_no))
+        logging.info("Deleting phonenumber: %s", str(phone_no))
         try:
             self.bw_client.release_phone_number(phone_no)
         except ValueError as e:
-            logging.info("Received ValueError exception: {}:{}".
-                         format(e, phone_no))
+            logging.info("Received ValueError exception: %s:%s",
+                         str(e), str(phone_no))
             if re_raise:
                 raise
             else:
                 pass
         except BandwidthAccountAPIException as e:
             logging.info("Received BandwidthAccountAPIException "
-                         "exception: {}:{}".format(e, phone_no))
+                         "exception: %s:%s", str(e), str(phone_no))
             if re_raise:
                 raise
             else:
@@ -144,6 +149,7 @@ class BandwidthAccountHelpers:
 
 
 class BandwidthAccountTestCases(unittest.TestCase):
+    """band width account test cases"""
     INVALID_NUMBER = ['', 0, 1234, 34567, '89101112ab']
     NOT_BW_NUMBER = ['+19254797926', '+14087036579', '(408)703-6579', 4087036579]  # noqa`
     FOREIGN_NUMBERS = ['+44 1509 813888', '+91 9999999999', 9199999999999]
@@ -164,7 +170,7 @@ class BandwidthAccountTestCases(unittest.TestCase):
         number = self.helper._search_phonenumber_with_areacode(
             area_code=SUCCESS_AREA_CODE, quantity=1
         )
-        logging.info("Numbers: {}".format(number))
+        logging.info("Numbers: %s", str(number))
         self.assertIsNotNone(number)
 
     def test_search_multiple_phone_numbers(self):
@@ -173,7 +179,7 @@ class BandwidthAccountTestCases(unittest.TestCase):
             area_code=SUCCESS_AREA_CODE,
             quantity=quantity
         )
-        logging.info("Numbers: {}".format(number))
+        logging.info("Numbers: %s", str(number))
         self.assertIsNotNone(number)
         self.assertIsInstance(number, list)
         self.assertEqual(len(number), quantity)
@@ -183,7 +189,7 @@ class BandwidthAccountTestCases(unittest.TestCase):
             '647',
             country_code='CA'
         )
-        logging.info('number: {}'.format(number))
+        logging.info('number: %s', str(number))
         self.assertIsNone(number)
 
     def test_search_invalid_qty_tollfree_number(self):
@@ -192,32 +198,26 @@ class BandwidthAccountTestCases(unittest.TestCase):
                           quantity=-1)
 
     def test_search_one_tollfree_number(self):
-        number = self.helper._search_tollfree_phonenumber(
-            quantity=1
-        )
+        number = self.helper._search_tollfree_phonenumber(quantity=1)
         self.assertIsNotNone(number)
 
     def test_search_multiple_tollfree_numbers(self):
         quantity = 4
-        number = self.helper._search_tollfree_phonenumber(
-            quantity=quantity
-        )
+        number = self.helper._search_tollfree_phonenumber(quantity=quantity)
         self.assertIsNotNone(number)
         self.assertIsInstance(number, list)
         self.assertEqual(len(number), quantity)
 
-    def test_search_and_buy_phonenumber(self):
-        search_number = self.helper._search_phonenumber_with_areacode(
-            area_code=SUCCESS_AREA_CODE
-        )
+    def test_search_and_buy_phonenumber(self):  # noqa
+        search_number = self.helper._search_phonenumber_with_areacode(area_code=SUCCESS_AREA_CODE)  # noqa
         self.assertIsNotNone(search_number)
-        logging.info("searched phone number: {}, going to buy".
-                     format(search_number))
+        logging.info("searched phone number: %s, going to buy",
+                     str(search_number))
         bought_number = self.helper._buy_phonenumber_with_phonenum(
             search_number
         )
         self.assertIsNotNone(bought_number)
-        logging.info("Bought number: {}".format(bought_number))
+        logging.info("Bought number: %s", str(bought_number))
 
         if bought_number:
             self.assertIsNone(self.helper._delete_phonenumber(bought_number))
@@ -456,7 +456,7 @@ class PhoneNumberListAllTestCases(unittest.TestCase):
             self.fail('exception unexpectedly: {}'.format(e))
         else:
             for number in numbers:
-                logging.info("number: {}".format(number))
+                logging.info("number: %s", str(number))
 
     def test_list_numbers_size2(self):
         try:
@@ -465,7 +465,7 @@ class PhoneNumberListAllTestCases(unittest.TestCase):
             self.fail('exception unexpectedly: {}'.format(e))
         else:
             for number in numbers:
-                logging.info("number: {}".format(number))
+                logging.info("number: %s", str(number))
 
     def test_list_numbers_size500(self):
         try:
@@ -474,7 +474,7 @@ class PhoneNumberListAllTestCases(unittest.TestCase):
             self.fail('exception unexpectedly: {}'.format(e))
         else:
             for number in numbers:
-                logging.info("number: {}".format(number))
+                logging.info("number: %s", str(number))
 
     def test_list_numbers_size1000(self):
         try:
@@ -483,7 +483,7 @@ class PhoneNumberListAllTestCases(unittest.TestCase):
             self.fail('exception unexpectedly: {}'.format(e))
         else:
             for number in numbers:
-                logging.info("number: {}".format(number))
+                logging.info("number: %s", str(number))
 
     def test_list_numbers_sizedefault(self):
         try:
@@ -492,7 +492,7 @@ class PhoneNumberListAllTestCases(unittest.TestCase):
             self.fail('exception unexpectedly: {}'.format(e))
         else:
             for number in numbers:
-                logging.info("number: {}".format(number))
+                logging.info("number: %s", str(number))
 
     def test_list_numbers_invalidsite(self):
         # in this case bandwidth returns 0 numbers
@@ -543,7 +543,7 @@ class PhoneNumberCountTestCases(unittest.TestCase):
         except Exception as e:
             self.fail("Unexpected exception: {}".format(e))
         else:
-            logging.info("Count: {}".format(count))
+            logging.info("Count: %s", str(count))
 
         self.assertGreaterEqual(count, 0)
 
@@ -570,7 +570,7 @@ class GetSiteInfoTestCases(unittest.TestCase):
         except Exception as e:
             self.fail("Unexpected exception: {}".format(e))
         else:
-            logging.info("site information: {}".format(siteinfo))
+            logging.info("site information: %s", str(siteinfo))
 
     def test_siteid_invalid_number(self):
         self.assertRaises(ValueError,
@@ -584,13 +584,16 @@ class GetSiteInfoTestCases(unittest.TestCase):
 
 
 class GetNumberInfoTestCases(unittest.TestCase):
+    """get number infotest cases"""
     def setUp(self):
         self.bw_client = SHBandwidthClient(debug=ENABLE_BW_DEBUGGING)
 
     def tearDown(self):
+        """teardown"""
         pass
 
     def test_phone_info(self):
+        """test phone info"""
         # get valid number
         numbers = self.bw_client.list_active_numbers(size=1)
         number = next(numbers)
@@ -600,14 +603,16 @@ class GetNumberInfoTestCases(unittest.TestCase):
         except Exception as e:
             self.fail("Unexpected exception: {}".format(e))
         else:
-            logging.info("number information: {}".format(info))
+            logging.info("number information: %s", str(info))
 
     def test_phoneinfo_invalid_number(self):
+        """test phoneinfo invalid number"""
         self.assertRaises(ValueError,
                           self.bw_client.get_number_info,
                           'hello')
 
     def test_phoneinfo_notbw_number(self):
+        """test phoneinfo not bw number"""
         self.assertRaises(BandwidthAccountAPIException,
                           self.bw_client.get_number_info,
                           '+19254797926')
@@ -622,15 +627,19 @@ class DownloadMediaTestCases(unittest.TestCase):
 
     # call this proper URI
     def download(self, url):
+        """download mms file"""
         self.bw_client.get_media(url)
 
     def test_download_empty_uri(self):
+        """test download empty uri"""
         self.assertIsNone(self.bw_client.get_media(''))
 
     def test_download_invalid_uri(self):
+        """test download invalid uri"""
         self.assertIsNone(self.bw_client.get_media('https://messaging.bandwidth.com/api/v2/users/5004525/media/abcself.jpg'))  # noqa
 
     def test_download_invalid_hostdir(self):
+        """test download invalid hostdir"""
         self.assertRaises(ValueError,
                           self.bw_client.get_media,
                           '',
@@ -639,24 +648,29 @@ class DownloadMediaTestCases(unittest.TestCase):
 
 # for independently testing delete test cases
 class BandwidthTollFreeSimpleTestCase:
+    """band with toll free simple test case"""
     def setUp(self):
+        """setup"""
         self.bw_client = SHBandwidthClient()
 
     def tearDown(self):
+        """teardown"""
         pass
 
     def __init__(self):
         self.helper = BandwidthAccountHelpers()
 
     def test_search_one_tfnumber(self):
+        """test search one tf number"""
         number = self.helper._search_tollfree_phonenumber(
             quantity=1
         )
-        logging.info("Found Toll Free Number: {}".format(number))
+        logging.info("Found Toll Free Number: %s", str(number))
 
 
 # for independently testing delete test cases
 class BandwidthDeleteCases:
+    """band width delete cases"""
     INVALID_NUMBER = ['', 0, 1234, 34567, '89101112ab']
     NOT_BW_NUMBER = ['+19254797926', '+14087036579', '(408)703-6579', 4087036579]  # noqa
     FOREIGN_NUMBERS = ['+44 1509 813888', '+91 9999999999', 9199999999999]
@@ -671,44 +685,49 @@ class BandwidthDeleteCases:
         for number in num_list:
             try:
                 self.helper._delete_phonenumber(number)
-                logging.info("Deleted {} from account".format(number))
+                logging.info("Deleted %s from account", str(number))
             except ValueError as e:
-                logging.info('Received ValueError exception: {}:{}'.
-                             format(e, number))
+                logging.info('Received ValueError exception: %s:%s'.
+                             str(e), str(number))
             except BandwidthAccountAPIException as e:
                 logging.info('Received BandwidthAccountAPIException '
-                             'exception: {}:{}'.format(e, number))
+                             'exception: %s:%s', str(e), str(number))
 
     def test_delete_invalid_numbers(self):
+        """test delete invalid numbers"""
         self._test_delete_number(self.INVALID_NUMBER)
         self._test_delete_number(self.NOT_BW_NUMBER)
         self._test_delete_number(self.FOREIGN_NUMBERS)
 
     def test_delete_valid_numbers(self):
+        """test delete valid numbers"""
         self._test_delete_number(self.DELETE_LIST)
 
     def run(self):
+        """run test"""
         self.test_delete_invalid_numbers()
         logging.info("=====================================")
         self.test_delete_valid_numbers()
 
 
 class BandwidthDeleteNumber:
+    """band width delete number"""
     def __init__(self, number):
         self.helper = BandwidthAccountHelpers()
         try:
             self.helper._delete_phonenumber(number)
-            logging.info("Deleted {} from account".format(number))
+            logging.info("Deleted %s from account", str(number))
         except ValueError as e:
-            logging.info('Received ValueError exception: {}:{}'.
-                         format(e, number))
+            logging.info('Received ValueError exception: %s:%s',
+                         str(e), str(number))
         except BandwidthAccountAPIException as e:
             logging.info('Received BandwidthAccountAPIException '
-                         'exception: {}:{}'.format(e, number))
+                         'exception: %s:%s', str(e), str(number))
             raise
 
 
 class VerifyOrders:
+    """verify orders """
     order_list = ['1ea6057d-d97a-453e-b22c-c09dea403da8',
                   '161aec20-4758-4336-b0e0-0e2ffc270cc1',
                   '9da5eb20-0a14-4d83-ae76-2f6441a56d75']
@@ -720,6 +739,7 @@ class VerifyOrders:
 
 
 class BuyDeleteLocalPhoneNumber:
+    """buy delete local phone number"""
     def __init__(self):
         self.helper = BandwidthAccountHelpers()
 
@@ -729,29 +749,31 @@ class BuyDeleteLocalPhoneNumber:
             area_code=SUCCESS_AREA_CODE
         )
         assert(phonenum != None)  # noqa
-        logging.info("Bought number: {}".format(phonenum))
+        logging.info("Bought number: %s", str(phonenum))
 
         if phonenum:
             self.helper._delete_phonenumber(phonenum)
-        logging.info("Released phone number: {}".format(phonenum))
+        logging.info("Released phone number: %s", str(phonenum))
 
 
 class SearchBuyPhoneNumber:
+    """ search buy phone number """
     def __init__(self):
         self.helper = BandwidthAccountHelpers()
 
     def search_and_buy_and_delete(self):
+        """search and buy and delete"""
         search_number = self.helper._search_phonenumber_with_areacode(
             area_code=SUCCESS_AREA_CODE
         )
         assert(search_number != None)  # noqa
-        logging.info("searched phone number: {}, going to buy".
-                     format(search_number))
+        logging.info("searched phone number: %s, going to buy",
+                     str(search_number))
         bought_number = self.helper._buy_phonenumber_with_phonenum(
             search_number
         )
         assert(bought_number != None)  # noqa
-        logging.info("Bought number: {}".format(bought_number))
+        logging.info("Bought number: %s", str(bought_number))
 
         if bought_number:
             self.helper._delete_phonenumber(bought_number)
@@ -770,11 +792,12 @@ def run_specific_tests():
 
     test_suite = unittest.TestSuite(test_list)
     results = runner.run(test_suite)
-    logging.info("results of tests: {}".format(results))
+    logging.info("results of tests: %s", str(results))
 
 
 def run_all_tests():
     unittest.main()
+
 
 if __name__ == '__main__':
     logger = logging.getLogger()

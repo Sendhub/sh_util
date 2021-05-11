@@ -23,6 +23,7 @@ def squeeze_sms_message(string, *args):
 
     return format_string_to_fit_in_n_chars(*([string, maxLength] + list(args)))
 
+
 def format_string_to_fit_in_n_chars(
     string,
     max_number_of_characters,
@@ -37,14 +38,14 @@ def format_string_to_fit_in_n_chars(
     arg[2:] = args which will be passed to str.format.
     """
     if len(args) == 0:
-        raise TypeError('format_string_to_fit_in_n_chars() takes 2 or more arguments ({0} given)'.format(len(args)))
+        raise TypeError('format_string_to_fit_in_n_chars() takes 2 or more arguments ({0} given)'.format(len(args)))  # noqa
 
     max_number_of_characters = int(max_number_of_characters)
 
     # Validate initial conditions.
     if len(string) > max_number_of_characters:
         raise TypeError(
-            'format_string_to_fit_in_n_chars() argument 1 must not exceed the length indicated by argument 2 ({0} > {1}'
+            'format_string_to_fit_in_n_chars() argument 1 must not exceed the length indicated by argument 2 ({0} > {1}'  # noqa
             .format(len(string), max_number_of_characters)
         )
 
@@ -60,11 +61,12 @@ def format_string_to_fit_in_n_chars(
 
     if len(test) > max_number_of_characters:
         raise Exception(
-            'Failed to format string {{0}} to fit inside of {1} characters'
+            'Failed to format string {0} to fit inside of {1} characters'
             .format(string, max_number_of_characters)
         )
 
     return test
+
 
 def _trim_percentage_off_tail(s, pct):
     """
@@ -78,6 +80,7 @@ def _trim_percentage_off_tail(s, pct):
         s = '{0}..'.format(s[0: offset])
     return s
 
+
 def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
     """
     Trim a list of words starting with the longer words until a target
@@ -86,14 +89,14 @@ def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
     # NB: this is a brute force type of approach, I'm sure it will be
     # improved if someone spends some time on it.
     if len(tokens) == 0:
-        raise TypeError('trim_longest_tokens_to_reduce_length() does not accept empty lists')
+        raise TypeError('trim_longest_tokens_to_reduce_length() does not accept empty lists')  # noqa
 
     start_length = reduce(lambda a, b: a + len(b), tokens, 0)
     n_characters_cut = 0
     unique_tokens = set(tokens)
     step = len(tokens)
 
-    #print 'start_len=',start_length,'need_to_reduce_by=',reduce_by_n_chars
+    # print 'start_len=',start_length,'need_to_reduce_by=',reduce_by_n_chars
 
     shrunk = tokens
 
@@ -104,17 +107,17 @@ def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
             # Calculate the index offset of the top n records desired.
             n = int(math.ceil(len(unique_tokens) / (step * 1.0)))
 
-            top = sorted(unique_tokens, key=lambda x: len(x), reverse=True)[0:n]
-            #print 'top=',top
+            top = sorted(unique_tokens, key=lambda x: len(x), reverse=True)[0:n]  # noqa
+            # print 'top=',top
 
-            transformed = dict([(t, _trim_percentage_off_tail(t, pct)) for t in top])
+            transformed = dict([(t, _trim_percentage_off_tail(t, pct)) for t in top])  # noqa
 
             # Reintegrate with original list.
             shrunk = [transformed.get(t, t) for t in tokens]
 
             # The doubling strategy here yields reasonable results and cuts
             # down on the number of iterations by quite a bit.
-            #pct += pct
+            # pct += pct
 
             # Let's try a linear approach instead (slower but yields nicer
             # and more precise results.)
@@ -123,9 +126,8 @@ def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
             updated_length = reduce(lambda a, b: a + len(b), shrunk, 0)
             n_characters_cut = start_length - updated_length
 
-            #print 'numcut=',n_characters_cut
+            # print 'numcut=',n_characters_cut
 
         step -= 1
 
     return shrunk
-
