@@ -4,8 +4,8 @@
 Translate an input string to replace any ec2 hostname with the bare ip.
 
 e.g.: If the input is
-    "postgres://*:*@ec2-107-22-243-182.compute-1.amazonaws.com:5432/dbname", the
-    output will be "postgres://*:*@107.22.243.182:5432/d67shu8760iutg"
+    "postgres://*:*@ec2-107-22-243-182.compute-1.amazonaws.com:5432/dbname",
+    the output will be "postgres://*:*@107.22.243.182:5432/d67shu8760iutg"
 
 >>> ec2HostnameToIp(
 ...     'postgres://*:*@ec2-107-22-243-182.compute-1.amazonaws.com:5432/dbname'
@@ -28,13 +28,14 @@ _ec2HostnameRe = _re.compile(
     _re.X
 )
 
+
 def ec2HostnameToIp(s):
     """
     Translate an input string to replace any ec2 hostname with the bare ip.
 
     e.g. If the input is
-    "postgres://*:*@ec2-107-22-243-182.compute-1.amazonaws.com:5432/dbname", the
-    output will be "postgres://*:*@107.22.243.182:5432/d67shu8760iutg"
+    "postgres://*:*@ec2-107-22-243-182.compute-1.amazonaws.com:5432/dbname",
+    the output will be "postgres://*:*@107.22.243.182:5432/d67shu8760iutg"
     """
     m = _ec2HostnameRe.match(s)
     while m is not None:
@@ -43,4 +44,3 @@ def ec2HostnameToIp(s):
         m = _ec2HostnameRe.match(s)
 
     return s
-

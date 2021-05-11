@@ -1,24 +1,27 @@
 # -*- coding: utf-8 -*-
 
 """
-Postgres-specific data tooling, primarily to assist with operational management of logical and physical sharding.
+Postgres-specific data tooling, primarily to assist with operational
+management of logical and physical sharding.
 
 Including:
     - Table data sync/replication
     - User and logical shard shard relocation
 
-NB: Things won't work right if any of the connection names are integers, or if the string of the connection name
+NB: Things won't work right if any of the connection names are integers,
+or if the string of the connection name
 resolves to truthy for str.isdigit().
 """
 
 __author__ = 'Jay Taylor [@jtaylor]'
-
-import simplejson as json
+# pylint: disable=C0103,C0415,E1101,R0914,C0301,R0912,R0915,C0302,E0402
 import re
-import settings
 import time
 import logging
 from collections import OrderedDict
+from io import StringIO
+import simplejson as json
+import settings
 from ..functional import memoize
 from ..sharding import ShardedResource, coerceIdToShardName, ShardEvent
 from ..memcache import attempt_memcache_flush
@@ -28,7 +31,6 @@ from .reflect import describe, discoverDependencies, \
     findTablesWithUserIdColumn, getPrimaryKeyColumns, updatePrimaryKeyId
 from .distributed import tableDescriptionToDbLinkT
 # NB: Don't use cStringIO because it is unable to work with UTF-8.
-from io import StringIO
 
 
 # Logical shard S3 backup path.
@@ -37,7 +39,8 @@ s3MigrationBackupPath = '/logicalShardMigrations'
 
 def _base_backup_file_name(logical_shard_id, ts):
     """@return string containing a base backup filename."""
-    return '{0}/id-{1}_{2}'.format(s3MigrationBackupPath, logical_shard_id, int(ts))
+    return '{0}/id-{1}_{2}'.format(s3MigrationBackupPath,
+                                   logical_shard_id, int(ts))
 
 
 # Used to cleanup SQL queries sometimes (not always guaranteed to be safe
@@ -46,6 +49,7 @@ _spacesRe = re.compile(r'\s+', re.M)
 
 
 def to_single_line(s):
+    """to single line"""
     return _spacesRe.sub(' ', s).strip()
 
 
@@ -58,18 +62,24 @@ class MigrateUserStaleReadError(MigrateUserError):
 
 
 def should_table_be_ignored_for_user_operations(table):
-    """@return True if user-specific data does not live in specified table, otherwise False."""
-    return table in settings.STATIC_TABLES or table in settings.SHARDING_IGNORE_TABLES
+    """
+    @return True if user-specific data does not live in
+    specified table, otherwise False.
+    """
+    return table in settings.STATIC_TABLES or \
+        table in settings.SHARDING_IGNORE_TABLES
 
 
 def does_the_table_data_differ(table, source1, source2):
     """
     Determine if the table data differs across hosts (shards).
 
-    NB: Hardcoded not to work on tables with more than 100,000 rows.  This should never be used for tables that may grow
+    NB: Hardcoded not to work on tables with more than 100,000 rows.
+    This should never be used for tables that may grow
     to that size (or even close to that).
 
-    @return True if the data differs between source1 and source2, otherwise False.
+    @return True if the data differs between source1 and source2,
+    otherwise False.
     """
     count_sql = 'SELECT COUNT(*) FROM "{0}"'.format(table)
 
@@ -98,7 +108,8 @@ def does_the_table_data_differ(table, source1, source2):
 
 def replicate_table(table, source, destination):
     """
-    Replicate a static table from one database connection to another.  The destination table will pull the data
+    Replicate a static table from one database connection to another.
+    The destination table will pull the data
     directly from the source db's table.
 
     :@param table: str Table name.
@@ -117,7 +128,8 @@ def replicate_table(table, source, destination):
     if not differ:
         return
 
-    logging.info('Replicating table {0} from {1} -> {2}'.format(table, source, destination))
+    logging.info('Replicating table %s from %s -> %s',
+                 str(table), str(source), str(destination))
 
     # Let the refresh begin!
     connection_string = getPsqlConnectionString(source)
@@ -150,8 +162,9 @@ def replicate_table(table, source, destination):
         db_exec('COMMIT', using=destination)
 
     except Exception as e:
-        error_message = '[ERROR] replicate_table caught exception with table={0} source={1} destination={2}: {3}' \
-            .format(table, source, destination, e)
+        error_message = '[ERROR] replicate_table caught exception with ' \
+                        'table={0} source={1} destination={2}: {3}' \
+                        .format(table, source, destination, e)
         logging.error(error_message)
         db_exec('ROLLBACK', using=destination)
 
@@ -164,19 +177,23 @@ def replicate_table(table, source, destination):
         )
 
 
-def auto_db_link_insert(table, db_link_sql, source_connection_string, using='default', pk=None):
+def auto_db_link_insert(table, db_link_sql, source_connection_string,
+                        using='default', pk=None):
     """
-    Automatically generate and execute the autoDb part of the SQL statement to insert a remote dataset for a
+    Automatically generate and execute the autoDb part of the SQL statement
+    to insert a remote dataset for a
     particular SELECT query.
 
     @param table str Name of table
     @param db_link_sql str  <SELECT X FROM Y clause> for table.
-    @param source_connection_string str psql-style connection string for the source database.
+    @param source_connection_string str psql-style connection string for
+    the source database.
     @param using str Django connection name -- should be the destination host.
-    @param pk str Optional string containing the primary key column name, or None to enable auto-detection.
+    @param pk str Optional string containing the primary key column name, or
+    None to enable auto-detection.
     """
     if source_connection_string in connections():
-        source_connection_string = getPsqlConnectionString(source_connection_string)
+        source_connection_string = getPsqlConnectionString(source_connection_string)  # noqa
 
     db_link_sql = to_single_line(db_link_sql)
     db_link_t = tableDescriptionToDbLinkT(describe(table))
@@ -190,17 +207,22 @@ def auto_db_link_insert(table, db_link_sql, source_connection_string, using='def
                 '{connectionString}',
                 '{dbLinkSql}'
             ) AS {dbLinkT}
-        '''.format(table=table, connectionString=source_connection_string, dbLinkSql=db_link_sql, dbLinkT=db_link_t)
+        '''.format(table=table,
+                   connectionString=source_connection_string,
+                   dbLinkSql=db_link_sql,
+                   dbLinkT=db_link_t)
 
         db_exec(sql, using=using)
         db_exec('RELEASE SAVEPOINT auto_db_link_insert', using=using)
 
-    except Exception as e:
-        exc_str = str(e)
+    except Exception as exp_err:
+        exc_str = str(exp_err)
 
         if 'duplicate key value violates unique constraint' in exc_str:
-            logging.warning('Naiive auto_db_link_insert failed, attempting again with pk exclusion..')
-            logging.warning('Exception was: {0}/{1}'.format(type(e), e))
+            logging.warning('Naiive auto_db_link_insert failed, '
+                            'attempting again with pk exclusion..')
+            logging.warning('Exception was: %s/%s', str(type(exp_err)),
+                            str(exp_err))
 
             db_exec('ROLLBACK TO auto_db_link_insert', using=using)
             db_exec('SAVEPOINT auto_db_link_insert', using=using)
@@ -229,15 +251,17 @@ def auto_db_link_insert(table, db_link_sql, source_connection_string, using='def
 
         else:
             db_exec('RELEASE SAVEPOINT auto_db_link_insert', using=using)
-            raise e
+            raise exp_err
 
 
 def table_row_counts(table_column_pairs, user_id_or_user_ids, using):
     """
-    Get counts for each table with the user-id filter applied.  Executes a single query to get the results as
+    Get counts for each table with the user-id filter applied.
+    Executes a single query to get the results as
     list((table, count)).
 
-    @param table_column_pairs list of tuples of table/column pairs (where the column contains the user id).
+    @param table_column_pairs list of tuples of table/column pairs
+    (where the column contains the user id).
     @param user_id_or_user_ids mixed int user-id or list of user-ids.
     @param using str Connection name.
 
@@ -259,7 +283,7 @@ def table_row_counts(table_column_pairs, user_id_or_user_ids, using):
                                        if is_iterable else
                                        int(user_id_or_user_ids))
             )
-        ) for table_column in [table for table in table_column_pairs if not should_table_be_ignored_for_user_operations(table)]])
+        ) for table_column in [table for table in table_column_pairs if not should_table_be_ignored_for_user_operations(table)]])  # noqa
 
     return dict(db_query(sql, using=using))
 
@@ -271,9 +295,12 @@ def scrub_tables(using):
         DELETE FROM "main_phonenumber" WHERE "id" IN (
             SELECT "pn"."id"
             FROM "main_phonenumber" "pn"
-                LEFT JOIN "main_extendeduser" "eu" ON "eu"."twilio_phone_number_id" = "pn"."id"
-                LEFT JOIN "main_sendhubphonenumber" "spn" ON "spn"."twilioPhoneNumber_id" = "pn"."id"
-            WHERE "eu"."twilio_phone_number_id" IS NULL AND "spn"."twilioPhoneNumber_id" IS NULL
+                LEFT JOIN "main_extendeduser" "eu" ON
+                "eu"."twilio_phone_number_id" = "pn"."id"
+                LEFT JOIN "main_sendhubphonenumber" "spn"
+                ON "spn"."twilioPhoneNumber_id" = "pn"."id"
+            WHERE "eu"."twilio_phone_number_id" IS NULL AND
+            "spn"."twilioPhoneNumber_id" IS NULL
         )
         ''',
     ]
@@ -293,19 +320,22 @@ def set_logical_shard_status(logical_shard_id, status):
     db_exec('''COMMIT''', using=settings.PRIMARY_SHARD_CONNECTION)
 
 
-def set_logical_shard_physical_shard_id(logical_shard_id, physical_shard_id, status=None):
+def set_logical_shard_physical_shard_id(logical_shard_id, physical_shard_id,
+                                        status=None):
     """Set a new physical_shard_id for a logical shard."""
     db_exec('''BEGIN''', using=settings.PRIMARY_SHARD_CONNECTION)
 
     if status is None:
         db_exec(
-            '''UPDATE "LogicalShard" SET "physical_shard_id" = %s WHERE "id" = %s''',
+            '''UPDATE "LogicalShard" SET "physical_shard_id" = %s
+            WHERE "id" = %s''',
             (physical_shard_id, logical_shard_id),
             using=settings.PRIMARY_SHARD_CONNECTION
         )
     else:
         db_exec(
-            '''UPDATE "LogicalShard" SET "physical_shard_id" = %s, "status" = %s WHERE "id" = %s''',
+            '''UPDATE "LogicalShard" SET "physical_shard_id" = %s,
+            "status" = %s WHERE "id" = %s''',
             (physical_shard_id, status, logical_shard_id),
             using=settings.PRIMARY_SHARD_CONNECTION
         )
@@ -332,7 +362,8 @@ def _logical_shard_user_ids(logical_shard_id, physical_shard_id=None):
     res = db_query(
         '''SELECT "id" FROM "auth_user" WHERE "id" %% %s = %s''',
         (settings.NUM_LOGICAL_SHARDS, logical_shard_id),
-        using='shard_{0}'.format(physical_shard_id or _physical_shard_id(logical_shard_id))
+        using='shard_{0}'.format(physical_shard_id or
+                                 _physical_shard_id(logical_shard_id))
     )
 
     user_ids = [tup[0] for tup in res]
@@ -342,37 +373,43 @@ def _logical_shard_user_ids(logical_shard_id, physical_shard_id=None):
 
 def _cleanup_straggler_short_links(connection_name):
     """Cleanup orphaned shortlinks."""
-    logging.info('Cleaning up orphaned straggler shortlinks on connection={0}'.format(connection_name))
+    logging.info('Cleaning up orphaned straggler shortlinks on connection=%s',
+                 str(connection_name))
     return db_exec(
         '''
         DELETE FROM "main_shortlink"
         WHERE "id" IN (
             SELECT "s"."id" FROM "main_shortlink" "s"
-                LEFT JOIN "main_usermessage" "um" ON "um"."shortlink_id" = "s"."id"
-                LEFT JOIN "main_receipt" "r" ON "r"."shortlink_id" = "s"."id"
-            WHERE "s"."used" IS NOT NULL AND "r"."id" IS NULL AND "um"."id" IS NULL
+                LEFT JOIN "main_usermessage" "um" ON
+                "um"."shortlink_id" = "s"."id"
+                LEFT JOIN "main_receipt" "r" ON
+                "r"."shortlink_id" = "s"."id"
+            WHERE "s"."used" IS NOT NULL AND "r"."id" IS NULL AND
+            "um"."id" IS NULL
         )
         ''',
         using=connection_name
     )
 
 
-def _automatic_duplicate_recovery(logical_shard_id, source_connection_name, destination_connection_name):
+def _automatic_duplicate_recovery(logical_shard_id, source_connection_name,
+                                  destination_connection_name):
     """
-    To be invoked at the end of `migrate_logical_shard()` regardless of the outcome.
+    To be invoked at the end of `migrate_logical_shard()`
+    regardless of the outcome.
     """
     logging.info('_automatic_duplicate_recovery :: invoked with '
-                 'logical_shard_id={0}, source_connection_name={1},'
-                 ' destination_connection_name={2}'.format(
-                    logical_shard_id, source_connection_name,
-                    destination_connection_name))
+                 'logical_shard_id=%s, source_connection_name=%s,'
+                 ' destination_connection_name=%s',
+                 str(logical_shard_id), str(source_connection_name),
+                 str(destination_connection_name))
     db_exec('ROLLBACK', using=source_connection_name)
     db_exec('ROLLBACK', using=destination_connection_name)
     test = db_query(
         '''
         SELECT au1.id
         FROM auth_user au1
-        JOIN (SELECT id FROM dblink('{0}', 'SELECT id FROM auth_user WHERE id 
+        JOIN (SELECT id FROM dblink('{0}', 'SELECT id FROM auth_user WHERE id
         %% {1} = {2}') AS t(id bigint)) au2 on au1.id = au2.id
         WHERE au1.id %% {1} = {2}
         '''.format(getPsqlConnectionString(destination_connection_name),
@@ -380,25 +417,27 @@ def _automatic_duplicate_recovery(logical_shard_id, source_connection_name, dest
         using=source_connection_name
     )
     if len(test) > 0:
-        logging.warning('Dupe user_ids detected, affected ids: {0}'.format(
-            ', '.join(['(user-id={0}, ls_id={1})'.format(
-                tup[0], tup[0] % settings.NUM_LOGICAL_SHARDS) for tup in test])))
+        logging.warning('Dupe user_ids detected, affected ids: %s',
+                        str(', '.join(['(user-id={0}, ls_id={1})'
+                        .format(tup[0], tup[0] % settings.NUM_LOGICAL_SHARDS) for tup in test])))  # noqa
 
         logging.warning('Logical shard migration failed, removing duplicate'
                         ' entries from the destination shard')
 
         physical_shard_id = re.sub(r'[^0-9]', '', source_connection_name)
 
-        assert physical_shard_id.isdigit(), 'Failed to extract physical_shard_id' \
-                                            ' from source connection name "{0}"'.\
+        assert physical_shard_id.isdigit(), \
+            'Failed to extract physical_shard_id' \
+            ' from source connection name "{0}"'.\
             format(source_connection_name)
 
         deleteUsers([x[0] for x in test], using=destination_connection_name)
         _cleanup_straggler_short_links(destination_connection_name)
 
         db_exec('UPDATE "LogicalShard" SET "physical_shard_id" = %s WHERE "id"'
-                ' = %s', (physical_shard_id, logical_shard_id,), using=settings.
-                PRIMARY_SHARD_CONNECTION)
+                ' = %s',
+                (physical_shard_id, logical_shard_id,),
+                using=settings.PRIMARY_SHARD_CONNECTION)
 
         attempt_memcache_flush()
 
@@ -417,53 +456,75 @@ def migrate_logical_shard(logical_shard_id, destination_shard, **kw):
 
     try:
         # Keep track of initial counts.
-        pre_source_counts = table_row_counts(_userIdTableColumnPairs(), user_ids, using=source_shard)
+        pre_source_counts = table_row_counts(_userIdTableColumnPairs(),
+                                             user_ids,
+                                             using=source_shard)
 
         # migrateUsers(userIds, source_shard, destination_shard)
-        started_ts = _dumpAndCopyLogicalShardWrapper(logical_shard_id, destination_shard, source_shard, user_ids, **kw)
+        started_ts = _dumpAndCopyLogicalShardWrapper(logical_shard_id,
+                                                     destination_shard,
+                                                     source_shard,
+                                                     user_ids, **kw)
         duration = int(time.time() - started_ts)
 
         started_counts_ts = time.time()
-        post_source_counts = table_row_counts(_userIdTableColumnPairs(), user_ids, using=source_shard)
-        post_destination_counts = table_row_counts(_userIdTableColumnPairs(), user_ids, using=destination_shard)
+        post_source_counts = table_row_counts(_userIdTableColumnPairs(),
+                                              user_ids,
+                                              using=source_shard)
+        post_destination_counts = table_row_counts(_userIdTableColumnPairs(),
+                                                   user_ids,
+                                                   using=destination_shard)
         finished_counts_ts = time.time()
-        logging.info('Tail-end src/dest counts took {0} seconds'.format(int(started_counts_ts - finished_counts_ts)))
+        logging.info('Tail-end src/dest counts took %d seconds',
+                     int(started_counts_ts - finished_counts_ts))
 
-        message = 'duration={0}s\nnumUsers={1}\npreSourceCounts={2}\npostSourceCounts={3}\npostDestinationCounts={4}' \
-            .format(duration, len(user_ids), pre_source_counts, post_source_counts, post_destination_counts)
+        message = 'duration={0}s\nnumUsers={1}\npreSourceCounts={2}\n' \
+                  'postSourceCounts={3}\npostDestinationCounts={4}' \
+                  .format(duration, len(user_ids), pre_source_counts,
+                          post_source_counts, post_destination_counts)
         logging.info(message)
 
         base_file_name = _base_backup_file_name(logical_shard_id, started_ts)
 
-        if pre_source_counts != post_source_counts or pre_source_counts != post_destination_counts:
-            logging.warning('FAILED: Logical shard migration failed due to count mis-match!')
+        if pre_source_counts != post_source_counts or \
+                pre_source_counts != post_destination_counts:
+            logging.warning('FAILED: Logical shard migration '
+                            'failed due to count mis-match!')
             file_name = '{0}.failed'.format(base_file_name)
-            logging.info('Deleting copied data from destination shard {0}'.format(destination_shard))
+            logging.info('Deleting copied data from destination shard %s',
+                         str(destination_shard))
             deleteUsers(user_ids, destination_shard, **kw)
 
         else:
-            logging.info('SUCCEEDED: pre/post source/destination counts all match')
+            logging.info('SUCCEEDED: pre/post source/destination '
+                         'counts all match')
             file_name = '{0}.succeeded'.format(base_file_name)
-            new_physical_shard_id = ShardedResource.shardNameToId(destination_shard)
-            logging.info('Updating LogicalShard table to point id={0}'
-                         ' at physical_shard_id={1}'.format(
-                            logical_shard_id, new_physical_shard_id))
+            new_physical_shard_id = ShardedResource.shardNameToId(destination_shard)  # noqa
+            logging.info('Updating LogicalShard table to point id=%s'
+                         ' at physical_shard_id=%s',
+                         str(logical_shard_id), str(new_physical_shard_id))
 
-            set_logical_shard_physical_shard_id(logical_shard_id, new_physical_shard_id, 'OK')
+            set_logical_shard_physical_shard_id(logical_shard_id,
+                                                new_physical_shard_id,
+                                                'OK')
             attempt_memcache_flush()
             deleteUsers(user_ids, source_shard, **kw)
 
         url = upload_file(file_name, message)
-        logging.info('Stored migration run note at {0}'.format(url))
+        logging.info('Stored migration run note at %s', str(url))
 
     except AssertionError as e:
-        logging.warning('Assertion failed while migrating userIds={0} from '
-                        '{1} to {2}: {3}'.format(user_ids,
-                                                  source_shard,
-                                                  destination_shard, e))
+        logging.warning('Assertion failed while migrating userIds=%s from '
+                        '%s to %s: %s',
+                        str(user_ids),
+                        str(source_shard),
+                        str(destination_shard),
+                        str(e))
 
     finally:
-        _automatic_duplicate_recovery(logical_shard_id, source_shard, destination_shard)
+        _automatic_duplicate_recovery(logical_shard_id,
+                                      source_shard,
+                                      destination_shard)
 
 
 class AutomaticErrorResolver(object):
@@ -474,7 +535,8 @@ class AutomaticErrorResolver(object):
     """
     def __init__(self, using, regex_str):
         """
-        @param using str Db connection name to resolve conflict on (where data will be altered).
+        @param using str Db connection name to resolve conflict on
+        (where data will be altered).
         @param regex_str str Regular expression string to be used.
         """
         self.using = using
@@ -482,7 +544,8 @@ class AutomaticErrorResolver(object):
         self.match = None
 
     def matches(self, exc):
-        """Determine if a particular exception matches the regular expression of this AutomaticErrorResolver."""
+        """Determine if a particular exception matches the regular
+        expression of this AutomaticErrorResolver."""
         self.match = re.match(self.regexStr, str(exc).replace('\n', ' '))
         if not self.match:
             return False
@@ -499,52 +562,88 @@ class AutomaticErrorResolver(object):
             'after `.matches()` failed: no match was found in the first place'
 
     def run(self):
-        raise NotImplementedError('All children of AutomaticErrorResolver must implement their own `run()` method')
+        """run"""
+        raise NotImplementedError('All children of AutomaticErrorResolver '
+                                  'must implement their own `run()` method')
 
 
 class DuplicateMixPanelIdResolver(AutomaticErrorResolver):
+    """Duplicate mix panel id resolver"""
     def __init__(self, source_shard, destinationShard):
-        regexStr = r'''.*duplicate key value violates unique constraint "main_extendeduser_mixpanelid_key".*DETAIL: *Key \(mixpanelid\)=\((.+)\) already exists\..*'''
-        super(DuplicateMixPanelIdResolver, self).__init__(destinationShard, regexStr)
+        regexStr = r'''.*duplicate key value violates unique constraint
+                    "main_extendeduser_mixpanelid_key".*DETAIL:
+                    *Key \(mixpanelid\)=\((.+)\) already exists\..*'''
+        super(DuplicateMixPanelIdResolver, self).__init__(destinationShard,
+                                                          regexStr)
 
     def run(self):
-        """Verify that the state of `destination_shard` is as expected, and if so, update the conflicting mixpanelid to something new"""
+        """Verify that the state of `destination_shard` is as expected,
+        and if so, update the conflicting mixpanelid to something new"""
         self.validate_runnability()
         foundValue = self.match.group(1)
         db_exec('ROLLBACK', using=self.using)
-        numRows = db_query('SELECT count(*) FROM "main_extendeduser" WHERE "mixpanelid" = %s', (foundValue,), using=self.using)[0][0]
-        assert numRows == 1, 'Expected to find 1 row in main_extendeduser where mixpanelid={0} on {1}, but instead found {2}'.format(foundValue, self.using, numRows)
+        numRows = db_query('SELECT count(*) FROM "main_extendeduser" WHERE '
+                           '"mixpanelid" = %s',
+                           (foundValue,), using=self.using)[0][0]
+        assert numRows == 1, \
+            'Expected to find 1 row in main_extendeduser where ' \
+            'mixpanelid={0} on {1}, but instead found {2}' \
+            .format(foundValue, self.using, numRows)
         import uuid
         newValue = str(uuid.uuid4())
         db_exec('BEGIN', using=self.using)
-        db_exec('UPDATE "main_extendeduser" SET "mixpanelid" = %s WHERE "mixpanelid" = %s', (newValue, foundValue,), using=self.using)
+        db_exec('UPDATE "main_extendeduser" SET "mixpanelid" = %s '
+                'WHERE "mixpanelid" = %s',
+                (newValue, foundValue,), using=self.using)
         db_exec('COMMIT', using=self.using)
-        logging.info('DuplicateMixPanelIdResolver :: updated "{0}" to "{1}"'.format(foundValue, newValue))
+        logging.info('DuplicateMixPanelIdResolver :: updated "%s" to "%s"',
+                     str(foundValue), str(newValue))
 
 
 class DuplicateUsernameResolver(AutomaticErrorResolver):
+    """duplicate user name resolver"""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*duplicate key value violates unique constraint "username".*DETAIL: *Key \(username\)=\((.+)\) already exists\..*'''
-        super(DuplicateUsernameResolver, self).__init__(destinationShard, regexStr)
+        regexStr = r'''.*duplicate key value violates unique constraint
+                    "username".*DETAIL: *Key \(username\)=\((.+)\)
+                    already exists\..*'''
+        super(DuplicateUsernameResolver, self).__init__(destinationShard,
+                                                        regexStr)
 
     def run(self):
-        """Handles cases where the username is something like 'openiduser12'."""
+        """Handles cases where the username is something
+        like 'openiduser12'."""
         self.validate_runnability()
         foundValue = self.match.group(1)
-        assert re.match(r'^[0-9]{10,11}$', foundValue) is None, 'Unable to automatically rename user with username "{0}"'.format(foundValue)
+        assert re.match(r'^[0-9]{10,11}$', foundValue) is None, \
+            'Unable to automatically rename user with ' \
+            'username "{0}"'.format(foundValue)
         db_exec('ROLLBACK', using=self.using)
-        numRows = db_query('SELECT count(*) FROM "auth_user" WHERE "username" = %s', (foundValue,), using=self.using)[0][0]
-        assert numRows == 1, 'Expected to find 1 row in auth_user where username={0} on {1}, but instead found {2}'.format(foundValue, self.using, numRows)
+        numRows = db_query('SELECT count(*) FROM "auth_user" '
+                           'WHERE "username" = %s',
+                           (foundValue,), using=self.using)[0][0]
+        assert numRows == 1, \
+            'Expected to find 1 row in auth_user where ' \
+            'username={0} on {1}, but instead found {2}' \
+            .format(foundValue, self.using, numRows)
         newValue = foundValue + foundValue[-1]
         db_exec('BEGIN', using=self.using)
-        db_exec('UPDATE "auth_user" SET "username" = %s WHERE "username" = %s', (newValue, foundValue,), using=self.using)
+        db_exec('UPDATE "auth_user" SET "username" = %s '
+                'WHERE "username" = %s',
+                (newValue, foundValue,), using=self.using)
         db_exec('COMMIT', using=self.using)
-        logging.info('DuplicateUsernameResolver :: updated "{0}" to "{1}"'.format(foundValue, newValue))
+        logging.info('DuplicateUsernameResolver :: updated "%s" to "%s"',
+                     str(foundValue), str(newValue))
 
 
 class DuplicateIdResolver(AutomaticErrorResolver):
+    """duplicate id resolver"""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*duplicate key value violates unique constraint "(main_usermessage|main_shortlink|main_receipt|main_thread|main_phonenumber|main_userphonenumber|main_voicecall|tastypie_apikey|django_openid_auth_useropenid|main_usermessageshortcode).+".*DETAIL: *Key \(id\)=\(([0-9]+)\) already exists\..*'''
+        regexStr = r'''.*duplicate key value violates unique constraint
+                    "(main_usermessage|main_shortlink|main_receipt|main_thread|
+                    main_phonenumber|main_userphonenumber|main_voicecall|
+                    tastypie_apikey|django_openid_auth_useropenid|
+                    main_usermessageshortcode).+".*DETAIL:
+                    *Key \(id\)=\(([0-9]+)\) already exists\..*'''
         super(DuplicateIdResolver, self).__init__(destinationShard, regexStr)
 
     def run(self):
@@ -552,12 +651,16 @@ class DuplicateIdResolver(AutomaticErrorResolver):
         self.validate_runnability()
         table = self.match.group(1)
         currentId = self.match.group(2)
-        assert currentId.isdigit(), 'Extracted currentId={0}, was expecting a number'.format(currentId)
+        assert currentId.isdigit(), \
+            'Extracted currentId={0}, was expecting a number'.format(currentId)
         currentId = int(currentId)
         db_exec('ROLLBACK', using=self.using)
         db_exec('BEGIN', using=self.using)
-        newId = db_query('''SELECT sh_next_id('{0}_id_seq')'''.format(table), using=self.using)[0][0]
-        logging.info('DuplicateIdResolver :: updating "{0}" to "{1}" on connection={2}'.format(currentId, newId, self.using))
+        newId = db_query('''SELECT sh_next_id('{0}_id_seq')'''
+                         .format(table), using=self.using)[0][0]
+        logging.info('DuplicateIdResolver :: updating "%s" to "%s" '
+                     'on connection=%s',
+                     str(currentId), str(newId), str(self.using))
         updatePrimaryKeyId(table, currentId, newId, using=self.using)
         db_exec('COMMIT', using=self.using)
 
@@ -565,17 +668,25 @@ class DuplicateIdResolver(AutomaticErrorResolver):
 class ContactGroupsOverlapResolver(AutomaticErrorResolver):
     """Fix mis-matched contact group membership."""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*insert or update on table "main_contact_groups" violates foreign key constraint "[^"]+".*DETAIL: *Key \(group_id\)=\(([0-9]+)\) is not present in table "main_group"\..*'''
-        super(ContactGroupsOverlapResolver, self).__init__(sourceShard, regexStr)
+        regexStr = r'''.*insert or update on table "main_contact_groups"
+                    violates foreign key constraint "[^"]+".*DETAIL:
+                    *Key \(group_id\)=\(([0-9]+)\) is not present in
+                    table "main_group"\..*'''
+        super(ContactGroupsOverlapResolver, self).__init__(sourceShard,
+                                                           regexStr)
 
     def run(self):
-        """Updates the offending contacts-groups records to remove contacts from groups where the contact's user-id differs from the group's user-id."""
+        """Updates the offending contacts-groups records to remove contacts
+        from groups where the contact's user-id differs from the
+        group's user-id."""
         self.validate_runnability()
         groupId = int(self.match.group(1))
         db_exec('ROLLBACK', using=self.using)
         # Find actual group owner user-id.
         db_exec('BEGIN', using=self.using)
-        userId = db_query('SELECT "user_id" FROM "main_group" WHERE "id" = %s', (groupId,), using=self.using)[0][0]
+        userId = db_query('SELECT "user_id" FROM "main_group" '
+                          'WHERE "id" = %s',
+                          (groupId,), using=self.using)[0][0]
         db_exec(
             '''
             DELETE FROM "main_contact_groups"
@@ -584,38 +695,49 @@ class ContactGroupsOverlapResolver(AutomaticErrorResolver):
                 "contact_id" IN (
                     SELECT "c"."id"
                     FROM "main_contact" "c"
-                        JOIN "main_contact_groups" "cg" ON "cg"."contact_id" = "c"."id"
+                        JOIN "main_contact_groups" "cg" ON
+                        "cg"."contact_id" = "c"."id"
                     WHERE "cg"."group_id" = %s AND "c"."user_id" != %s
                 )
             ''',
             (groupId, groupId, userId,),
             using=self.using
         )
-        logging.info('ContactGroupsOverlapResolver :: fixed main_contact_groups for group_id={0} on connection={1}'.format(groupId, self.using))
+        logging.info('ContactGroupsOverlapResolver :: fixed '
+                     'main_contact_groups for group_id=%s on connection=%s',
+                     str(groupId), str(self.using))
         db_exec('COMMIT', using=self.using)
 
 
 class ReceiptOverlapResolver(AutomaticErrorResolver):
     """Fix mis-matched receipts."""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*insert or update on table "main_receipt" violates foreign key constraint "[^"]+".*DETAIL: *Key \((contact|group)_id\)=\(([0-9]+)\) is not present in table "main_(contact|group)"\..*'''
+        regexStr = r'''.*insert or update on table "main_receipt" violates
+                    foreign key constraint "[^"]+".*DETAIL:
+                    *Key \((contact|group)_id\)=\(([0-9]+)\) is not present
+                    in table "main_(contact|group)"\..*'''
         super(ReceiptOverlapResolver, self).__init__(sourceShard, regexStr)
 
     def run(self):
-        """Updates the offending receipt and related records to belong to the correct user-id."""
+        """Updates the offending receipt and related records
+        to belong to the correct user-id."""
         self.validate_runnability()
         table = self.match.group(1)
         currentId = int(self.match.group(2))
         db_exec('ROLLBACK', using=self.using)
         db_exec('BEGIN', using=self.using)
         # Find actual object owner's user-id.
-        userId = db_query('SELECT "user_id" FROM "main_{0}" WHERE "id" = %s'.format(table), (currentId,), using=self.using)[0][0]
+        userId = db_query('SELECT "user_id" FROM "main_{0}" '
+                          'WHERE "id" = %s'.format(table),
+                          (currentId,), using=self.using)[0][0]
         db_exec(
             '''
             UPDATE "main_thread"
             SET "user_id" = {userId}
             WHERE "latestUserMessageId" IN (
-                SELECT "um"."id" FROM "main_usermessage" "um" JOIN "main_receipt" "r" ON "r"."message_id" = "um"."id" WHERE "r"."{table}_id" = {currentId}
+                SELECT "um"."id" FROM "main_usermessage" "um" JOIN
+                "main_receipt" "r" ON "r"."message_id" = "um"."id"
+                WHERE "r"."{table}_id" = {currentId}
             )
             '''.format(table=table, currentId=currentId, userId=userId),
             using=self.using
@@ -625,77 +747,126 @@ class ReceiptOverlapResolver(AutomaticErrorResolver):
             UPDATE "main_usermessage"
             SET "user_id" = {userId}
             WHERE "id" IN (
-                SELECT "um"."id" FROM "main_usermessage" "um" JOIN "main_receipt" "r" ON "r"."message_id" = "um"."id" WHERE "r"."{table}_id" = {currentId}
+                SELECT "um"."id" FROM "main_usermessage" "um" JOIN
+                "main_receipt" "r" ON "r"."message_id" = "um"."id"
+                WHERE "r"."{table}_id" = {currentId}
             )
             '''.format(table=table, currentId=currentId, userId=userId),
             using=self.using
         )
         db_exec(
-            '''UPDATE "main_receipt" SET "user_id" = {userId} WHERE "{table}_id" = {currentId}'''.format(table=table, currentId=currentId, userId=userId),
+            '''UPDATE "main_receipt" SET "user_id" = {userId} WHERE
+            "{table}_id" = {currentId}'''.format(table=table,
+                                                 currentId=currentId,
+                                                 userId=userId),
             using=self.using
         )
-        logging.info('ReceiptOverlapResolver :: fixed mis-matched receipt for {0}_id={1}/user_id={2} on connection={3}'.format(table, currentId, userId, self.using))
+        logging.info('ReceiptOverlapResolver :: fixed mis-matched receipt '
+                     'for %s_id=%s/user_id=%s on connection=%s',
+                     str(table), str(currentId), str(userId), str(self.using))
         db_exec('COMMIT', using=self.using)
 
 
 def _findAndValidateUserIdForThreadMembers(match, membersJson, using):
-    """Given a Thread.membersJson field value, resolve the members to a single user-id."""
+    """Given a Thread.membersJson field value, resolve the
+    members to a single user-id."""
     userIdsC, userIdsG = None
     contactIds, groupIds = json.loads(membersJson)
-    assert len(contactIds) + len(groupIds) != 0, 'threadId={0} somehow had no members at all'.format(match.group(1))
+    assert len(contactIds) + len(groupIds) != 0, \
+        'threadId={0} somehow had no members at all'.format(match.group(1))
     if len(contactIds) > 0:
-        userIdsC = db_query('''SELECT DISTINCT "user_id" FROM "main_contact" WHERE "id" IN ({0})'''.format(','.join(map(str, contactIds))), using=using)
-        assert len(userIdsC) == 1, 'Expected to find a single user-id for contactIds={0}, but instead found {1}'.format(contactIds, len(userIdsC))
+        userIdsC = db_query('''SELECT DISTINCT "user_id" FROM "main_contact"
+                            WHERE "id" IN ({0})'''
+                            .format(','.join(map(str, contactIds))),
+                            using=using)
+        assert len(userIdsC) == 1, \
+            'Expected to find a single user-id for contactIds={0}, but ' \
+            'instead found {1}'.format(contactIds, len(userIdsC))
     if len(groupIds) > 0:
-        userIdsG = db_query('''SELECT DISTINCT "user_id" FROM "main_group" WHERE "id" IN ({0})'''.format(','.join(map(str, groupIds))), using=using)
-        assert len(userIdsG) == 1, 'Expected to find a single user-id for groupIds={0}, but instead found {1}'.format(groupIds, len(userIdsG))
+        userIdsG = db_query('''SELECT DISTINCT "user_id" FROM "main_group"
+                            WHERE "id" IN ({0})'''
+                            .format(','.join(map(str, groupIds))), using=using)
+        assert len(userIdsG) == 1, \
+            'Expected to find a single user-id for groupIds={0}, but ' \
+            'instead found {1}'.format(groupIds, len(userIdsG))
     if 'userIdsC' in vars() and 'userIdsG' in vars():
-        assert userIdsC[0][0] == userIdsG[0][0], 'user-id for contacts/groups in membersJson={0} did not match: {1}, {2}'.format(membersJson, userIdsC[0], userIdsG[0])
+        assert userIdsC[0][0] == userIdsG[0][0], \
+            'user-id for contacts/groups in membersJson={0} did ' \
+            'not match: {1}, {2}'.format(membersJson, userIdsC[0], userIdsG[0])
         return userIdsC[0][0]
     elif 'userIdsC' in vars():
         return userIdsC[0][0]
     elif 'userIdsG' in vars():
         return userIdsG[0][0]
     else:
-        raise Exception('Failed to resolve any user-ids for membersJson={0}'.format(membersJson))
+        raise Exception('Failed to resolve any user-ids for '
+                        'membersJson={0}'.format(membersJson))
 
 
 class ThreadOverlapResolver(AutomaticErrorResolver):
     """Fix mis-matched threads."""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*insert or update on table "main_usermessage" violates foreign key constraint "threadId_.*".*DETAIL: *Key \(threadId\)=\(([0-9]+)\) is not present in table "main_thread"\..*'''
+        regexStr = r'''.*insert or update on table "main_usermessage" violates
+                    foreign key constraint "threadId_.*".*DETAIL:
+                    *Key \(threadId\)=\(([0-9]+)\) is not present in
+                    table "main_thread"\..*'''
         super(ThreadOverlapResolver, self).__init__(sourceShard, regexStr)
 
     def run(self):
-        """Updates the offending threadId and associated records to reference the correct user-id."""
+        """Updates the offending threadId and associated records
+        to reference the correct user-id."""
         self.validate_runnability()
         threadId = int(self.match.group(1))
         db_exec('ROLLBACK', using=self.using)
         db_exec('BEGIN', using=self.using)
         # Find actual object owner's user-id.
-        incorrectUserId, membersJson = db_query('SELECT "user_id", "membersJson" FROM "main_thread" WHERE "id" = %s', (threadId,), using=self.using)[0]
-        userId = _findAndValidateUserIdForThreadMembers(self.match, membersJson, self.using)
+        incorrectUserId, membersJson = db_query('SELECT "user_id", '
+                                                '"membersJson" FROM '
+                                                '"main_thread" WHERE '
+                                                '"id" = %s',
+                                                (threadId,),
+                                                using=self.using)[0]
+        userId = _findAndValidateUserIdForThreadMembers(self.match,
+                                                        membersJson,
+                                                        self.using)
 
         if incorrectUserId == userId:
-            db_exec('''UPDATE "main_thread" SET "latestUserMessageId" = NULL WHERE "id" = %s''', (threadId,), using=self.using)
-            logging.info('ThreadOverlapResolver :: fixed mis-matched thread for threadId={0}, nulled out latestUserMessageId on connection={1}'.format(threadId, self.using))
+            db_exec('''UPDATE "main_thread" SET "latestUserMessageId" = NULL
+                    WHERE "id" = %s''', (threadId,), using=self.using)
+            logging.info('ThreadOverlapResolver :: fixed mis-matched thread '
+                         'for threadId=%s, nulled out latestUserMessageId on'
+                         'connection=%s', str(threadId), str(self.using))
 
         else:
-            db_exec('''UPDATE "main_receipt" SET "user_id" = %s WHERE "message_id" IN (SELECT "id" FROM "main_usermessage" WHERE "threadId" = %s)''', (userId, threadId,), using=self.using)
-            db_exec('''UPDATE "main_usermessage" SET "user_id" = %s WHERE "threadId" = %s''', (userId, threadId,), using=self.using)
-            db_exec('''UPDATE "main_thread" SET "user_id" = %s WHERE "id" = %s''', (userId, threadId,), using=self.using)
-            logging.info('ThreadOverlapResolver :: fixed mis-matched thread for threadId={0}, incorrectUserId={1} correctUserId={2} on connection={3}'.format(threadId, incorrectUserId, userId, self.using))
+            db_exec('''UPDATE "main_receipt" SET "user_id" = %s WHERE
+                    "message_id" IN (SELECT "id" FROM "main_usermessage"
+                    WHERE "threadId" = %s)''',
+                    (userId, threadId,), using=self.using)
+            db_exec('''UPDATE "main_usermessage" SET "user_id" = %s
+                    WHERE "threadId" = %s''',
+                    (userId, threadId,), using=self.using)
+            db_exec('''UPDATE "main_thread" SET "user_id" = %s WHERE
+                    "id" = %s''', (userId, threadId,), using=self.using)
+            logging.info('ThreadOverlapResolver :: fixed mis-matched thread '
+                         'for threadId=%s, incorrectUserId=%s '
+                         'correctUserId=%s on connection=%s',
+                         str(threadId),
+                         str(incorrectUserId), str(userId), str(self.using))
         db_exec('COMMIT', using=self.using)
 
 
 class BlockMismatchResolver(AutomaticErrorResolver):
     """Fix mis-matched receipts."""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*insert or update on table "main_block" violates foreign key constraint "message_id.*".*DETAIL: *Key \(message_id\)=\(([0-9]+)\) is not present in table "main_usermessage"\..*'''
+        regexStr = r'''.*insert or update on table "main_block" violates
+                    foreign key constraint "message_id.*".*DETAIL:
+                    *Key \(message_id\)=\(([0-9]+)\) is not present in
+                    table "main_usermessage"\..*'''
         super(BlockMismatchResolver, self).__init__(sourceShard, regexStr)
 
     def run(self):
-        """Updates the offending related block records to belong to the correct user-id."""
+        """Updates the offending related block records to
+        belong to the correct user-id."""
         self.validate_runnability()
         userMessageId = int(self.match.group(1))
         db_exec('ROLLBACK', using=self.using)
@@ -704,133 +875,227 @@ class BlockMismatchResolver(AutomaticErrorResolver):
         userId = None
         # Find all blocks from the conflicting user message id.
         blocks = db_query(
-            '''SELECT * FROM "main_block" WHERE "blocked_user_id" = (SELECT "blocked_user_id" FROM "main_block" WHERE "message_id" = %s LIMIT 1)''',
+            '''SELECT * FROM "main_block" WHERE "blocked_user_id" =
+            (SELECT "blocked_user_id" FROM "main_block" WHERE
+            "message_id" = %s LIMIT 1)''',
             (userMessageId,),
             using=self.using,
             as_dict=True
         )
         for block in blocks:
             # Require that the blocked user-id matches the contact user-id.
-            contactUserId = db_query('''SELECT "user_id" FROM "main_contact" WHERE "id" = %s''', (block['contact_id'],), using=self.using)[0][0]
+            contactUserId = db_query('''SELECT "user_id" FROM
+                                     "main_contact" WHERE "id" = %s''',
+                                     (block['contact_id'],),
+                                     using=self.using)[0][0]
             assert block['blocked_user_id'] == contactUserId, \
-                'Bad block with id={0}, blocked_user_id={1} but contactId={2} user-id was {3}'.format(block['id'], block['blocked_user_id'], block['contact_id'], contactUserId)
+                'Bad block with id={0}, blocked_user_id={1} but ' \
+                'contactId={2} user-id was {3}' \
+                .format(block['id'], block['blocked_user_id'],
+                        block['contact_id'], contactUserId)
             userMessageIds.append(str(block['message_id']))
             if userId is None:
                 userId = block['blocked_user_id']
 
         if userId is None:
-            logging.warning('BlockMismatchResolver :: Unexpectedly failed to find block(s) for user with block originating from message_id={0}'.format(userMessageId))
+            logging.warning('BlockMismatchResolver :: Unexpectedly failed '
+                            'to find block(s) for user with block originating'
+                            'from message_id=%s', str(userMessageId))
             return
 
-        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s WHERE "id" IN ({0})'''.format(','.join(userMessageIds)), (userId,), using=self.using)
-        db_exec('''UPDATE "main_receipt" SET "user_id" = %s WHERE "id" IN ({0})'''.format(','.join(userMessageIds)), (userId,), using=self.using)
+        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s
+                WHERE "id" IN ({0})'''
+                .format(','.join(userMessageIds)), (userId,), using=self.using)
+        db_exec('''UPDATE "main_receipt" SET "user_id" = %s
+                WHERE "id" IN ({0})'''
+                .format(','.join(userMessageIds)), (userId,), using=self.using)
         db_exec(
-            '''UPDATE "main_thread" SET "user_id" = %s WHERE "id" IN (SELECT "threadId" FROM "main_usermessage" WHERE "id" IN ({0}))'''.format(','.join(userMessageIds)),
+            '''UPDATE "main_thread" SET "user_id" = %s
+            WHERE "id" IN (SELECT "threadId" FROM "main_usermessage"
+            WHERE "id" IN ({0}))'''.format(','.join(userMessageIds)),
             (userId,),
             using=self.using
         )
-        logging.info('BlockMismatchResolver :: fixed mis-matched block records for userMessageId={0}/user_id={1} on connection={2}'.format(userMessageId, userId, self.using))
+        logging.info('BlockMismatchResolver :: fixed mis-matched block '
+                     'records for userMessageId=%s/user_id=%s on '
+                     'connection=%s',
+                     str(userMessageId), str(userId), str(self.using))
         db_exec('COMMIT', using=self.using)
 
 
 class ThreadMismatchResolver(AutomaticErrorResolver):
     """Fix mis-matched threads."""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*insert or update on table "main_thread" violates foreign key constraint "latestUserMessageId_.*".*DETAIL: +Key \(latestUserMessageId\)=\(([0-9]+)\) is not present in table "main_usermessage"\..*'''
+        regexStr = r'''.*insert or update on table "main_thread" violates
+                    foreign key constraint "latestUserMessageId_.*".*DETAIL:
+                    +Key \(latestUserMessageId\)=\(([0-9]+)\) is not present
+                    in table "main_usermessage"\..*'''
         super(ThreadMismatchResolver, self).__init__(sourceShard, regexStr)
 
     def run(self):
-        """Updates the offending related block records to belong to the correct user-id."""
+        """Updates the offending related block records to belong to the
+        correct user-id."""
         self.validate_runnability()
         userMessageId = int(self.match.group(1))
         db_exec('ROLLBACK', using=self.using)
         db_exec('BEGIN', using=self.using)
 
-        userId0, membersJson = db_query('''SELECT "user_id", "membersJson" FROM "main_thread" WHERE "latestUserMessageId" = %s''', (userMessageId,), using=self.using)[0]
-        userId = _findAndValidateUserIdForThreadMembers(self.match, membersJson, self.using)
-        assert userId0 == userId, 'Thread with membersJson={0} is too borked to handle automatically'.format(membersJson)
+        userId0, membersJson = db_query(
+                               '''SELECT "user_id", "membersJson" FROM
+                               "main_thread" WHERE
+                               "latestUserMessageId" = %s''',
+                               (userMessageId,), using=self.using)[0]
+        userId = _findAndValidateUserIdForThreadMembers(self.match,
+                                                        membersJson,
+                                                        self.using)
+        assert userId0 == userId, \
+            'Thread with membersJson={0} is too borked to handle ' \
+            'automatically'.format(membersJson)
 
-        db_exec('''UPDATE "main_receipt" SET "user_id" = %s WHERE "message_id" = %s''', (userId, userMessageId,), using=self.using)
-        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s WHERE "id" = %s''', (userId, userMessageId,), using=self.using)
+        db_exec('''UPDATE "main_receipt" SET "user_id" = %s WHERE
+                "message_id" = %s''',
+                (userId, userMessageId,), using=self.using)
+        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s WHERE
+                "id" = %s''', (userId, userMessageId,), using=self.using)
         unintelligibleReceiptIds = [str(row[0]) for row in db_query(
             '''
             SELECT "r"."id"
             FROM "main_receipt" "r"
                 JOIN "main_contact" "c" ON "c"."id" = "r"."contact_id"
-            WHERE "r"."message_id" = %s AND "r"."user_id" = %s AND "c"."user_id" != "r"."user_id"
+            WHERE "r"."message_id" = %s AND "r"."user_id" = %s
+            AND "c"."user_id" != "r"."user_id"
             ''',
             (userMessageId, userId,),
             using=self.using
         )]
         if len(unintelligibleReceiptIds) > 0:
-            logging.info('ThreadMismatchResolver :: found {0} unintelligible receipts, ids={0}'.format(len(unintelligibleReceiptIds), unintelligibleReceiptIds))
-            db_exec('''DELETE FROM "main_receipt" WHERE "message_id" = %s AND "id" IN ({0})'''.format(','.join(unintelligibleReceiptIds)), (userMessageId,), using=self.using)
-        logging.info('ThreadMismatchResolver :: fixed mismatched thread with lastestUserMessageId={0}/user_id={1} on connection={2}'.format(userMessageId, userId, self.using))
+            logging.info('ThreadMismatchResolver :: found %s '
+                         'unintelligible receipts, ids=%s',
+                         str(len(unintelligibleReceiptIds)),
+                         str(unintelligibleReceiptIds))
+            db_exec('''DELETE FROM "main_receipt" WHERE "message_id" = %s
+                    AND "id" IN ({0})'''
+                    .format(','.join(unintelligibleReceiptIds)),
+                    (userMessageId,), using=self.using)
+        logging.info('ThreadMismatchResolver :: fixed mismatched thread '
+                     'with lastestUserMessageId=%s/user_id=%s on '
+                     'connection=%s',
+                     str(userMessageId),
+                     str(userId),
+                     str(self.using))
         db_exec('COMMIT', using=self.using)
 
 
 class MismatchedContactOrGroupResolver(AutomaticErrorResolver):
     """Fix mis-matched threads."""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*insert or update on table "main_usermessage_(contact|group)s" violates foreign key constraint "main_usermessage_(?:contact|group)s_(?:contact|group)_id_fk".*DETAIL: *Key \((?:contact|group)_id\)=\(([0-9]+)\) is not present in table "main_(?:contact|group)"\..*'''
-        super(MismatchedContactOrGroupResolver, self).__init__(sourceShard, regexStr)
+        regexStr = r'''.*insert or update on table
+                    "main_usermessage_(contact|group)s" violates foreign key
+                    constraint "main_usermessage_(?:contact|group)s_
+                    (?:contact|group)_id_fk".*DETAIL:
+                    *Key \((?:contact|group)_id\)=\(([0-9]+)\) is not present
+                    in table "main_(?:contact|group)"\..*'''
+        super(MismatchedContactOrGroupResolver, self).__init__(sourceShard,
+                                                               regexStr)
 
     def run(self):
-        """Updates the offending usermessages to belong to the correct user-id."""
+        """Updates the offending usermessages to belong
+        to the correct user-id."""
         self.validate_runnability()
         objectType = self.match.group(1)
-        assert objectType in ('contact', 'group'), 'Unrecognized object type: {0}'.format(objectType)
+        assert objectType in ('contact', 'group'), \
+            'Unrecognized object type: {0}'.format(objectType)
         objectId = int(self.match.group(2))
         db_exec('ROLLBACK', using=self.using)
         db_exec('BEGIN', using=self.using)
 
-        userId = db_query('''SELECT "user_id" FROM "main_{0}" WHERE "id" = %s'''.format(objectType), (objectId,), using=self.using)[0][0]
+        userId = db_query('''SELECT "user_id" FROM "main_{0}"
+                          WHERE "id" = %s'''
+                          .format(objectType),
+                          (objectId,),
+                          using=self.using)[0][0]
         badUserMessageIds = [str(row[0]) for row in db_query(
-            '''SELECT "um"."id" FROM "main_usermessage_{0}s" "t" JOIN "main_usermessage" "um" ON "um"."id" = "t"."usermessage_id" WHERE "t"."{0}_id" = %s AND "um"."user_id" != %s'''.format(objectType),
+            '''SELECT "um"."id" FROM "main_usermessage_{0}s" "t"
+            JOIN "main_usermessage" "um" ON "um"."id" = "t"."usermessage_id"
+            WHERE "t"."{0}_id" = %s AND "um"."user_id" != %s'''
+            .format(objectType),
             (objectId, userId,),
             using=self.using
         )]
-        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s WHERE "id" IN ({0})'''.format(','.join(badUserMessageIds)), (userId,), using=self.using)
-        logging.info('MismatchedContactOrGroupResolver :: fixed mismatched usermessages for {0}Id={1} to belong to user_id={2} on connection={3}'.format(objectType, objectId, userId, self.using))
+        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s WHERE
+                "id" IN ({0})'''
+                .format(','.join(badUserMessageIds)),
+                (userId,),
+                using=self.using)
+        logging.info('MismatchedContactOrGroupResolver :: fixed mismatched '
+                     'usermessages for %sId=%s to belong to user_id=%s on '
+                     'connection=%s',
+                     str(objectType), str(objectId),
+                     str(userId), str(self.using))
         db_exec('COMMIT', using=self.using)
 
 
 class ReceiptMismatchResolver(AutomaticErrorResolver):
     """Fix mis-matched threads."""
     def __init__(self, sourceShard, destinationShard):
-        regexStr = r'''.*insert or update on table "main_receipt" violates foreign key constraint "main_receipt__message_id_fk".*DETAIL:  Key \(message_id\)=\(([0-9]+)\) is not present in table "main_usermessage"\..*'''
+        regexStr = r'''.*insert or update on table "main_receipt" violates
+                    foreign key constraint
+                    "main_receipt__message_id_fk".*DETAIL:
+                    Key \(message_id\)=\(([0-9]+)\) is not present in
+                    table "main_usermessage"\..*'''
         super(ReceiptMismatchResolver, self).__init__(sourceShard, regexStr)
 
     def run(self):
-        """Updates the offending usermessages to belong to the correct user-id."""
+        """Updates the offending usermessages to belong to
+        the correct user-id."""
         self.validate_runnability()
         userMessageId = int(self.match.group(1))
         db_exec('ROLLBACK', using=self.using)
         db_exec('BEGIN', using=self.using)
 
-        incorrectUserId = db_query('''SELECT "user_id" FROM "main_receipt" WHERE "message_id" = %s LIMIT 1''', (userMessageId,), using=self.using)[0][0]
+        incorrectUserId = db_query('''SELECT "user_id" FROM "main_receipt"
+                                   WHERE "message_id" = %s LIMIT 1''',
+                                   (userMessageId,), using=self.using)[0][0]
         correctUserId = db_query(
             '''
-            SELECT "user_id" FROM "main_contact" WHERE "id" = (SELECT "contact_id" FROM "main_receipt" WHERE "message_id" = %s)
+            SELECT "user_id" FROM "main_contact" WHERE
+            "id" = (SELECT "contact_id" FROM "main_receipt"
+            WHERE "message_id" = %s)
             UNION
-            SELECT "user_id" FROM "main_group" WHERE "id" = (SELECT "group_id" FROM "main_receipt" WHERE "message_id" = %s)
+            SELECT "user_id" FROM "main_group"
+            WHERE "id" = (SELECT "group_id" FROM "main_receipt"
+            WHERE "message_id" = %s)
             ''',
             (userMessageId, userMessageId,),
             using=self.using
         )[0][0]
-        assert incorrectUserId != correctUserId, 'The "good" user-id must not match the incorrect one, but they did ({0} == {1})'.format(correctUserId, incorrectUserId)
-        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s WHERE "id" = %s''', (correctUserId, userMessageId), using=self.using)
-        logging.info('ReceiptMismatchResolver :: fixed mismatched userMessageId={0}, correct user_id={1}, incorrect user_id={2} on connection={3}'.format(userMessageId, correctUserId, incorrectUserId, self.using))
+        assert incorrectUserId != correctUserId, \
+            'The "good" user-id must not match the incorrect one, ' \
+            'but they did ({0} == {1})'.format(correctUserId, incorrectUserId)
+        db_exec('''UPDATE "main_usermessage" SET "user_id" = %s
+                WHERE "id" = %s''',
+                (correctUserId, userMessageId),
+                using=self.using)
+        logging.info('ReceiptMismatchResolver :: fixed mismatched '
+                     'userMessageId=%s, correct user_id=%s, '
+                     'incorrect user_id=%s on connection=%s',
+                     str(userMessageId),
+                     str(correctUserId),
+                     str(incorrectUserId),
+                     str(self.using))
         db_exec('COMMIT', using=self.using)
 
 
-#class TroublesomeThreadResolver(AutomaticErrorResolver):
+# class TroublesomeThreadResolver(AutomaticErrorResolver):
 #    def __init__(self, destination_shard):
-#        regex_str = r'''.*duplicate key value violates unique constraint "username" *DETAIL:  Key \(username\)=\((.+)\) already exists\..*'''
-#        super(DuplicateUsernameResolver, self).__init__(destination_shard, regex_str)
+#        regex_str = r'''.*duplicate key value violates unique constraint
+#        "username" *DETAIL:  Key \(username\)=\((.+)\) already exists\..*'''
+#        super(DuplicateUsernameResolver, self).__init__(destination_shard,
+#        regex_str)
 #
 #    def run(self):
-#        """Handles cases where the username is something like 'openiduser12'."""
+#        """Handles cases where the username is something like
+#           'openiduser12'."""
 #        self.validate_runnability()
 
 _automaticErrorResolvers = (
@@ -845,6 +1110,7 @@ _automaticErrorResolvers = (
     MismatchedContactOrGroupResolver,
 )
 
+
 def _findAutomaticErrorResolver(sourceShard, destinationShard, exc):
     """
     Attempt to find a matching automatic resolver.
@@ -856,7 +1122,9 @@ def _findAutomaticErrorResolver(sourceShard, destinationShard, exc):
     for ResolverClass in _automaticErrorResolvers:
         instance = ResolverClass(sourceShard, destinationShard)
         if instance.matches(exc):
-            logging.info('_findAutomaticErrorResolver :: Found matching resolver: {0}'.format(instance.__class__.__name__))
+            logging.info('_findAutomaticErrorResolver :: Found matching '
+                         'resolver: %s',
+                         str(instance.__class__.__name__))
             return instance
     return None
 
@@ -864,7 +1132,9 @@ def _findAutomaticErrorResolver(sourceShard, destinationShard, exc):
 MAX_DUMP_COPY_ERRORS = 10
 
 
-def _dumpAndCopyLogicalShardWrapper(logicalShardId, destinationShard, using, userIds=None, **kw):
+def _dumpAndCopyLogicalShardWrapper(logicalShardId,
+                                    destinationShard, using,
+                                    userIds=None, **kw):
     """Automatically attempts to handle recognized error cases."""
     if 'attemptCount' not in kw or 'lastException' not in kw:
         # Seed counter during first attempt.
@@ -878,60 +1148,84 @@ def _dumpAndCopyLogicalShardWrapper(logicalShardId, destinationShard, using, use
             raise Exception('Max number of dump/copy retries exceeded')
 
     try:
-        return _dumpAndCopyLogicalShard(logicalShardId, destinationShard, using, userIds, **kw)
+        return _dumpAndCopyLogicalShard(logicalShardId,
+                                        destinationShard, using,
+                                        userIds, **kw)
 
     except Exception as e:
-        # If the same exception occurs twice in a row, don't keep trying to resolve it the same way (astronomically unlikely to work).
-        if 'lastException' in kw and kw['lastException'] is not None and str(e) == str(kw['lastException']):
-            logging.error('Got the same exact exception twice, aborting operation')
+        # If the same exception occurs twice in a row, don't
+        # keep trying to resolve it the same
+        # way (astronomically unlikely to work).
+        if 'lastException' in kw and kw['lastException'] is not None and \
+                str(e) == str(kw['lastException']):
+            logging.error('Got the same exact exception twice, '
+                          'aborting operation')
             raise
 
-        logging.info('_dumpAndCopyLogicalShard :: Caught exception: {0}, will try to resolve automatically..'.format(e))
+        logging.info('_dumpAndCopyLogicalShard :: Caught exception: %s, '
+                     'will try to resolve automatically..', str(e))
         resolver = _findAutomaticErrorResolver(using, destinationShard, e)
         if resolver is None:
-            logging.error('_dumpAndCopyLogicalShard :: Automatic resolution could not be found')
+            logging.error('_dumpAndCopyLogicalShard :: Automatic resolution '
+                          'could not be found')
             raise
 
         resolver.run()
-        # Rollback on the destination shard connection to establish a known transaction state (no txn in progress).
+        # Rollback on the destination shard connection to
+        # establish a known transaction state (no txn in progress).
         db_exec('ROLLBACK', using=destinationShard)
         kw['attemptCount'] += 1
         kw['lastException'] = e
 
-        return _dumpAndCopyLogicalShardWrapper(logicalShardId, destinationShard, using, userIds, **kw)
+        return _dumpAndCopyLogicalShardWrapper(logicalShardId,
+                                               destinationShard,
+                                               using, userIds, **kw)
 
 
-def _dumpAndCopyLogicalShard(logicalShardId, destinationShard, using=None, userIds=None, **kw):
+def _dumpAndCopyLogicalShard(logicalShardId,
+                             destinationShard,
+                             using=None, userIds=None, **kw):
     """
     Dump and copy a logical shard.
 
     @return int Started timestamp in epoch format (# of seconds since 1970).
     """
     startedTs = time.time()
-    dump = _dumpLogicalShard(logicalShardId=logicalShardId, using=using, userIds=userIds, **kw)
+    dump = _dumpLogicalShard(logicalShardId=logicalShardId,
+                             using=using,
+                             userIds=userIds, **kw)
     dumpFinishedTs = time.time()
     dumpDuration = int(dumpFinishedTs - startedTs)
-    logging.info('LogicalShard dump phase for id={0} took {1} seconds'.format(logicalShardId, dumpDuration))
+    logging.info('LogicalShard dump phase for id=%s '
+                 'took %s seconds', str(logicalShardId), str(dumpDuration))
 
-    sqlStatements = _backupDumpAndConvertToSqlList(dump, logicalShardId, startedTs, dumpFinishedTs)
+    sqlStatements = _backupDumpAndConvertToSqlList(dump,
+                                                   logicalShardId,
+                                                   startedTs,
+                                                   dumpFinishedTs)
 
     copyStartedTs = time.time()
 
     numStatements = len(sqlStatements)
-    logging.info('Executing {0} SQL insert statements on {1}'.format(numStatements, destinationShard))
+    logging.info('Executing %s SQL insert statements '
+                 'on %s', str(numStatements), str(destinationShard))
 
     for i, statement in enumerate(sqlStatements):
         statement = statement.replace('%', '%%')
-        logging.info('Executing SQL statement {0}/{1}: {2}..'.format(i + 1, numStatements, statement[0:64]))
+        logging.info('Executing SQL statement %s/%s: %s..',
+                     str(i + 1), str(numStatements),
+                     str(statement[0:64]))
         db_exec(statement, using=destinationShard)
 
     copyFinishedTs = time.time()
 
     copyDuration = int(copyFinishedTs - copyStartedTs)
-    logging.info('LogicalShard copy phase for id={0} took {1} seconds'.format(logicalShardId, copyDuration))
+    logging.info('LogicalShard copy phase for id=%s took %s seconds',
+                 str(logicalShardId), str(copyDuration))
 
     duration = int(copyFinishedTs - startedTs)
-    logging.info('Dump and copy for logical_shard_id={0} took {1} seconds'.format(logicalShardId, duration))
+    logging.info('Dump and copy for logical_shard_id=%s took %s seconds',
+                 str(logicalShardId), str(duration))
 
     return int(startedTs)
 
@@ -939,7 +1233,8 @@ def _dumpAndCopyLogicalShard(logicalShardId, destinationShard, using=None, userI
 def _dump2SqlString(dump, logicalShardId, startedTs, finishedTs):
     """Convert a logical shard dump to a string of SQL statements."""
     buf = StringIO()
-    buf.write('-- Dump of LogicalShard {0} on {1}\n'.format(logicalShardId, int(startedTs)))
+    buf.write('-- Dump of LogicalShard {0} on {1}\n'.format(logicalShardId,
+                                                            int(startedTs)))
     for key in dump:
         buf.write('\n\n-- table = {0}\n'.format(key))
         for statement in dump[key]:
@@ -958,19 +1253,26 @@ def _dump2SqlList(dump):
     return out
 
 
-def _backupDumpAndConvertToSqlList(dump, logicalShardId, startedTs, finishedTs):
-    """Backup a logical shard dump in two formats -- as an SQL string and as a JSON list of discrete statements."""
+def _backupDumpAndConvertToSqlList(dump, logicalShardId,
+                                   startedTs, finishedTs):
+    """
+    Backup a logical shard dump in two formats -- as an SQL string
+    and as a JSON list of discrete statements.
+    """
     baseFileName = _base_backup_file_name(logicalShardId, startedTs)
 
     # Upload SQL string to S3.
     sqlString = _dump2SqlString(dump, logicalShardId, startedTs, finishedTs)
     sqlStringUrl = upload_file(baseFileName + '.sql', sqlString)
-    logging.info('Uploaded SQL string dump of logicalShard {0}, sqlStringUrl={1}'.format(logicalShardId, sqlStringUrl))
+    logging.info('Uploaded SQL string dump of logicalShard %s, '
+                 'sqlStringUrl=%s',
+                 str(logicalShardId), str(sqlStringUrl))
 
     # Upload JSON-serialized SQL list to S3.
     sqlList = _dump2SqlList(dump)
     sqlListUrl = upload_file(baseFileName + '.json', json.dumps(sqlList))
-    logging.info('Uploaded JSON list dump of logicalShard {0}, sqlStringUrl={1}'.format(logicalShardId, sqlListUrl))
+    logging.info('Uploaded JSON list dump of logicalShard %s, sqlStringUrl=%s',
+                 str(logicalShardId), str(sqlListUrl))
     return sqlList
 
 
@@ -985,7 +1287,8 @@ def _dumpLogicalShard(logicalShardId, using=None, userIds=None, **kw):
             physicalShardId = _physical_shard_id(logicalShardId)
         userIds = _logical_shard_user_ids(logicalShardId, physicalShardId)
 
-    assert len(userIds) > 0, 'No users found for logicalShard={0}'.format(logicalShardId)
+    assert len(userIds) > 0, \
+        'No users found for logicalShard={0}'.format(logicalShardId)
 
     return dumpUsers(userIds, using, **kw)
 
@@ -1014,7 +1317,7 @@ postMigrationSql = [
 def _userIdTableColumnPairs():
     """@return list of <table,column> pairs for tables with user-id columns."""
     # Uniqify set of items while retaining original list order.
-    return list(OrderedDict.fromkeys(list(seedTableColumnPairs) + findTablesWithUserIdColumn()))
+    return list(OrderedDict.fromkeys(list(seedTableColumnPairs) + findTablesWithUserIdColumn()))  # noqa
 
 
 def _verifyTheseUsersExistInShard(userIds, using):
@@ -1022,8 +1325,11 @@ def _verifyTheseUsersExistInShard(userIds, using):
     inUserIds = ','.join(map(str, userIds))
 
     # Verify that the requested users exist on the source_shard indicated.
-    userCheck = db_query('''SELECT count(*) FROM "auth_user" WHERE "id" IN ({0})'''.format(inUserIds), using=using)
-    assert userCheck[0][0] == len(userIds), 'not all userIds in ({0}) not found on {1}'.format(userIds, using)
+    userCheck = db_query('''SELECT count(*) FROM "auth_user"
+                         WHERE "id" IN ({0})'''
+                         .format(inUserIds), using=using)
+    assert userCheck[0][0] == len(userIds), \
+        'not all userIds in ({0}) not found on {1}'.format(userIds, using)
 
 
 def dumpUsers(userIds, using, **kw):
@@ -1037,7 +1343,7 @@ def dumpUsers(userIds, using, **kw):
     """
     from .select2insert import select2multiInsert
 
-    logging.info('Dumping users ({0}) from {1}'.format(userIds, using))
+    logging.info('Dumping users (%s) from %s', str(userIds), str(using))
 
     deactivateTriggers = kw.get('deactivateTriggers', True)
 
@@ -1049,78 +1355,90 @@ def dumpUsers(userIds, using, **kw):
 
     # Keep track of inserts on a per-table basis.
     inserts = OrderedDict()
-    inserts['__pre__'] = ['ALTER TABLE "main_contact" DISABLE TRIGGER "main_contact_trigger";'] if deactivateTriggers else []
+    inserts['__pre__'] = ['ALTER TABLE "main_contact" '
+                          'DISABLE TRIGGER "main_contact_trigger";'] if deactivateTriggers else []  # noqa
     inserts['__pre__'] += preMigrationSql
 
     def collectInserts(table, whereClause):
         """
-        Given a table and where-clause, appends the list of inserts for the matching records from that table to a
+        Given a table and where-clause, appends the list of inserts
+        for the matching records from that table to a
         corresponding key for that table in the ``inserts`` dict.
         """
-        sql = select2multiInsert(table=table, description=describe(table), using=using, whereClause=whereClause)
+        sql = select2multiInsert(table=table, description=describe(table),
+                                 using=using, whereClause=whereClause)
         if sql is not None:
             if table not in inserts:
                 inserts[table] = []
             inserts[table].append(sql)
 
-    def collectRecords(sourceTable, sourcePkColumn, innerTable, innerColumn, innerUserIdColumn):
-        """Generic way to move rows containing ``userIds`` from one shard to another."""
+    def collectRecords(sourceTable, sourcePkColumn,
+                       innerTable, innerColumn, innerUserIdColumn):
+        """
+        Generic way to move rows containing ``userIds``
+        from one shard to another.
+        """
         if should_table_be_ignored_for_user_operations(sourceTable):
-            logging.debug('Skipping copy to static table: {0}'.format(sourceTable))
+            logging.debug('Skipping copy to static table: %s',
+                          str(sourceTable))
             return
 
         collectInserts(
             sourceTable,
-            whereClause='"{pk}" IN (' \
-                'SELECT "{innerColumn}" FROM "{innerTable}" WHERE "{innerUserIdColumn}" in ({userIds})' \
-            ')'.format(
-                pk=sourcePkColumn,
-                innerColumn=innerColumn,
-                innerTable=innerTable,
-                innerUserIdColumn=innerUserIdColumn,
-                userIds=inUserIds
-            )
+            whereClause='"{pk}" IN ('
+                        'SELECT "{innerColumn}" FROM "{innerTable}" '
+                        'WHERE "{innerUserIdColumn}" in ({userIds})'
+                        ')'.format(pk=sourcePkColumn,
+                                   innerColumn=innerColumn,
+                                   innerTable=innerTable,
+                                   innerUserIdColumn=innerUserIdColumn,
+                                   userIds=inUserIds)
         )
 
     # Uniqify set of items while retaining original list order.
     userIdTableColumnPairs = _userIdTableColumnPairs()
 
-    dependencies = discoverDependencies([x[0] for x in userIdTableColumnPairs], using=using)
+    dependencies = discoverDependencies([x[0] for x in userIdTableColumnPairs], using=using)  # noqa
 
     populatedTables = []
 
     for table, userIdColumn in userIdTableColumnPairs:
-        logging.debug('(1) TABLE={0}'.format(table))
+        logging.debug('(1) TABLE=%s', str(table))
 
         if should_table_be_ignored_for_user_operations(table):
-            logging.debug('Skipping dump from static table: {0}'.format(table))
+            logging.debug('Skipping dump from static table: %s', str(table))
             continue
 
         if table in populatedTables:
-            logging.info('Skipping dump from already populated table: {0}'.format(table))
+            logging.info('Skipping dump from already populated table: %s',
+                         str(table))
             continue
 
         if table in _additionalRelations:
             for fkTable, fkColumn, sourceTable in _additionalRelations[table]:
-                sourcePkColumn = getPrimaryKeyColumns(sourceTable, using=using)[0]
-                collectRecords(sourceTable, sourcePkColumn, fkTable, fkColumn, userIdColumn)
+                sourcePkColumn = getPrimaryKeyColumns(sourceTable,
+                                                      using=using)[0]
+                collectRecords(sourceTable, sourcePkColumn,
+                               fkTable, fkColumn, userIdColumn)
 
         # Collect relevant records from the table.
-        collectInserts(table, '''"{0}" IN ({1})'''.format(userIdColumn, inUserIds))
+        collectInserts(table,
+                       '''"{0}" IN ({1})'''.format(userIdColumn, inUserIds))
         populatedTables.append(table)
 
     # Backfill dependent tables.
     for table, userIdColumn in userIdTableColumnPairs:
-        logging.debug('(2) TABLE={0}'.format(table))
+        logging.debug('(2) TABLE=%s', str(table))
 
         if should_table_be_ignored_for_user_operations(table):
-            logging.debug('Dependencies backfiller is skipping static table: {0}'.format(table))
+            logging.debug('Dependencies backfiller is skipping static '
+                          'table: %s', str(table))
             continue
 
         # If there are additional dependencies, insert them as well.
         if table in dependencies:
             unpopulatedTables = \
-                [fkTable for fkTable in dependencies[table] if fkTable not in populatedTables]
+                [fkTable for fkTable in dependencies[table] if fkTable not in populatedTables]  # noqa
 
             for column, fkTable, fkColumn in unpopulatedTables:
                 collectRecords(fkTable, fkColumn, table, column, userIdColumn)
@@ -1128,14 +1446,16 @@ def dumpUsers(userIds, using, **kw):
 
     inserts['__post__'] = postMigrationSql
     if deactivateTriggers:
-        inserts['__post__'].append('ALTER TABLE "main_contact" ENABLE TRIGGER "main_contact_trigger";')
+        inserts['__post__'].append('ALTER TABLE "main_contact" ENABLE '
+                                   'TRIGGER "main_contact_trigger";')
 
     return inserts
 
 
 def migrateUsers(userIds, sourceShard, destinationShard, **kw):
     """
-    Migrate all records for a particular set of user-ids from one physical shard to another.
+    Migrate all records for a particular set of user-ids
+    from one physical shard to another.
 
     @param userIds list of int.
     @param sourceShard str Source connection name.
@@ -1148,7 +1468,7 @@ def migrateUsers(userIds, sourceShard, destinationShard, **kw):
         """Pre-commit callback for copyUser()."""
         def copyPreCommitCb():
             # Lambda function to commit the copy.
-            deletePreCommitCb = lambda: db_exec('COMMIT', using=myDestination)
+            deletePreCommitCb = lambda: db_exec('COMMIT', using=myDestination)  # noqa
 
             # Seal the deal.
             # Delete the user.
@@ -1156,41 +1476,62 @@ def migrateUsers(userIds, sourceShard, destinationShard, **kw):
 
         return copyPreCommitCb
 
-    #copyUsers(userIds, source_shard, destination_shard, copyPreCommitCb, True)
+    # copyUsers(userIds, source_shard, destination_shard, copyPreCommitCb,True)
     preCommitCb = genCopyPreCommitCb(sourceShard, destinationShard)
-    copyUsers(userIds, sourceShard, destinationShard, preCommitCb=preCommitCb, commitDestinationShard=False, **kw)
+    copyUsers(userIds, sourceShard, destinationShard,
+              preCommitCb=preCommitCb, commitDestinationShard=False, **kw)
 
     # Notify subscribers about update.
     shardId = destinationShard[destinationShard.rindex('_') + 1:]
     se = ShardEvent()
-    list(map(lambda userId: se.publish('movedUser', {'user_id': userId, 'shardId': shardId}), userIds))
+    list(map(lambda userId: se.publish('movedUser',
+                                       {'user_id': userId,
+                                        'shardId': shardId
+                                        }), userIds))
 
 
 def migrateUser(userId, sourceShard, destinationShard, **kw):
+    """migrate user"""
     return migrateUsers([userId], sourceShard, destinationShard, **kw)
 
 
 # dict((table, tuple(fkTable, fkColumn, sourceTable), ..)))
 _additionalRelations = {
-    'main_receipt': [('main_receipt', 'shortlink_id', 'main_shortlink'),],
-    'main_usermessage': [('main_usermessage', 'shortlink_id', 'main_shortlink'),],
-    'main_extendeduser': [('main_extendeduser', 'twilio_phone_number_id', 'main_phonenumber'),('main_extendeduser', 'entitlement_id', 'main_entitlement'),],
-    'main_groupshare': [('main_groupshare', 'invitation_ptr_id', 'main_invitation'),],
+    'main_receipt': [('main_receipt', 'shortlink_id', 'main_shortlink'), ],
+    'main_usermessage': [('main_usermessage',
+                          'shortlink_id',
+                          'main_shortlink'), ],
+    'main_extendeduser': [('main_extendeduser',
+                           'twilio_phone_number_id',
+                           'main_phonenumber'),
+                          ('main_extendeduser',
+                           'entitlement_id',
+                           'main_entitlement'), ],
+    'main_groupshare': [('main_groupshare',
+                         'invitation_ptr_id',
+                         'main_invitation'), ],
 }
+
 
 def copyUsers(userIds, sourceShard, destinationShard, **kw):
     """
-    Migrate all records for a particular user-id from one physical shard to another.
+    Migrate all records for a particular user-id from one
+    physical shard to another.
 
     @param userId int
     @param sourceShard str Source connection name.
     @param source_shard str Destination connection name.
     @param **kw Dict of optional arguments, including:
-        ``preCommitCb`` mixed Function or None Defaults to None.  Function to invoke before the copy is committed.
-        ``commitDestinationShard`` bool Defaults to True.  Whether or not to commit the changes to the destination
-            shard -- you may instead handle the commit operation yourself in the pre-commit callback.
-        ``deactivateTriggers`` bool Defaults to True.  Flag to determine whether or not triggers will be disabled.
-        ``manageTransactions`` bool Defaults to True.  Flat to determine whether or not the function will manage the
+        ``preCommitCb`` mixed Function or None Defaults to None.
+        Function to invoke before the copy is committed.
+        ``commitDestinationShard`` bool Defaults to True.
+        Whether or not to commit the changes to the destination
+            shard -- you may instead handle the commit operation
+            yourself in the pre-commit callback.
+        ``deactivateTriggers`` bool Defaults to True.  Flag to determine
+        whether or not triggers will be disabled.
+        ``manageTransactions`` bool Defaults to True.  Flat to determine
+        whether or not the function will manage the
             transaction.
     """
     preCommitCb = kw.get('preCommitCb', None)
@@ -1199,7 +1540,10 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
     manageTransactions = kw.get('manageTransactions', True)
 
     def ifManagingTransactionsThenExec(sql, using):
-        """Will only execute the statement if ``manageTransactions`` is True."""
+        """
+        Will only execute the statement if
+        ``manageTransactions`` is True.
+        """
         if manageTransactions is True:
             db_exec(sql, using=using)
 
@@ -1207,16 +1551,22 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
 
     _verifyTheseUsersExistInShard(userIds, sourceShard)
 
-    def remotelyFillTable(sourceTable, sourcePkColumn, innerTable, innerColumn, innerUserIdColumn):
-        """Generic way to move rows containing ``userIds`` from one shard to another."""
+    def remotelyFillTable(sourceTable, sourcePkColumn,
+                          innerTable, innerColumn, innerUserIdColumn):
+        """
+        Generic way to move rows containing ``userIds``
+        from one shard to another.
+        """
         if should_table_be_ignored_for_user_operations(sourceTable):
-            logging.debug('Skipping copy to static table: {0}'.format(sourceTable))
+            logging.debug('Skipping copy to static table: %s',
+                          str(sourceTable))
             return
 
         dbLinkSql = to_single_line(
             '''
                 SELECT * FROM "{sourceTable}" WHERE "{pk}" IN (
-                    SELECT "{innerColumn}" FROM "{innerTable}" WHERE "{innerUserIdColumn}" in ({userIds})
+                    SELECT "{innerColumn}" FROM "{innerTable}"
+                    WHERE "{innerUserIdColumn}" in ({userIds})
                 )
             '''.format(
                 sourceTable=sourceTable,
@@ -1229,25 +1579,31 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
         )
 
         # Insert relevant records from the table.
-        auto_db_link_insert(sourceTable, dbLinkSql, sourceShard, destinationShard)
+        auto_db_link_insert(sourceTable, dbLinkSql,
+                            sourceShard, destinationShard)
 
     # Uniqify set of items while retaining original list order.
     userIdTableColumnPairs = _userIdTableColumnPairs()
 
-    sourceCountsInitial = table_row_counts(userIdTableColumnPairs, userIds, using=sourceShard)
+    sourceCountsInitial = table_row_counts(userIdTableColumnPairs,
+                                           userIds,
+                                           using=sourceShard)
 
-    dependencies = discoverDependencies([x[0] for x in userIdTableColumnPairs], using=sourceShard)
+    dependencies = discoverDependencies([x[0] for x in userIdTableColumnPairs], using=sourceShard)  # noqa
 
     if deactivateTriggers is True:
         # Disable all triggers.
-        #db_exec('SELECT fn_modify_all_trigger_states(FALSE)', using=destination_shard)
-        db_exec('ALTER TABLE "main_contact" DISABLE TRIGGER "main_contact_trigger"', using=destinationShard)
+        # db_exec('SELECT fn_modify_all_trigger_states(FALSE)',
+        # using=destination_shard)
+        db_exec('ALTER TABLE "main_contact" DISABLE TRIGGER '
+                '"main_contact_trigger"', using=destinationShard)
 
     ifManagingTransactionsThenExec('BEGIN', using=destinationShard)
 
     # NB: About set constraints all deferred:
     # http://www.postgresql.org/docs/devel/static/sql-set-constraints.html
-    ifManagingTransactionsThenExec('SET CONSTRAINTS ALL DEFERRED', using=destinationShard)
+    ifManagingTransactionsThenExec('SET CONSTRAINTS ALL DEFERRED',
+                                   using=destinationShard)
 
     populatedTables = []
 
@@ -1257,43 +1613,55 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
     savePoint = 0
     n = 0
 
-    #for table, userIdColumn in userIdTableColumnPairs:
+    # for table, userIdColumn in userIdTableColumnPairs:
     while len(userIdTableColumnPairsCopy) > 0:
         n += 1
         if n > len(userIdTableColumnPairs) * 2:
             raise Exception('Dependency cycle detected')
 
         table, userIdColumn = userIdTableColumnPairsCopy.pop(0)
-        logging.debug('TABLE={0}'.format(table))
+        logging.debug('TABLE=%s', str(table))
 
         if should_table_be_ignored_for_user_operations(table):
-            logging.debug('Skipping copy to static table: {0}'.format(table))
+            logging.debug('Skipping copy to static table: %s', str(table))
             continue
 
         if table in populatedTables:
-            logging.info('Skipping copy to already populated table: {0}'.format(table))
+            logging.info('Skipping copy to already populated table: %s',
+                         str(table))
             continue
 
         try:
             savePoint += 1
-            db_exec('SAVEPOINT save{0}'.format(savePoint), using=destinationShard)
+            db_exec('SAVEPOINT save{0}'
+                    .format(savePoint), using=destinationShard)
 
             if table in _additionalRelations:
-                for fkTable, fkColumn, sourceTable in _additionalRelations[table]:
-                    sourcePkColumn = getPrimaryKeyColumns(sourceTable, using=destinationShard)[0]
-                    remotelyFillTable(sourceTable, sourcePkColumn, fkTable, fkColumn, userIdColumn)
+                for fkTable, fkColumn, sourceTable in \
+                        _additionalRelations[table]:
+                    sourcePkColumn = getPrimaryKeyColumns(sourceTable, using=destinationShard)[0]  # noqa
+                    remotelyFillTable(sourceTable,
+                                      sourcePkColumn,
+                                      fkTable, fkColumn,
+                                      userIdColumn)
 
-            dbLinkSql = '''SELECT * FROM "{0}" WHERE "{1}" IN ({2})'''.format(table, userIdColumn, inUserIds)
+            dbLinkSql = '''SELECT * FROM "{0}"
+                        WHERE "{1}" IN ({2})'''.format(table,
+                                                       userIdColumn,
+                                                       inUserIds)
 
             # Insert relevant records from the table.
-            auto_db_link_insert(table, dbLinkSql, sourceShard, destinationShard)
+            auto_db_link_insert(table, dbLinkSql,
+                                sourceShard, destinationShard)
             populatedTables.append(table)
-            db_exec('RELEASE SAVEPOINT save{0}'.format(savePoint), using=destinationShard)
+            db_exec('RELEASE SAVEPOINT save{0}'
+                    .format(savePoint), using=destinationShard)
             n = 0
 
         except Exception as e:
-            logging.info('Caught exception, will handle with it: {0}'.format(e))
-            db_exec('ROLLBACK TO save{0}'.format(savePoint), using=destinationShard)
+            logging.info('Caught exception, will handle with it: %s', str(e))
+            db_exec('ROLLBACK TO save{0}'
+                    .format(savePoint), using=destinationShard)
             userIdTableColumnPairsCopy.append((table, userIdColumn))
 
         ordering.append((table, userIdColumn))
@@ -1302,7 +1670,7 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
     savePoint = 0
 
     # Backfill dependent tables.
-    #for table, userIdColumn in userIdTableColumnPairs:
+    # for table, userIdColumn in userIdTableColumnPairs:
     while len(userIdTableColumnPairsCopy) > 0:
         n += 1
         if n > len(userIdTableColumnPairs) * 2:
@@ -1311,36 +1679,49 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
         table, userIdColumn = userIdTableColumnPairsCopy.pop(0)
 
         if should_table_be_ignored_for_user_operations(table):
-            logging.debug('Dependencies backfiller is skipping static table: {0}'.format(table))
+            logging.debug('Dependencies backfiller is skipping '
+                          'static table: %s', str(table))
             continue
 
         try:
             savePoint += 1
-            db_exec('SAVEPOINT save{0}'.format(savePoint), using=destinationShard)
+            db_exec('SAVEPOINT save{0}'
+                    .format(savePoint), using=destinationShard)
 
             # If there are additional dependencies, insert them as well.
             if table in dependencies:
-                unpopulatedTables = [fkTable for fkTable in dependencies[table] if fkTable not in populatedTables]
+                unpopulatedTables = [fkTable for fkTable in dependencies[table]
+                                     if fkTable not in populatedTables]
 
                 for column, fkTable, fkColumn in unpopulatedTables:
-                    remotelyFillTable(fkTable, fkColumn, table, column, userIdColumn)
+                    remotelyFillTable(fkTable, fkColumn,
+                                      table, column, userIdColumn)
                     populatedTables.append(fkTable)
-            db_exec('RELEASE SAVEPOINT save{0}'.format(savePoint), using=destinationShard)
+            db_exec('RELEASE SAVEPOINT save{0}'
+                    .format(savePoint), using=destinationShard)
             n = 0
 
         except Exception as e:
-            logging.info('Caught exception, will handle with it: {0}'.format(e))
-            db_exec('ROLLBACK TO save{0}'.format(savePoint), using=destinationShard)
+            logging.info('Caught exception, will handle with it: %s', str(e))
+            db_exec('ROLLBACK TO save{0}'
+                    .format(savePoint), using=destinationShard)
             userIdTableColumnPairsCopy.append((table, userIdColumn))
 
-    destinationCountsVerify = table_row_counts(userIdTableColumnPairs, userIds, using=destinationShard)
-    sourceCountsVerify = table_row_counts(userIdTableColumnPairs, userIds, using=sourceShard)
+    destinationCountsVerify = table_row_counts(userIdTableColumnPairs,
+                                               userIds,
+                                               using=destinationShard)
+    sourceCountsVerify = table_row_counts(userIdTableColumnPairs,
+                                          userIds,
+                                          using=sourceShard)
 
-    if destinationCountsVerify == sourceCountsInitial and destinationCountsVerify == sourceCountsVerify:
+    if destinationCountsVerify == sourceCountsInitial and \
+            destinationCountsVerify == sourceCountsVerify:
         # Before proceeding, set constraints to all immediate.
-        # Will be applied retroactively, raising issues before more work is performed.
+        # Will be applied retroactively, raising issues
+        # before more work is performed.
         # @see http://postgresql.org/docs/devel/static/sql-set-constraints.html
-        ifManagingTransactionsThenExec('SET CONSTRAINTS ALL IMMEDIATE', using=destinationShard)
+        ifManagingTransactionsThenExec('SET CONSTRAINTS ALL IMMEDIATE',
+                                       using=destinationShard)
 
         if preCommitCb is not None:
             preCommitCb()
@@ -1350,20 +1731,24 @@ def copyUsers(userIds, sourceShard, destinationShard, **kw):
 
         if deactivateTriggers is True:
             # Re-enable all triggers.
-            #db_exec('SELECT fn_modify_all_trigger_states(TRUE)', using=destination_shard)
-            db_exec('ALTER TABLE "main_contact" ENABLE TRIGGER "main_contact_trigger"', using=destinationShard)
+            # db_exec('SELECT fn_modify_all_trigger_states(TRUE)',
+            #         using=destination_shard)
+            db_exec('ALTER TABLE "main_contact" ENABLE TRIGGER '
+                    '"main_contact_trigger"', using=destinationShard)
 
     else:
         ifManagingTransactionsThenExec('ROLLBACK', using=destinationShard)
 
         if deactivateTriggers is True:
             # Re-enable all triggers.
-            #db_exec('SELECT fn_modify_all_trigger_states(TRUE)', using=destination_shard)
-            db_exec('ALTER TABLE "main_contact" ENABLE TRIGGER "main_contact_trigger"', using=destinationShard)
+            # db_exec('SELECT fn_modify_all_trigger_states(TRUE)',
+            # using=destination_shard)
+            db_exec('ALTER TABLE "main_contact" ENABLE TRIGGER '
+                    '"main_contact_trigger"', using=destinationShard)
 
         raise MigrateUserStaleReadError(
-            'Aborted migration of userIds={0} from {1} to {2} due to changed ' \
-            'source data\n\nsourceCountsInitial={3}\n\n' \
+            'Aborted migration of userIds={0} from {1} to {2} due to changed '
+            'source data\n\nsourceCountsInitial={3}\n\n'
             'destinationCountsVerify={4}\n\nsourceCountsVerify={5}'.format(
                 userIds,
                 sourceShard,
@@ -1387,15 +1772,19 @@ def deleteUsers(userIds, using, **kw):
     @param userIds
     @param using str Database connection handle to use.
     @param **kw Dict of optional arguments, including:
-        ''preCommitCb mixed Function or None.  Pre-commit callback function, invoked immediately before COMMIT.
-        ``manageTransactions`` bool Defaults to True.  Flat to determine whether or not the function will manage the
+        ''preCommitCb mixed Function or None.  Pre-commit callback function,
+        invoked immediately before COMMIT.
+        ``manageTransactions`` bool Defaults to True.  Flat to determine
+        whether or not the function will manage the
             transaction.
     """
     preCommitCb = kw.get('preCommitCb', None)
     manageTransactions = kw.get('manageTransactions', True)
 
     def ifManagingTransactionsThenExec(sql, using):
-        """Will only execute the statement if ``manageTransactions`` is True."""
+        """
+        Will only execute the statement if ``manageTransactions`` is True.
+        """
         if manageTransactions is True:
             db_exec(sql, using=using)
 
@@ -1403,12 +1792,12 @@ def deleteUsers(userIds, using, **kw):
 
     userIdTableColumnPairs = findTablesWithUserIdColumn(using=using)
 
-    dependencies = discoverDependencies([x[0] for x in userIdTableColumnPairs], using=using)
+    dependencies = discoverDependencies([x[0] for x in userIdTableColumnPairs], using=using)  # noqa
 
     clearedTables = []
 
     origLen = len(userIdTableColumnPairs)
-    n = 0 # Count number of iterations since last success.
+    n = 0  # Count number of iterations since last success.
 
     ifManagingTransactionsThenExec('BEGIN', using=using)
 
@@ -1493,12 +1882,14 @@ def deleteUsers(userIds, using, **kw):
         ''',
         '''
         DELETE FROM "main_phonenumber" WHERE "id" IN (
-            SELECT "twilio_phone_number_id" FROM "main_extendeduser" WHERE "user_id" IN ({0})
+            SELECT "twilio_phone_number_id" FROM "main_extendeduser"
+            WHERE "user_id" IN ({0})
         )
         ''',
         '''
         DELETE FROM "main_entitlement" WHERE "id" IN (
-            SELECT "entitlement_id" FROM "main_extendeduser" WHERE "user_id" IN ({0})
+            SELECT "entitlement_id" FROM "main_extendeduser"
+            WHERE "user_id" IN ({0})
         )
         ''',
         '''
@@ -1507,42 +1898,51 @@ def deleteUsers(userIds, using, **kw):
         )
         ''',
     ]
-    list(map(lambda sql: db_exec(to_single_line(sql.format(inUserIds)), using=using), sqls))
+    list(map(lambda sql: db_exec(to_single_line(sql.format(inUserIds)),
+                                 using=using), sqls))
     del sqls
 
     savePoint = 0
 
     while len(userIdTableColumnPairs) > 0:
-        logging.info('Number of table,column pairs remaining: {0}'.format(len(userIdTableColumnPairs)))
+        logging.info('Number of table,column pairs remaining: %s',
+                     str(len(userIdTableColumnPairs)))
         n += 1
         if n > origLen * 2:
-            logging.info('userIdTableColumnPairs={0}'.format(userIdTableColumnPairs))
+            logging.info('userIdTableColumnPairs=%s',
+                         str(userIdTableColumnPairs))
             raise Exception('Dependency cycle detected')
 
         table, userIdColumn = userIdTableColumnPairs.pop(0)
 
         if should_table_be_ignored_for_user_operations(table):
-            logging.debug('[{0}] Skipping deletion from static table: {1}'.format(using, table))
+            logging.debug('[%s] Skipping deletion from static table: %s',
+                          str(using), str(table))
             continue
 
-        logging.info('[{0}] Deleting from table: {1}'.format(using, table))
+        logging.info('[%s] Deleting from table: %s', str(using), str(table))
 
         try:
             savePoint += 1
             db_exec('SAVEPOINT save{0}'.format(savePoint), using=using)
 
             if table in _additionalRelations:
-                for fkTable, fkColumn, sourceTable in _additionalRelations[table]:
+                for fkTable, fkColumn, sourceTable in \
+                        _additionalRelations[table]:
                     if should_table_be_ignored_for_user_operations(fkTable):
-                        logging.debug('[{0}] Skipping deletion from static table: {1}'.format(using, sourceTable))
+                        logging.debug('[%s] Skipping deletion from static '
+                                      'table: %s', str(using),
+                                      str(sourceTable))
                         continue
 
-                    logging.info('[{0}] Deleting from subtable: {1}'.format(using, sourceTable))
+                    logging.info('[%s] Deleting from subtable: %s',
+                                 str(using), str(sourceTable))
 
                     deleteSql = to_single_line(
                         '''
                             DELETE FROM "{sourceTable}" WHERE "{pk}" IN (
-                                SELECT "{fkColumn}" FROM "{fkTable}" WHERE "{userIdColumn}" IN ({userIds})
+                                SELECT "{fkColumn}" FROM "{fkTable}"
+                                WHERE "{userIdColumn}" IN ({userIds})
                             )
                         '''.format(
                             sourceTable=sourceTable,
@@ -1559,15 +1959,19 @@ def deleteUsers(userIds, using, **kw):
                 # If there are additional dependents, delete them first.
                 for column, fkTable, fkColumn in dependencies[table]:
                     if should_table_be_ignored_for_user_operations(fkTable):
-                        logging.debug('[{0}] Skipping deletion from static table: {1}'.format(using, fkTable))
+                        logging.debug('[%s] Skipping deletion from '
+                                      'static table: %s',
+                                      str(using), str(fkTable))
                         continue
 
-                    logging.info('[{0}] Deleting from subtable: {1}'.format(using, fkTable))
+                    logging.info('[%s] Deleting from subtable: %s',
+                                 str(using), str(fkTable))
 
                     deleteSql = to_single_line(
                         '''
                             DELETE FROM "{fkTable}" WHERE "{fkColumn}" IN (
-                                SELECT "{column}" FROM "{table}" WHERE "{userIdColumn}" IN ({userIds})
+                                SELECT "{column}" FROM "{table}"
+                                WHERE "{userIdColumn}" IN ({userIds})
                             )
                         '''.format(
                             fkTable=fkTable,
@@ -1581,7 +1985,8 @@ def deleteUsers(userIds, using, **kw):
                     db_exec(deleteSql, using=using)
 
             deleteSql = to_single_line(
-                '''DELETE FROM "{0}" WHERE "{1}" IN ({2})'''.format(table, userIdColumn, inUserIds)
+                '''DELETE FROM "{0}" WHERE
+                "{1}" IN ({2})'''.format(table, userIdColumn, inUserIds)
             )
             db_exec(deleteSql, using=using)
 
@@ -1593,8 +1998,9 @@ def deleteUsers(userIds, using, **kw):
 
         except Exception as e:
             logging.info(
-                '[{0}] Dealing with IntegrityError -----\n{1}----- for table={2}/userIdColumn={3}'
-                .format(using, e, table, userIdColumn)
+                '[%s] Dealing with IntegrityError -----\n{1}----- for '
+                'table=%s/userIdColumn=%s',
+                str(using), str(e), str(table), str(userIdColumn)
             )
             db_exec('ROLLBACK TO save{0}'.format(savePoint), using=using)
             userIdTableColumnPairs.append((table, userIdColumn))
@@ -1605,23 +2011,23 @@ def deleteUsers(userIds, using, **kw):
         # Set constraints to all immediate, which will be applied retroactively
         # (raising any problems BEFORE commits have happened).
         # @see http://postgresql.org/docs/devel/static/sql-set-constraints.html
-        ifManagingTransactionsThenExec('SET CONSTRAINTS ALL IMMEDIATE', using=using)
+        ifManagingTransactionsThenExec('SET CONSTRAINTS ALL IMMEDIATE',
+                                       using=using)
 
         if preCommitCb is not None:
             logging.info('deleteUser invoking pre-commit callback')
             preCommitCb()
 
-        logging.info('Committing deletion on {0}'.format(using))
+        logging.info('Committing deletion on %s', str(using))
         ifManagingTransactionsThenExec('COMMIT', using=using)
 
         return True
 
-    except Exception as e:
+    except Exception as exp_err:
         ifManagingTransactionsThenExec('ROLLBACK', using=using)
-        raise MigrateUserError(str(e))
+        raise MigrateUserError(str(exp_err)) from exp_err
 
 
 def deleteUser(userId, using, **kw):
     """Delete a single user."""
     return deleteUsers([userId], using, **kw)
-

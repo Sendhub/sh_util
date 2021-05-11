@@ -68,7 +68,7 @@ def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
 
                 return newNumber
                 # Purchase requested number
-            except Exception as e:
+            except Exception as e:  # noqa
                 import traceback
                 traceback.print_exc()
 

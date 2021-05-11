@@ -11,7 +11,7 @@ from sh_util.db import connections
 from .singleton import Singleton
 from .memcache import get_memcache_client
 from .retry import retry
-#from .functional import Memoizewithexpiry
+# from .functional import Memoizewithexpiry
 
 
 def coerceIdToShardName(shardOrShardId):
@@ -23,6 +23,7 @@ def coerceIdToShardName(shardOrShardId):
 
 class ShardException(Exception):
     """Base shard exception."""
+
 
 class ShardLookupFailure(ShardException):
     """Raised when a shard lookup fails."""
@@ -113,6 +114,7 @@ class ShardEvent(Singleton):
 # Prune connection keys down to only shard connections.
 _shards = [c for c in connections() if c.startswith('shard_')]
 
+
 class ShardedResource(object):
     """Determine which shard a given resource lives on."""
 
@@ -165,7 +167,7 @@ class ShardedResource(object):
             value = cli.set(key, value)
 
         except pylibmc.Error as e:
-            logging.info('ShardedResource._cacheSet error: {0}'.format(e))
+            logging.info('ShardedResource._cacheSet error: %s', str(e))
 
     @staticmethod
     def _cacheGet(key):
@@ -175,7 +177,7 @@ class ShardedResource(object):
             return cli.get(key)
 
         except pylibmc.Error as e:
-            logging.info('ShardedResource._cacheSet error: {0}'.format(e))
+            logging.info('ShardedResource._cacheSet error: %s', str(e))
             return None
 
     @staticmethod
@@ -198,10 +200,8 @@ class ShardedResource(object):
                     cli.set_multi(mapping, key_prefix=prefix)
 
         except pylibmc.Error as e:
-            logging.info(
-                'ShardedResource.warmShardCache :: memcache error: {0}' \
-                    .format(e)
-            )
+            logging.info('ShardedResource.warmShardCache :: memcache '
+                         'error: %s', str(e))
 
     @retry(tries=3)
     @staticmethod
@@ -217,7 +217,7 @@ class ShardedResource(object):
             return True
 
         except pylibmc.Error as e:
-            logging.error('memcache error: {0}'.format(e))
+            logging.error('memcache error: %s', str(e))
             return False
 
     @staticmethod
@@ -246,14 +246,9 @@ class ShardedResource(object):
                 shardId = ShardedResource.shardNameToId(shard)
                 if useCache is True:
                     ShardedResource._cacheSet(key, str(shardId))
-                logging.info(
-                    'FOUND {0}.{1}={2} on shardId={3}'.format(
-                        model.__name__,
-                        column,
-                        value,
-                        shardId
-                    )
-                )
+                logging.info('FOUND %s.%s=%s on shardId=%s',
+                             str(model.__name__), str(column), str(value),
+                             str(shardId))
                 return shardId
 
         # Not found
@@ -273,8 +268,8 @@ class ShardedResource(object):
         from sh_util.db import db_query
 
         res = db_query(
-            'SELECT "physical_shard_id" FROM "LogicalShard" WHERE "id" = {0}' \
-                .format(userIdToLogicalShardId(userId)),
+            'SELECT "physical_shard_id" FROM "LogicalShard" WHERE "id" = {0}'
+            .format(userIdToLogicalShardId(userId)),
             using='shard_1'
         )
 
@@ -289,9 +284,10 @@ class ShardedResource(object):
 
     @staticmethod
     # @TODO MEMOIZATION TEMPORARILY DISABLED
-    #@Memoizewithexpiry(180)
+    # @Memoizewithexpiry(180)
     def _cachingUserIdToPhysicalShardId(userId):
-        """Memoizing function to algorythmically resolve user-id to shard-id."""
+        """Memoizing function to algorythmically resolve
+        user-id to shard-id."""
         logicalShardId = userIdToLogicalShardId(userId)
 
         try:
@@ -362,7 +358,7 @@ class ShardedResource(object):
 ShardedResource()._subscribeToShardEvents()
 
 
-userIdToShardName = lambda userId: 'shard_{0}'.format(ShardedResource.userIdToPhysicalShardId(userId))
+userIdToShardName = lambda userId: 'shard_{0}'.format(ShardedResource.userIdToPhysicalShardId(userId))  # noqa
 
 
 class ShardedAuthenticationMiddleware(object):
@@ -371,7 +367,7 @@ class ShardedAuthenticationMiddleware(object):
     def process_request(request):
         """Override for the stock django authentication middleware."""
         from django.contrib.auth import get_user, SESSION_KEY
-        #from django.contrib import auth
+        # from django.contrib import auth
         from django.utils.functional import SimpleLazyObject
 
         assert hasattr(request, 'session'), 'The Django authentication ' \
@@ -384,10 +380,8 @@ class ShardedAuthenticationMiddleware(object):
         if userId != -1:
             shardId = ShardedResource().userIdToPhysicalShardId(userId)
 
-            logging.info(
-                '[SHARD-SELECTOR] Selecting shard #{0} for user_id={1}' \
-                .format(shardId, userId)
-            )
+            logging.info('[SHARD-SELECTOR] Selecting shard #%s for '
+                         'user_id=%s', str(shardId), str(userId))
 
             from .db import switchDefaultDatabase
             switchDefaultDatabase('shard_{0}'.format(shardId))
@@ -398,6 +392,6 @@ class ShardedAuthenticationMiddleware(object):
             )
 
         request.user = SimpleLazyObject(lambda: get_user(request))
-        #print 'request.user = %s' % auth.get_user(request)
+        # print 'request.user = %s' % auth.get_user(request)
 
         return None

@@ -202,7 +202,6 @@ class SHBandwidthClient(object):
         raise NotImplementedError('This method is not supported '
                                   'with v2 messaging')
 
-
     def send_hello(self, from_number, to_number):
         return self.send_sms(from_number, to_number,
                              'Hello from Sendhub through Bandwidth!')
@@ -266,8 +265,8 @@ class SHBandwidthClient(object):
                 raise ValueError("Invalid phone number passed- unable to buy")
 
             # a specific number ought to be ordered
-            logging.info('buy_phone_number(): buying requested number: {}.'.
-                         format(phone_number, site_id))
+            logging.info('buy_phone_number : %s buying requested number: %s.',
+                         str(phone_number, site_id))
             try:
                 newNumber = self.account_client.order_phone_number(
                     number=self._parse_number_to_bw_format(phone_number),
