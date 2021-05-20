@@ -40,8 +40,7 @@ def distinct(seq):
 
 
 # Filter an interable to elements of a particular class.
-filterByClass = \ 
-    lambda clazz, iterable: [x for x in iterable if isinstance(x, clazz)]  # noqa
+filterByClass = lambda clazz, iterable: [x for x in iterable if isinstance(x, clazz)]  # noqa
 
 
 def curry(arg1, argc=None):
