@@ -53,9 +53,6 @@ def db_query(sql, args=None, as_dict=False, using='default',
     if args is None:
         args = tuple()
 
-    if force is False:
-        using = getRealShardConnectionName(using)
-
     # Execute the raw query.
     cursor = connections()[using].cursor()
 
@@ -81,9 +78,6 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
 
     if args is None:
         args = tuple()
-
-    if force is False:
-        using = getRealShardConnectionName(using)
 
     if DEBUG is True or debug is True:
         logging.info('-- [DEBUG] DB_EXEC, using=%s ::\n%s',
