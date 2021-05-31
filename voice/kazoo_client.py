@@ -66,9 +66,9 @@ class KazooClient(object):
             if self.authToken is None:
                 self.authToken = self.kazooCli.authenticate()
                 logging.info('Authenticated against kazoo. Caching result.')
-                self.redisCli.setex(self.authTokenCacheKey,
-                                    self.authToken,
-                                    settings.KAZOO_AUTH_TOKEN_CACHE_EXPIRY_SECONDS)  # noqa
+                self.redisCli.setex(name=self.authTokenCacheKey,
+                                    value=self.authToken,
+                                    time=settings.KAZOO_AUTH_TOKEN_CACHE_EXPIRY_SECONDS)  # noqa
             else:
                 logging.info('Using cached kazoo authentication')
                 self.kazooCli.auth_token = self.authToken
