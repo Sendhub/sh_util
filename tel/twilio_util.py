@@ -12,11 +12,8 @@ class AreaCodeUnavailableError(Exception):
 
 def twilioFindNumberInAreaCode(twilioClient, areaCode, countryCode='US'):
     """Find a number within an area code."""
-    return twilioClient.phone_numbers.search(
-        area_code=areaCode,
-        country=countryCode
-    )
-
+    result = twilioClient.api.available_phone_numbers(countryCode).local.list(area_code=areaCode)
+    return result
 
 def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
                          phoneNumber=None):
