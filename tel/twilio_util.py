@@ -21,9 +21,10 @@ def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
     # NB: This could probably actually just use the
     # twilioClient.phone_numbers.purchase(area_code=xxx) method, and it'd be
     # faster.
-    numbers = twilioClient.phone_numbers.search(area_code=areaCode,
-                                                country=countryCode) \
-        if areaCode is not None else False
+    numbers = \
+        twilioClient.api.available_phone_numbers(countryCode).local.list(
+            area_code=areaCode) if areaCode is not None else False
+
 
     if numbers:
         # Attempt to buy twillio number up to 5 times before giving up and
@@ -57,7 +58,7 @@ def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode='US',
     elif phoneNumber is not None:
         for index in range(0, 5):
             try:
-                newNumber = twilioClient.phone_numbers.purchase(
+                newNumber = twilioClient.incoming_phone_numbers.create(
                     sms_application_sid=appSid,
                     voice_application_sid=appSid,
                     phone_number=cleanupPhoneNumber(phoneNumber)
