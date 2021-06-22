@@ -244,7 +244,8 @@ class FindPhoneNumberInAreaCode:
                         quantity=quantity,
                         pattern=str(toll_free_area_code[:-1])+'*'
                     )
-                    logging.info('avail toll free numbers are : {}'.format(avail_numbers))
+                    logging.info('avail toll free numbers are : %r',
+                                 avail_numbers)
                 except BWTollFreeUnavailableError as e:
                     logging.info('exception {} while searching for toll-free '
                                  'numbers'.format(e))
@@ -256,7 +257,8 @@ class FindPhoneNumberInAreaCode:
                         country_code=country_code,
                         quantity=quantity
                     )
-                    logging.info('avail toll free numbers are : {}'.format(avail_numbers))
+                    logging.info('avail toll free numbers are : %r',
+                                 avail_numbers)
                 except AreaCodeUnavailableError as e:
                     logging.info('exception {} while searching for numbers '
                                  'in area code: {}'.format(e, area_code))
