@@ -257,7 +257,7 @@ class FindPhoneNumberInAreaCode:
                         country_code=country_code,
                         quantity=quantity
                     )
-                    logging.info('avail toll free numbers are : %r',
+                    logging.info('avail numbers in area code are : %r',
                                  avail_numbers)
                 except AreaCodeUnavailableError as e:
                     logging.info('exception {} while searching for numbers '
