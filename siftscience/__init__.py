@@ -2,11 +2,11 @@
 siftscience
 """
 # pylint: disable=E0611,E0401,E1101,W0703
-from http.wget import wget
+from sh_util.http.wget import wget
 import logging
 import settings
 import simplejson as json
-from retry import retry
+from sh_util.retry import retry
 
 
 SIFTSCIENCE_CHOICES = (
