@@ -265,8 +265,6 @@ class SHBandwidthClient(object):
                 raise ValueError("Invalid phone number passed- unable to buy")
 
             # a specific number ought to be ordered
-            logging.info('buy_phone_number : %s buying requested number: %s.',
-                         str(phone_number, site_id))
             try:
                 newNumber = self.account_client.order_phone_number(
                     number=self._parse_number_to_bw_format(phone_number),
