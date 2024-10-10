@@ -21,7 +21,8 @@ except ImportError:
     from sh_util.tel import displayNumber
 
 import bandwidth
-from bandwidth.account import BandwidthAccountAPIException
+from bandwidth.rest import ApiException
+#from bandwidth.account import BandwidthAccountAPIException
 try:
     from bandwidth.account import BandwidthOrderPendingException
 except ImportError:
@@ -282,7 +283,7 @@ class SHBandwidthClient(object):
                     'Pending Number Order: ' +
                     SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
                 )
-            except BandwidthAccountAPIException as err:
+            except ApiException as err:
                 # If we didn't get the number, throw an error
                 err_resp = 'We could not get number %i from our carrier. ' \
                            'Carrier Message: %r.', phone_number, str(err)
@@ -314,7 +315,7 @@ class SHBandwidthClient(object):
                     'Pending Area Code Order: ' +
                     SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
                 )
-            except BandwidthAccountAPIException as err:
+            except ApiException as err:
                 # If we didn't get the number, throw an error
                 logging.error('buy_phone_number(): could not get number. '
                               'Throwing an error - %r.', str(err))
@@ -339,7 +340,7 @@ class SHBandwidthClient(object):
         nat_number = self._parse_number_to_bw_format(str(number), 'US')
         try:
             self.account_client.delete_phone_number(nat_number)
-        except BandwidthAccountAPIException as err:
+        except ApiException as err:
             logging.info("Error Deleting phone# %i, Exception: %r",
                          number, str(err))
             raise
@@ -362,7 +363,7 @@ class SHBandwidthClient(object):
                 area_code=area_code,
                 quantity=quantity
             )
-        except BandwidthAccountAPIException as err:
+        except ApiException as err:
             logging.info('Failed to search for phone number in given area '
                          'code - error: %r', str(err))
             raise AreaCodeUnavailableError(
@@ -389,7 +390,7 @@ class SHBandwidthClient(object):
                                        quantity=quantity,
                                        pattern=pattern)
 
-        except BandwidthAccountAPIException as err:
+        except ApiException as err:
             # If we didn't get the number, throw an error
             logging.error('search_tollfree(): could not get toll '
                           'free number. '
@@ -434,7 +435,7 @@ class SHBandwidthClient(object):
                 SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
             )
 
-        except BandwidthAccountAPIException as err:
+        except ApiException as err:
             # If we didn't get the number, throw an error
             logging.error('buy_tollfree_phone_number(): could not get '
                           'toll free number. '
@@ -464,7 +465,7 @@ class SHBandwidthClient(object):
         try:
             self.account_client.get_phone_number(nat_number)
             retval = True
-        except BandwidthAccountAPIException as err:
+        except ApiException as err:
             logging.info("Phone number query: %i, caused error: %r",
                          number, str(err))
             pass
@@ -483,7 +484,7 @@ class SHBandwidthClient(object):
                 site_id=site_id,
                 size=size
             )
-        except BandwidthAccountAPIException as err:
+        except ApiException as err:
             logging.info("List Phone number query: caused error: {}",
                          str(err))
             raise
@@ -499,7 +500,7 @@ class SHBandwidthClient(object):
             count = self.account_client.get_phone_number_count(
                 site_id=site_id
             )
-        except BandwidthAccountAPIException as e:
+        except ApiException as e:
             logging.info("Active Phone number query, caused error: {}".
                          format(e))
             raise
@@ -519,7 +520,7 @@ class SHBandwidthClient(object):
             site_info = self.account_client.get_siteinfo_for_number(
                 phone_number
             )
-        except BandwidthAccountAPIException as e:
+        except ApiException as e:
             logging.info("Site info for Phone number {}, caused error: {}".
                          format(phone_number, e))
             raise
@@ -549,7 +550,7 @@ class SHBandwidthClient(object):
             number_info = self.account_client.get_phone_number(
                 phone_number
             )
-        except BandwidthAccountAPIException as e:
+        except ApiException as e:
             logging.info("Number info for Phone number {}, caused error: {}".
                          format(phone_number, e))
             raise
