@@ -34,7 +34,7 @@ def sqlAndArgsToText(sql, args=None):
         return '{0}:{1}'.format(match.group(1), binding)
 
     transformedSql = _argRe.sub(nextBindSub, sql)
-    return text(transformedSql).params(**bindparams)
+    return text(transformedSql).bindparams(bindparams)
 
 
 def connections():
