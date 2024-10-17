@@ -5,7 +5,7 @@
 __author__ = 'Jay Taylor [@jtaylor]'
 # pylint: disable=R0903,W0235,E1101,C0123
 
-import collections as _collections
+import collections.abc as _collections
 import logging
 from inspect import getfullargspec
 from copy import deepcopy
