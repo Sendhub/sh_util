@@ -6,35 +6,31 @@ __author__ = 'Jay Taylor [@jtaylor]'
 # pylint: disable=C0415,C0103
 import logging
 import re
-import settings
 from sqlalchemy.sql.expression import bindparam, text
 
-_argRe = re.compile(r'([^%])%s')
+# Updated for Python 3.11 compatibility and modern Python best practices
+
+_arg_re = re.compile(r'([^%])%s')
 
 
-def sqlAndArgsToText(sql, args=None):
+def sql_and_args_to_text(sql, args=None):
     """
-    Convert plain old combination of sql/args to SqlAlchemy `text` instance.
-
-    It seems ridiculous to have to do this, but I really want to use the
-    `text` instances to turn off auto-commit.
+    Convert plain SQL and arguments to a SqlAlchemy `text` instance.
     """
     if not args:
         return text(sql)
 
     bindparams = []
-    i = [-1]
-    # Using a list since we need to mutate the variable
-    # which isn't allowed with a direct variable reference.
+    i = [-1]  # Use a list to allow mutation within `next_bind_sub`.
 
-    def nextBindSub(match):
+    def next_bind_sub(match):
         i[0] += 1
-        binding = 'arg{0}'.format(i[0])
+        binding = f'arg{i[0]}'
         bindparams.append(bindparam(binding, args[i[0]]))
-        return '{0}:{1}'.format(match.group(1), binding)
+        return f'{match.group(1)}:{binding}'
 
-    transformedSql = _argRe.sub(nextBindSub, sql)
-    return text(transformedSql, bindparams=bindparams)
+    transformed_sql = _arg_re.sub(next_bind_sub, sql)
+    return text(transformed_sql).bindparams(*bindparams)
 
 
 def connections():
@@ -44,112 +40,89 @@ def connections():
     except ImportError:
         from src.app import app
 
-    # from flask.globals import current_app
-    print(app.engines, "engines")
     return app.engines
 
 
-def switchDefaultDatabase(name):
-    """Swap in a different default database."""
-    pass
+def switch_default_database(name):
+    """Swap in a different default database (Placeholder function)."""
+    raise NotImplementedError("switch_default_database is not implemented yet.")
 
 
-def getRealShardConnectionName(using):
-    """Lookup and return the ACTUAL connection name, never use 'default'."""
+def get_real_shard_connection_name(using):
+    """Lookup and return the actual connection name, never use 'default'."""
+    from settings import DATABASE_DEFAULT_SHARD
+
     if using == 'default':
-        if hasattr(settings, 'DATABASE_DEFAULT_SHARD'):
-            using = settings.DATABASE_DEFAULT_SHARD
-        else:
-            using = list(connections().keys())[0]
-
+        return DATABASE_DEFAULT_SHARD or list(connections().keys())[0]
     return using
 
 
-def _dictfetchall(resultProxy):
-    """Returns all rows from a cursor as a dict."""
-    desc = list(resultProxy.keys())
-    return [dict(list(zip([col for col in desc], row))) for row in resultProxy.fetchall()]  # noqa
+def dict_fetch_all(result_proxy):
+    """Returns all rows from a cursor as a list of dictionaries."""
+    keys = result_proxy.keys()
+    return [dict(zip(keys, row)) for row in result_proxy.fetchall()]
 
 
-def db_query(sql, args=None, as_dict=False, using='default',
-             force=False, debug=False):
+def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=False):
     """
-    Execute raw select queries.  Not tested or guaranteed to work with any
-    other type of query.
-
-    @param force boolean Defaults to False. Whether or not to force the
-    named connection to be used.
+    Execute raw select queries.
     """
-    from ..import DEBUG
     try:
         from app import ScopedSessions
     except ImportError:
         from src.app import ScopedSessions
 
-    if args is None:
-        args = tuple()
+    args = args or ()
 
-    if force is False:
-        using = getRealShardConnectionName(using)
+    if not force:
+        using = get_real_shard_connection_name(using)
 
-    if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s %s',
-                     str(using), str(sql), str(args))
+    if debug:
+        logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s %s', using, sql, args)
 
-    # resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args)
-    # .execution_options(autocommit=False))
-    resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
-    # resultProxy = ScopedSessions[using]().execute(sql, args)
-
-    res = _dictfetchall(resultProxy) if as_dict is True else resultProxy.fetchall()  # noqa
-    resultProxy.close()
-    return res
+    with ScopedSessions[using]() as session:
+        result_proxy = session.execute(sql_and_args_to_text(sql, args))
+        result = dict_fetch_all(result_proxy) if as_dict else result_proxy.fetchall()
+        result_proxy.close()
+        return result
 
 
 def db_exec(sql, args=None, using='default', force=False, debug=False):
     """
-    Execute a raw query on the requested database connection.
-
-    @param force boolean Defaults to False. Whether or not to force the
-    named connection to be used.
+    Execute raw database queries.
     """
     from sqlalchemy.exc import InvalidRequestError
-    from ..import DEBUG
 
     try:
         from app import ScopedSessions
     except ImportError:
         from src.app import ScopedSessions
 
-    if args is None:
-        args = tuple()
+    args = args or ()
 
-    if force is False:
-        using = getRealShardConnectionName(using)
+    if not force:
+        using = get_real_shard_connection_name(using)
 
-    if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_EXEC, using=%s ::\n%s',
-                     str(using), str(sql))
+    if debug:
+        logging.info('-- [DEBUG] DB_EXEC, using=%s ::\n%s', using, sql)
 
-    txCandidate = sql.strip().rstrip(';').strip().lower()
-    if txCandidate == 'begin':
-        try:
-            ScopedSessions[using]().begin()
-        except InvalidRequestError:
-            pass
-    elif txCandidate == 'rollback':
-        ScopedSessions[using]().rollback()
-    elif txCandidate == 'commit':
-        ScopedSessions[using]().commit()
-    else:
-        # statement = sqlAndArgsToText(sql, args)
-        # .execution_options(autocommit=False)
-        # ScopedSessions[using]().execute(statement)
-        ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
-        # ScopedSessions[using]().execute(sql, args)
+    sql_stripped = sql.strip().lower()
+    try:
+        with ScopedSessions[using]() as session:
+            if sql_stripped == 'begin':
+                session.begin()
+            elif sql_stripped == 'rollback':
+                session.rollback()
+            elif sql_stripped == 'commit':
+                session.commit()
+            else:
+                session.execute(sql_and_args_to_text(sql, args))
+    except InvalidRequestError as e:
+        logging.error("InvalidRequestError during DB execution: %s", e)
+        raise
 
 
-_saAttrsToPsql = (
+_sa_attrs_to_psql = (
     ('database', 'dbname', 'sendhub'),
     ('username', 'user', None),
     ('password', 'password', None),
@@ -158,16 +131,16 @@ _saAttrsToPsql = (
 )
 
 
-def getPsqlConnectionString(connectionName, secure=True):
+def get_psql_connection_string(connection_name, secure=True):
     """Generate a PSQL-format connection string for a given connection."""
-    assert connectionName in settings.DATABASE_URLS
+    from settings import DATABASE_URLS
 
-    engine = connections()[connectionName]
+    assert connection_name in DATABASE_URLS, f"Connection {connection_name} not found in DATABASE_URLS."
 
-    out = 'sslmode=require' if secure is True else ''
-
-    psqlTuples = list(map(lambda key, param, default: '{0}={1}'.format(
-        param, getattr(engine.url, key) or default), _saAttrsToPsql))
-
-    out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
-    return out
+    engine = connections()[connection_name]
+    ssl_mode = 'sslmode=require' if secure else ''
+    psql_tuples = [
+        f"{param}={getattr(engine.url, attr, default)}"
+        for attr, param, default in _sa_attrs_to_psql
+    ]
+    return ' '.join(psql_tuples) + f" {ssl_mode}"
