@@ -8,6 +8,8 @@ import logging
 import re
 from sqlalchemy.sql.expression import bindparam, text
 
+import settings
+
 # Updated for Python 3.11 compatibility and modern Python best practices
 
 _arg_re = re.compile(r'([^%])%s')
@@ -48,14 +50,19 @@ def switch_default_database(name):
     raise NotImplementedError("switch_default_database is not implemented yet.")
 
 
+
+
 def get_real_shard_connection_name(using):
     """Lookup and return the actual connection name, never use 'default'."""
-    from settings import DATABASE_DEFAULT_SHARD
+    from settings import DATABASE_URLS
 
     if using == 'default':
-        return DATABASE_DEFAULT_SHARD or list(connections().keys())[0]
-    return using
+        # Use 'default' from DATABASE_URLS if DATABASE_DEFAULT_SHARD is not set
+        using = getattr(settings, 'DATABASE_DEFAULT_SHARD', 'default')
+        if using not in DATABASE_URLS:
+            raise KeyError(f"Database shard '{using}' not found in DATABASE_URLS.")
 
+    return using
 
 def dict_fetch_all(result_proxy):
     """Returns all rows from a cursor as a list of dictionaries."""
