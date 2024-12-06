@@ -64,27 +64,26 @@ def dict_fetch_all(result_proxy):
 
 
 def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=False):
-    """
-    Execute raw select queries.
-    """
+    logging.info(f"Executing DB query: {sql} with args: {args}")
     try:
         from app import ScopedSessions
     except ImportError:
         from src.app import ScopedSessions
 
     args = args or ()
-
     if not force:
         using = get_real_shard_connection_name(using)
 
     if debug:
-        logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s %s', using, sql, args)
+        logging.info(f"Using DB connection: {using}")
 
     with ScopedSessions[using]() as session:
         result_proxy = session.execute(sql_and_args_to_text(sql, args))
         result = dict_fetch_all(result_proxy) if as_dict else result_proxy.fetchall()
         result_proxy.close()
+        logging.info(f"Query result: {result}")
         return result
+
 
 
 def db_exec(sql, args=None, using='default', force=False, debug=False):
