@@ -21,7 +21,9 @@ except ImportError:
     from sh_util.tel import displayNumber
 
 import bandwidth
-from bandwidth.account import BandwidthAccountAPIException
+from bandwidth.account import BandwidthAccountAPIException # deprecated
+# from bandwidth.rest import ApiException # latest module
+
 try:
     from bandwidth.account import BandwidthOrderPendingException
 except ImportError:
