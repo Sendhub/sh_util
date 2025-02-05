@@ -104,7 +104,7 @@ def wget(
     try:
         url = normalize_url(url)
         logging.info('w\'%sting %s' % (request_type.lower(), url))
-        if request_type is 'GET':  # noqa
+        if request_type == 'GET':  # noqa
             res = opener.open(url, timeout=timeout)
 
             if as_dict:
