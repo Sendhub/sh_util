@@ -6,8 +6,8 @@ __author__ = 'Jay Taylor [@jtaylor]'
 # pylint: disable=C0103,C0415,R0913
 import logging
 import re
-from celery_app import current_app
-from celery_app.task.base import Task
+from celery import current_app
+from celery import Task
 
 _fileLineFunctionExtractor = re.compile(
     r'^File "(?:\/app\/?)?(?P<file>[^"]+)".*? (?P<line>[0-9]+), in (?P<fn>.*)$'
@@ -66,7 +66,7 @@ class ShTask(Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Pass-through to failure handler."""
-        from celery_app.exceptions import MaxRetriesExceededError
+        from celery.exceptions import MaxRetriesExceededError
 
         if isinstance(exc, MaxRetriesExceededError):
             logging.error('Suppressing MaxRetriesExceededError exception')
@@ -94,7 +94,7 @@ class ShPeriodicTask(Task):
             raise NotImplementedError(
                 'Periodic tasks must have a run_every attribute'
             )
-        from celery_app.schedules import maybe_schedule
+        from celery.schedules import maybe_schedule
         self.run_every = maybe_schedule(self.run_every, self.relative)
         super(ShPeriodicTask, self).__init__()
 
