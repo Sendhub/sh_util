@@ -52,8 +52,8 @@ class BandwidthAvailablePhoneNumber:
 
        {"friendly_name":"(580) 271-9612", "phone_number":"+15802719612"}
     """
-    def __init__(self, number):
-        self.friendly_name = displayNumber(number)
+    def __init__(self, number, region):
+        self.friendly_name = displayNumber(number, region)
         self.phone_number = number
         self.gateway = settings.SMS_GATEWAY_BANDWIDTH
 

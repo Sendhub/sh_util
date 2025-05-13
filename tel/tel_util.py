@@ -266,7 +266,7 @@ class FindPhoneNumberInAreaCode:
             if not isinstance(avail_numbers, list):
                 avail_numbers = [avail_numbers]  # convert to list
 
-            return [BandwidthAvailablePhoneNumber(number) for number in avail_numbers]  # noqa
+            return [BandwidthAvailablePhoneNumber(number, country_code) for number in avail_numbers]  # noqa
         else:
             logging.info('Invalid Carrier {} to search a number'.
                          format(gateway))
