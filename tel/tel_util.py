@@ -225,8 +225,7 @@ class FindPhoneNumberInAreaCode:
                  country_code='US', quantity=4,
                  toll_free=False, toll_free_area_code='8**'):
         """
-           router that routes calls to appropriate carrier
-           specific driver.
+           router that routes calls to the appropriate carrier-specific driver.
 
         """
         if gateway == settings.SMS_GATEWAY_TWILIO:
