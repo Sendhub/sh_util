@@ -4,6 +4,7 @@ import logging
 import phonenumbers
 import json
 import requests
+import xmltodict
 
 try:
     import settings
@@ -295,12 +296,9 @@ class SHBandwidthClient(object):
             try:
                 if country_code == 'AU':
                     new_number = self.order_aus_number(phone_number)
-                    # new_number = self.account_client_au.order_phone_number(
-                    #     number=self._parse_number_to_bw_format(phone_number),
-                    #     name='SendHub Customer: {}'.format(user_id),
-                    #     quantity=1,
-                    #     siteid=site_id
-                    # )
+                    new_number = [(new_number.get('ExistingTelephoneNumberOrderType')
+                                  .get('TelephoneNumberList')
+                                  .get('TelephoneNumber'))]
                 else:
                     new_number = self.account_client.order_phone_number(
                         number=self._parse_number_to_bw_format(phone_number),
@@ -367,38 +365,39 @@ class SHBandwidthClient(object):
 
             return self._cleanup_and_return_numbers(ordered_number, 1, country_code)
 
-    def order_aus_number(self,phone_number):
+    def order_aus_number(self, phone_number):
         """
         Orders an existing Australian phone number using Bandwidth's Universal Order API.
         """
-        from dicttoxml import dicttoxml
-        try:
-            uri = settings.BW_ACCOUNT_API_URL_AU+"/api/v2/accounts/"+str(settings.BW_USER_ID_AU)+"/orders"
+        import base64
+        url = "https://api.bandwidth.com/api/v2/accounts/" + str(settings.BW_USER_ID_AU) + "/orders"
 
-            data = {
-                'Order': {
-                    'Name': 'au_number',
-                    'SiteId': '12345',
-                    'ExistingTelephoneNumberOrderType': {
-                        'TelephoneNumberList': {
-                            'TelephoneNumber': phone_number
-                        }
-                    },
-                    'AutoActivate': 'true'
-                }
-            }
-            headers = {'content-type': 'application/xml'}
-            xml_data = dicttoxml(data, custom_root='Order', attr_type=False)
-            response = requests.request('post', uri,
-                                        auth=(settings.BW_USERNAME, settings.BW_PASSWORD),
-                                        headers=headers, data=xml_data)
-            print(response, response.content, type(response), '-------========-=-=--=-=-=-=')
-            if response.status_code == 201:
-                return response.text
-        except Exception as err:
-            logging.info(f"Error in buying AUS number :{err}")
+        credentials = self.username + ":" + self.password
+        encoded_credentials = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
 
-        return False
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}",
+            "Content-Type": "application/xml"
+        }
+
+        xml_payload = """
+        <Order>
+            <Name>au_number</Name>
+            <SiteId>""" + str('181029') + """</SiteId>
+            <ExistingTelephoneNumberOrderType>
+                <TelephoneNumberList>
+                    <TelephoneNumber>""" + str(phone_number) + """</TelephoneNumber>
+                </TelephoneNumberList>
+            </ExistingTelephoneNumberOrderType>
+            <AutoActivate>true</AutoActivate>
+        </Order>
+        """
+        request = requests.post(url, headers=headers, data=xml_payload)
+        response = xmltodict.parse(request.text)
+        response = response['OrderResponse']['Order']
+        logging.info(f"response in buying AUS number:{response}")
+
+        return response
 
     def release_phone_number(self, number):
         """
