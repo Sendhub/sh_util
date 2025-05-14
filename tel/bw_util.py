@@ -262,10 +262,11 @@ class SHBandwidthClient(object):
         TODO: must be an API from phonenumbers library that allows
         parsing national number
         """
-        return phonenumbers.format_number(
-            phonenumbers.parse(str(number), 'US'),
+        number = phonenumbers.format_number(
+            phonenumbers.parse(str(number), country_code),
             phonenumbers.PhoneNumberFormat.E164
-        )[2:]
+        )
+        return number[2:] if number.startswith('+1') else number[3:]
 
     def buy_phone_number(self, phone_number=None,
                          area_code=None, user_id=None,
@@ -535,18 +536,23 @@ class SHBandwidthClient(object):
             return self._cleanup_and_return_numbers(toll_free_numbers,
                                                     quantity)
 
-    def in_service(self, number):
+    def in_service(self, number, country_code='US'):
         """
-            verifies if number if in service
+            verifies if number is in service
 
             : returns True if number is in service
             : returns False if is not.
         """
-        nat_number = phonenumber_as_e164(number)
-        nat_number = self._parse_number_to_bw_format(str(nat_number), 'US')
+        if number.startswith('+61'):
+            country_code = 'AU'
+        nat_number = phonenumber_as_e164(number, country_code)
+        nat_number = self._parse_number_to_bw_format(str(nat_number), country_code)
         retval = False
         try:
-            self.account_client.get_phone_number(nat_number)
+            if country_code == 'AU':
+                self.account_client_au.get_phone_number(number)
+            else:
+                self.account_client.get_phone_number(nat_number)
             retval = True
         except BandwidthAccountAPIException as err:
             logging.info("Phone number query: %i, caused error: %r",

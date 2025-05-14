@@ -15,7 +15,8 @@ def cleanupPhoneNumber(number, region='US'):
     # Leave shortcodes alone.
     if len(number) in (3, 4, 5, 6) and number.isdigit():
         return number
-
+    if str(number).startswith('+61'):
+        region = 'AU'
     # it's okay to search for the region US for all US/Can b/c they share
     # the same parsing/formatting rules
     p = phonenumbers.parse(number, region)
