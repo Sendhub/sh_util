@@ -4,6 +4,7 @@ import logging
 import phonenumbers
 import json
 import requests
+import xmltodict
 
 try:
     import settings
@@ -44,16 +45,16 @@ class BWTollFreeUnavailableError(Exception):
 
 class BandwidthAvailablePhoneNumber:
     """
-       for bandwidth carrier, numbers returned are number (if qty = 1),
+       For bandwidth carrier, numbers returned are number (if qty = 1),
        or a list of numbers. This router also converts bandwidth list
-       to list of numbers in dictionary with pretty name as key..
-       similar to format provided by Twilio so that upper layers are
+       to list of numbers in dictionary with pretty name as the key,
+       similar to the format provided by Twilio so that upper layers are
        at ease. Each number is in the format below:
 
        {"friendly_name":"(580) 271-9612", "phone_number":"+15802719612"}
     """
-    def __init__(self, number):
-        self.friendly_name = displayNumber(number)
+    def __init__(self, number, region):
+        self.friendly_name = displayNumber(number, region)
         self.phone_number = number
         self.gateway = settings.SMS_GATEWAY_BANDWIDTH
 
@@ -62,11 +63,11 @@ def phonenumber_as_e164(number, country_code='US'):
     """
       this function should be called mainly with valid
       phone numbers.
-      Exception is raised if number is invalid
+      Exception is raised if the number is invalid
     """
     if not isinstance(number, str):
         number = str(number)
-    if validatePhoneNumber(number, False) is False:
+    if validatePhoneNumber(number, False, country_code) is False:
         raise ValueError("Invalid phone number %i - unable to process",
                          number)
     return phonenumbers.format_number(
@@ -117,6 +118,7 @@ class SHBandwidthClient(object):
         self.secret = secret
         self.username = username
         self.password = password
+        self.userid_au = settings.BW_USER_ID_AU
 
         if not userid or not token or not secret \
            or not username or not password:
@@ -150,7 +152,31 @@ class SHBandwidthClient(object):
             account_id=settings.BW_ACCOUNT_ID,
             DEBUG=debug
         )
-
+        self.voice_client_au = bandwidth.client('voice',
+                                             self.userid_au,
+                                             token,
+                                             secret,
+                                             api_version='v2',
+                                             DEBUG=debug)
+        self.sms_client_au = bandwidth.client(
+            'messaging',
+            self.userid_au,
+            token,
+            secret,
+            api_version='v2',
+            api_endpoint=settings.BW_ACCOUNT_API_URL_AU,
+            DEBUG=debug
+        )
+        self.account_client_au = bandwidth.client(
+            'account',
+            self.userid_au,
+            username,
+            password,
+            api_version='v2',
+            api_endpoint=settings.BW_ACCOUNT_API_URL_AU,
+            account_id=settings.BW_ACCOUNT_ID_AU,
+            DEBUG=debug
+        )
     @staticmethod
     def _as_e164(number, country_code='US'):
         """
@@ -216,7 +242,7 @@ class SHBandwidthClient(object):
                                     quantity,
                                     country_code='US'):
         """
-          helper function that takes in the numbers list
+          helper function that takes in the number's list
           returned by BW APIs, formats them and returns:
           number itself if quantity is 1 else
           returns list of numbers.
@@ -236,10 +262,11 @@ class SHBandwidthClient(object):
         TODO: must be an API from phonenumbers library that allows
         parsing national number
         """
-        return phonenumbers.format_number(
-            phonenumbers.parse(str(number), 'US'),
+        number = phonenumbers.format_number(
+            phonenumbers.parse(str(number), country_code),
             phonenumbers.PhoneNumberFormat.E164
-        )[2:]
+        )
+        return number[2:] if number.startswith('+1') else number[3:]
 
     def buy_phone_number(self, phone_number=None,
                          area_code=None, user_id=None,
@@ -256,24 +283,30 @@ class SHBandwidthClient(object):
           : returns: phone number bought, None if invalid parameters
           :          or Exception if there is one.
         """
-        if country_code not in ('US', 'CA'):
-            logging.info('Only numbers in US or CA are supported, requested '
+        if country_code not in ('US', 'CA', 'AU'):
+            logging.info('Only numbers in US/CA or AUS are supported, requested '
                          'country: %i', country_code)
 
         site_id = site_id if site_id else settings.BW_SITE_ID
 
         if phone_number:
-            if validatePhoneNumber(phone_number, False) is False:
+            if validatePhoneNumber(phone_number, False, country_code) is False:
                 raise ValueError("Invalid phone number passed- unable to buy")
 
             # a specific number ought to be ordered
             try:
-                newNumber = self.account_client.order_phone_number(
-                    number=self._parse_number_to_bw_format(phone_number),
-                    name='SendHub Customer: {}'.format(user_id),
-                    quantity=1,
-                    siteid=site_id
-                )
+                if country_code == 'AU':
+                    new_number = self.order_aus_number(phone_number)
+                    new_number = [(new_number.get('ExistingTelephoneNumberOrderType')
+                                  .get('TelephoneNumberList')
+                                  .get('TelephoneNumber'))]
+                else:
+                    new_number = self.account_client.order_phone_number(
+                        number=self._parse_number_to_bw_format(phone_number),
+                        name='SendHub Customer: {}'.format(user_id),
+                        quantity=1,
+                        siteid=site_id
+                    )
             except BandwidthOrderPendingException as order_id:
                 logging.warning('Order %i is pending for phone number: %i, '
                                 'user: %s, looks like bandwidth service is '
@@ -292,18 +325,25 @@ class SHBandwidthClient(object):
                 raise BWNumberUnavailableError(err_resp)
 
             # we bought the number successfully
-            return self._cleanup_and_return_numbers(newNumber, quantity=1)
+            return self._cleanup_and_return_numbers(new_number, 1, country_code)
         else:
             if area_code is None:
                 return False
 
             try:
-                ordered_number = self.account_client.search_and_order_local_numbers(  # noqa
-                              area_code=area_code,
-                              quantity=1,
-                              name='SendHub Customer: {}'.format(user_id),
-                              siteid=site_id
-                )
+                if country_code == 'AU':
+                    ordered_number = self.account_client_au.search_and_order_local_numbers(
+                        area_code=area_code,
+                        quantity=1,
+                        name='SendHub Customer: {}'.format(user_id),
+                        siteid=site_id)
+                else:
+                    ordered_number = self.account_client.search_and_order_local_numbers(
+                                  area_code=area_code,
+                                  quantity=1,
+                                  name='SendHub Customer: {}'.format(user_id),
+                                  siteid=site_id
+                    )
 
             except BandwidthOrderPendingException as order_id:
                 logging.warning('Order %i is pending for a number in '
@@ -324,7 +364,41 @@ class SHBandwidthClient(object):
                     SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
                 )
 
-            return self._cleanup_and_return_numbers(ordered_number, quantity=1)
+            return self._cleanup_and_return_numbers(ordered_number, 1, country_code)
+
+    def order_aus_number(self, phone_number):
+        """
+        Orders an existing Australian phone number using Bandwidth's Universal Order API.
+        """
+        import base64
+        url = "https://api.bandwidth.com/api/v2/accounts/" + str(settings.BW_USER_ID_AU) + "/orders"
+
+        credentials = self.username + ":" + self.password
+        encoded_credentials = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
+
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}",
+            "Content-Type": "application/xml"
+        }
+
+        xml_payload = """
+        <Order>
+            <Name>au_number</Name>
+            <SiteId>""" + str('181029') + """</SiteId>
+            <ExistingTelephoneNumberOrderType>
+                <TelephoneNumberList>
+                    <TelephoneNumber>""" + str(phone_number) + """</TelephoneNumber>
+                </TelephoneNumberList>
+            </ExistingTelephoneNumberOrderType>
+            <AutoActivate>true</AutoActivate>
+        </Order>
+        """
+        request = requests.post(url, headers=headers, data=xml_payload)
+        response = xmltodict.parse(request.text)
+        response = response['OrderResponse']['Order']
+        logging.info(f"response in buying AUS number:{response}")
+
+        return response
 
     def release_phone_number(self, number):
         """
@@ -351,8 +425,8 @@ class SHBandwidthClient(object):
                                  quantity=1,
                                  country_code='US'):
         """Find a number within an area code."""
-        if country_code not in ('US', 'CA'):
-            logging.info('Only numbers in US/CA are supported, requested '
+        if country_code not in ('US', 'CA', 'AU'):
+            logging.info('Only numbers in US/CA and AUS are supported, requested '
                          'country: %i', country_code)
 
         if quantity < 1:
@@ -360,10 +434,19 @@ class SHBandwidthClient(object):
                              quantity)
 
         try:
-            numbers = self.account_client.search_available_local_numbers(
-                area_code=area_code,
-                quantity=quantity
-            )
+            if country_code == 'AU':
+                numbers = self.account_client_au.search_available_local_numbers(
+                    area_code=area_code,
+                    quantity=1,
+                    countryCodeA3='AUS',
+                    name='SendHub Customer: {}'.format(settings.BW_USER_ID_AU),
+                    siteid=settings.BW_SITE_ID_AU
+                )
+            else:
+                numbers = self.account_client.search_available_local_numbers(
+                    area_code=area_code,
+                    quantity=quantity
+                )
         except BandwidthAccountAPIException as err:
             logging.info('Failed to search for phone number in given area '
                          'code - error: %r', str(err))
@@ -376,10 +459,10 @@ class SHBandwidthClient(object):
                 raise AreaCodeUnavailableError(
                     SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
                 )
-            return self._cleanup_and_return_numbers(numbers, quantity)
+            return self._cleanup_and_return_numbers(numbers, quantity, country_code)
 
     def search_available_toll_free_number(self, pattern=None, quantity=1):
-        """searche toll free number."""
+        """search toll-free number."""
         if quantity < 1:
             raise ValueError('Quantity can not be < 1 - passed: %i',
                              quantity)
@@ -453,18 +536,23 @@ class SHBandwidthClient(object):
             return self._cleanup_and_return_numbers(toll_free_numbers,
                                                     quantity)
 
-    def in_service(self, number):
+    def in_service(self, number, country_code='US'):
         """
-            verifies if number if in service
+            verifies if number is in service
 
             : returns True if number is in service
             : returns False if is not.
         """
-        nat_number = phonenumber_as_e164(number)
-        nat_number = self._parse_number_to_bw_format(str(nat_number), 'US')
+        if number.startswith('+61'):
+            country_code = 'AU'
+        nat_number = phonenumber_as_e164(number, country_code)
+        nat_number = self._parse_number_to_bw_format(str(nat_number), country_code)
         retval = False
         try:
-            self.account_client.get_phone_number(nat_number)
+            if country_code == 'AU':
+                self.account_client_au.get_phone_number(number)
+            else:
+                self.account_client.get_phone_number(nat_number)
             retval = True
         except BandwidthAccountAPIException as err:
             logging.info("Phone number query: %i, caused error: %r",

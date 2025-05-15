@@ -15,7 +15,8 @@ def cleanupPhoneNumber(number, region='US'):
     # Leave shortcodes alone.
     if len(number) in (3, 4, 5, 6) and number.isdigit():
         return number
-
+    if str(number).startswith('+61'):
+        region = 'AU'
     # it's okay to search for the region US for all US/Can b/c they share
     # the same parsing/formatting rules
     p = phonenumbers.parse(number, region)
@@ -30,7 +31,7 @@ def isSpecialTwilioNumber(number):
     return number in specialNumbers
 
 
-def validatePhoneNumber(number, allowShortcode=True):
+def validatePhoneNumber(number, allowShortcode=True,country_code='US'):
     valid = False
 
     try:
@@ -42,11 +43,10 @@ def validatePhoneNumber(number, allowShortcode=True):
 
             # it's okay to search for the region US for all US/Can b/c they
             # share the same parsing/formatting rules
-            p = phonenumbers.parse(number, 'US')
+            p = phonenumbers.parse(number, country_code)
 
             # but we need to check the number is valid in either country
-            if phonenumbers.is_valid_number_for_region(p, 'US') or \
-                    phonenumbers.is_valid_number_for_region(p, 'CA'):
+            if phonenumbers.is_valid_number_for_region(p, country_code):
                 phonenumbers.format_number(
                     p,
                     phonenumbers.PhoneNumberFormat.E164
