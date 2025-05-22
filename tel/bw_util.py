@@ -54,7 +54,7 @@ class BandwidthAvailablePhoneNumber:
        {"friendly_name":"(580) 271-9612", "phone_number":"+15802719612"}
     """
     def __init__(self, number, region):
-        self.friendly_name = displayNumber(number,region)
+        self.friendly_name = displayNumber(number, region)
         self.phone_number = number
         self.gateway = settings.SMS_GATEWAY_BANDWIDTH
 
@@ -345,13 +345,13 @@ class SHBandwidthClient(object):
                     order_aus_number_status = self.order_aus_number(str(phone_number))
                     if order_aus_number_status :
                         logging.info("Number ordered successfully.")
-                        newNumber = [phone_number]
+                        new_number = [phone_number]
                     else:
                         err_resp = 'We could not get number %s from our carrier.'%(str(phone_number))
                         logging.error(err_resp)
                         raise BWNumberUnavailableError(err_resp)
                 else:
-                    newNumber = self.account_client.order_phone_number(
+                    new_number = self.account_client.order_phone_number(
 
                         number=self._parse_number_to_bw_format(phone_number),
                         name='SendHub Customer: {}'.format(user_id),
@@ -376,7 +376,7 @@ class SHBandwidthClient(object):
                 raise BWNumberUnavailableError(err_resp)
 
             # we bought the number successfully
-            return self._cleanup_and_return_numbers(newNumber, 1, country_code)
+            return self._cleanup_and_return_numbers(new_number, 1, country_code)
         else:
             if area_code is None:
                 return False
