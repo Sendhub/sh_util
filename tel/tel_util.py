@@ -101,8 +101,7 @@ class BuyPhoneNumberFromCarrier:
                             country_code, phone_number,
                             toll_free, user):
         """
-           router that routes calls to appropriate carrier
-           specific driver - internal only.
+           router that routes calls to the appropriate carrier-specific driver - internal only.
         """
         nbr_obj = None
         if gateway == settings.SMS_GATEWAY_TWILIO:
@@ -122,19 +121,21 @@ class BuyPhoneNumberFromCarrier:
                          format(gateway))
 
         if nbr_obj:
+            logging.info('buy phone number %s', str(nbr_obj.phone_number))
             return SHBoughtNumberObject(
                 nbr_obj.phone_number,
                 nbr_obj.sid,
                 gateway
             )
+        return
 
     def __call__(self, gateway, sid, area_code=None,
                  country_code='US', phone_number=None,
                  toll_free=False, user=None, alt_gateway=False):
-        '''
-            cycles through supported gateways.. tries preferred gateway
-            first and then tries alternate gateway
-        '''
+        """
+            cycles through supported gateways.
+            tries preferred gateway first and then tries alternate gateway
+        """
         if gateway not in settings.SUPPORTED_GATEWAYS:
             raise AreaCodeUnavailableError(
                 'Invalid gateway: {}'.format(gateway)
@@ -150,9 +151,9 @@ class BuyPhoneNumberFromCarrier:
                 gateway, sid, area_code, country_code,
                 phone_number, toll_free, user
             )
-        # only for area codes specifics... not for toll-free or
+        # Only for area codes specifics... not for toll-free or
         # complete number.
-        # Bandwidth driver raises different exception for different
+        # Bandwidth driver raises different exceptions for different
         # error cases and area code only should be caught
         # Twilio driver does not raise exception for failed full
         # number bought case rather returns None
@@ -180,15 +181,15 @@ class BuyPhoneNumberFromCarrier:
                 else:
                     return nbr_obj
         else:
-            # in cases no valid number is returned and no
-            # exception occured, let it fall through and
+            # in cases no valid number is returned, and no
+            # exception occurred, let it fall through and
             # raise another exception
-            # this closes gaps with Twilio driver - dont want
+            # this closes gaps with Twilio driver - don't want
             # to change the driver
             if isinstance(nbr_obj, SHBoughtNumberObject):
                 return nbr_obj
 
-        # number isnt available, raise an exception for upper layers
+        # number isn't available, raise an exception for upper layers
         # that are dependent on this exception
         raise AreaCodeUnavailableError('{}'.format(exception_msg))
 
@@ -196,8 +197,8 @@ class BuyPhoneNumberFromCarrier:
                               phone_number=None, toll_free=False,
                               user=None):
         """
-            makes a call to appropriate function to buy
-            a regular or toll free phone number
+            makes a call to the appropriate function to buy
+            a regular or toll-free phone number
         """
         bw_client = SHBandwidthClient()
         if toll_free:
@@ -225,8 +226,7 @@ class FindPhoneNumberInAreaCode:
                  country_code='US', quantity=4,
                  toll_free=False, toll_free_area_code='8**'):
         """
-           router that routes calls to appropriate carrier
-           specific driver.
+           router that routes calls to the appropriate carrier-specific driver.
 
         """
         if gateway == settings.SMS_GATEWAY_TWILIO:
@@ -268,6 +268,7 @@ class FindPhoneNumberInAreaCode:
                 avail_numbers = [avail_numbers]  # convert to list
 
             return [BandwidthAvailablePhoneNumber(number,country_code) for number in avail_numbers]  # noqa
+
         else:
             logging.info('Invalid Carrier {} to search a number'.
                          format(gateway))

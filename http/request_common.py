@@ -6,7 +6,7 @@ __author__ = 'Jay Taylor [@jtaylor]'
 
 def extract_parameters(query_dict, parameters, empty_value=None):
     """
-    Parses out a tuple of the the specified parameters from the passed
+    Parses out a tuple of the specified parameters from the passed
     query_dict. For params that aren't found, the value will be None.
 
     @return tuple of the same length as the sequence of parameters.
