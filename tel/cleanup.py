@@ -31,7 +31,9 @@ def isSpecialTwilioNumber(number):
     return number in specialNumbers
 
 
-def validatePhoneNumber(number, allowShortcode=True,country_code='US'):
+
+def validatePhoneNumber(number, allowShortcode=True, country_code='US'):
+
     valid = False
 
     try:
@@ -65,10 +67,16 @@ def displayNumber(number, region='US'):
         # it's okay to search for the region US for all US/Can b/c they
         # share the same parsing/formatting rules
         p = phonenumbers.parse(number, region)
-        formattedNumber = phonenumbers.format_number(
-            p,
-            phonenumbers.PhoneNumberFormat.NATIONAL
-        )
+        if region == 'AU':
+            formattedNumber = phonenumbers.format_number(
+                p,
+                phonenumbers.PhoneNumberFormat.INTERNATIONAL
+            )
+        else:
+            formattedNumber = phonenumbers.format_number(
+                p,
+                phonenumbers.PhoneNumberFormat.NATIONAL
+            )
     except phonenumbers.NumberParseException:
         try:
             formattedNumber = '-'.join([number[:3], number[3:6], number[6:]])
