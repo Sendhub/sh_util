@@ -30,7 +30,9 @@ def isSpecialTwilioNumber(number):
     return number in specialNumbers
 
 
+
 def validatePhoneNumber(number, allowShortcode=True, country_code='US'):
+
     valid = False
 
     try:
