@@ -152,12 +152,13 @@ class SHBandwidthClient(object):
             account_id=settings.BW_ACCOUNT_ID,
             DEBUG=debug
         )
+
         self.voice_client_au = bandwidth.client('voice',
-                                             self.userid_au,
-                                             token,
-                                             secret,
-                                             api_version='v2',
-                                             DEBUG=debug)
+                                            self.userid_au,
+                                            token,
+                                            secret,
+                                            api_version='v2',
+                                            DEBUG=debug)
         self.sms_client_au = bandwidth.client(
             'messaging',
             self.userid_au,
@@ -177,6 +178,7 @@ class SHBandwidthClient(object):
             account_id=settings.BW_ACCOUNT_ID_AU,
             DEBUG=debug
         )
+
     @staticmethod
     def _as_e164(number, country_code='US'):
         """
@@ -193,7 +195,10 @@ class SHBandwidthClient(object):
         if not isinstance(to_number, list):
             to_number = [to_number]
 
-        return self.sms_client.send_message(
+        send_sms_country_code = self.sms_client
+        if from_number.startswith("+61"):
+            send_sms_country_code = self.sms_client_au
+        return send_sms_country_code.send_message(
             from_=self._as_e164(from_number),
             to=[self._as_e164(number) for number in to_number],
             text=msg,
@@ -210,7 +215,10 @@ class SHBandwidthClient(object):
         if not isinstance(to_number, list):
             to_number = [to_number]
 
-        return self.sms_client.send_message(
+        send_mms_country_code = self.sms_client
+        if from_number.startswith("+61"):
+            send_mms_country_code = self.sms_client_au
+        return send_mms_country_code.send_message(
             from_=self._as_e164(from_number),
             to=[self._as_e164(number) for number in to_number],
             text=msg,
@@ -262,11 +270,48 @@ class SHBandwidthClient(object):
         TODO: must be an API from phonenumbers library that allows
         parsing national number
         """
-        number = phonenumbers.format_number(
+        number =  phonenumbers.format_number(
             phonenumbers.parse(str(number), country_code),
             phonenumbers.PhoneNumberFormat.E164
         )
-        return number[2:] if number.startswith('+1') else number[3:]
+        return number[3:] if number.startswith('+61') else number[2:]
+
+    def order_aus_number(self,phone_number):
+        """
+        Orders an existing Australian phone number using Bandwidth's Universal Order API.
+        """
+        import base64
+        try:
+            url = "https://api.bandwidth.com/api/v2/accounts/"+str(settings.BW_USER_ID_AU)+"/orders"
+
+            credentials = self.username+":"+self.password
+            encoded_credentials = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
+
+            headers = {
+                "Authorization": f"Basic {encoded_credentials}",
+                "Content-Type": "application/xml"
+            }
+
+            xml_payload ="""
+            <Order>
+                <Name>au_number</Name>
+                <SiteId>"""+str('181029')+"""</SiteId>
+                <ExistingTelephoneNumberOrderType>
+                    <TelephoneNumberList>
+                        <TelephoneNumber>"""+str(phone_number)+"""</TelephoneNumber>
+                    </TelephoneNumberList>
+                </ExistingTelephoneNumberOrderType>
+                <AutoActivate>true</AutoActivate>
+            </Order>
+            """
+            response = requests.post(url, headers=headers, data=xml_payload)
+            if response.status_code == 201:
+                return True
+        except Exception as e:
+            logging.info("Error in buying AUS number :"+str(e))
+
+        return False
+
 
     def buy_phone_number(self, phone_number=None,
                          area_code=None, user_id=None,
@@ -284,6 +329,7 @@ class SHBandwidthClient(object):
           :          or Exception if there is one.
         """
         if country_code not in ('US', 'CA', 'AU'):
+
             logging.info('Only numbers in US/CA or AUS are supported, requested '
                          'country: %i', country_code)
 
@@ -296,12 +342,17 @@ class SHBandwidthClient(object):
             # a specific number ought to be ordered
             try:
                 if country_code == 'AU':
-                    new_number = self.order_aus_number(phone_number)
-                    new_number = [(new_number.get('ExistingTelephoneNumberOrderType')
-                                  .get('TelephoneNumberList')
-                                  .get('TelephoneNumber'))]
+                    order_aus_number_status = self.order_aus_number(str(phone_number))
+                    if order_aus_number_status :
+                        logging.info("Number ordered successfully.")
+                        new_number = [phone_number]
+                    else:
+                        err_resp = 'We could not get number %s from our carrier.'%(str(phone_number))
+                        logging.error(err_resp)
+                        raise BWNumberUnavailableError(err_resp)
                 else:
                     new_number = self.account_client.order_phone_number(
+
                         number=self._parse_number_to_bw_format(phone_number),
                         name='SendHub Customer: {}'.format(user_id),
                         quantity=1,
@@ -425,6 +476,7 @@ class SHBandwidthClient(object):
                                  quantity=1,
                                  country_code='US'):
         """Find a number within an area code."""
+
         if country_code not in ('US', 'CA', 'AU'):
             logging.info('Only numbers in US/CA and AUS are supported, requested '
                          'country: %i', country_code)
@@ -435,12 +487,12 @@ class SHBandwidthClient(object):
 
         try:
             if country_code == 'AU':
-                numbers = self.account_client_au.search_available_local_numbers(
-                    area_code=area_code,
-                    quantity=1,
-                    countryCodeA3='AUS',
-                    name='SendHub Customer: {}'.format(settings.BW_USER_ID_AU),
-                    siteid=settings.BW_SITE_ID_AU
+                numbers = self.account_client_au.search_available_local_numbers(  # noqa
+                              area_code=area_code,
+                              quantity=quantity,
+                              countryCodeA3='AUS',
+                              name='SendHub Customer: {}'.format(settings.BW_USER_ID_AU),
+                              siteid=settings.BW_SITE_ID_AU
                 )
             else:
                 numbers = self.account_client.search_available_local_numbers(
@@ -536,18 +588,18 @@ class SHBandwidthClient(object):
             return self._cleanup_and_return_numbers(toll_free_numbers,
                                                     quantity)
 
-    def in_service(self, number, country_code='US'):
+
+    def in_service(self, number, country_code= 'US'):
         """
             verifies if number is in service
 
             : returns True if number is in service
             : returns False if is not.
         """
-        if number.startswith('+61'):
-            country_code = 'AU'
         nat_number = phonenumber_as_e164(number, country_code)
         nat_number = self._parse_number_to_bw_format(str(nat_number), country_code)
         retval = False
+
         try:
             if country_code == 'AU':
                 self.account_client_au.get_phone_number(number)
