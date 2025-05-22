@@ -154,11 +154,11 @@ class SHBandwidthClient(object):
         )
 
         self.voice_client_au = bandwidth.client('voice',
-                                                self.userid_au,
-                                                token,
-                                                secret,
-                                                api_version='v2',
-                                                DEBUG=debug)
+                                            self.userid_au,
+                                            token,
+                                            secret,
+                                            api_version='v2',
+                                            DEBUG=debug)
         self.sms_client_au = bandwidth.client(
             'messaging',
             self.userid_au,
