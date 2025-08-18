@@ -10,7 +10,7 @@ import traceback
 import phonenumbers
 import requests
 import xmltodict
-from main.models import ShUser
+# from main.models import ShUser
 from sh_util.tel import cleanupPhoneNumber
 
 try:
@@ -304,8 +304,8 @@ class SHBandwidthClient(object):
 
         """
 
-        if isinstance(user_id, ShUser):
-            logging.info(f"In buy_phone_number() with user_id.id received is {user_id.id}")
+        # if isinstance(user_id, ShUser):
+        #     logging.info(f"In buy_phone_number() with user_id.id received is {user_id.id}")
 
         if country_code not in ("US", "CA", "AU"):
             raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
@@ -654,8 +654,8 @@ class SHBandwidthClient(object):
         response = None
         response_data = None
 
-        if isinstance(user_id, ShUser):
-            logging.info(f"In buy_phone_number() with user_id.id received is {user_id.id}")
+        # if isinstance(user_id, ShUser):
+        #     logging.info(f"In buy_phone_number() with user_id.id received is {user_id.id}")
 
         if quantity < 1:
             raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
