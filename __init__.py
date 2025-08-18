@@ -24,7 +24,7 @@ def findVariableByNameInFrame(name, depth=1):
     """
     import sys
     frame = sys._getframe(2)
-    selfSearch = filter(lambda (k, v): k == 'self', frame.f_locals.items())
+    selfSearch = filter(lambda item: item[0] == 'self', frame.f_locals.items())
     return selfSearch[0][1] if len(selfSearch) > 0 else None
 
 
@@ -54,4 +54,3 @@ dynImport = lambda path: reduce(
     path.split('.')[1:],
     __import__(path[0:path.index('.')])
 )
-

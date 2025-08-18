@@ -153,7 +153,7 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     out = 'sslmode=require' if secure is True else ''
 
-    psqlTuples = map(lambda (key, param, default): '{0}={1}'.format(param, getattr(engine.url, key) or default), _saAttrsToPsql)
+    psqlTuples = map(lambda t: '{0}={1}'.format(t[1], getattr(engine.url, t[0]) or t[2]), _saAttrsToPsql)
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out

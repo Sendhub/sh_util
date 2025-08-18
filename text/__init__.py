@@ -2,8 +2,8 @@
 
 import unicodedata, re
 from .format_string_to_fit_in_n_chars import squeeze_sms_message, format_string_to_fit_in_n_chars
-from ec2HostnameToIp import ec2HostnameToIp
-from split import splitString
+from .ec2HostnameToIp import ec2HostnameToIp
+from .split import splitString
 from . import case
 
 def ensureAscii(text):
