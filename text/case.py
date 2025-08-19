@@ -119,36 +119,39 @@ def dictKeysToSnakeCase(struct):
         )
 
 
-def dictKeysToCamelCase(struct):
+def dictKeysToCamelCase(struct, seen=None):
     """
-    Recursively convert all snake_case dict keys to be CamelCase.
+    Recursively convert all snake_case dict keys to camelCase.
+    Supports dicts, lists, objects with .to_dict(), and primitives.
+    Handles circular references safely.
     """
-    t = type(struct)
+    if seen is None:
+        seen = set()
 
-    if isinstance(t, (str, int, bool, float)):
-        return struct
+    # Avoid infinite recursion for circular references
+    obj_id = id(struct)
+    if obj_id in seen:
+        return "<circular_reference>"
+    seen.add(obj_id)
 
-    elif t is dict or hasattr(struct, 'to_dict'):
-
-        # if the object is not a dictionary but knows how to transform
-        # into a dict, then do so
-        if t is not dict:
-            struct = struct.to_dict()
-
-        for k, v in struct.items():
-            del struct[k]
-            struct[snakeToCamel(k)] = dictKeysToCamelCase(v)
-        return struct
-
-    elif t is list or hasattr(struct, '__iter__'):
-        return [dictKeysToCamelCase(item) for item in struct]
-
-    elif struct is None:
+    if struct is None:
         return None
-    else:
-        raise Exception(
-            'dictKeysToCamelCase: unsupported type `{0}\''.format(t)
-        )
+
+    if isinstance(struct, (str, int, float, bool)):
+        return struct
+
+    if isinstance(struct, dict):
+        return {snakeToCamel(k): dictKeysToCamelCase(v, seen) for k, v in struct.items()}
+
+    if isinstance(struct, list):
+        return [dictKeysToCamelCase(item, seen) for item in struct]
+
+    # If the object has a to_dict method, convert and recurse
+    if hasattr(struct, "to_dict") and callable(struct.to_dict):
+        return dictKeysToCamelCase(struct.to_dict(), seen)
+
+    # Unknown type
+    return str(struct)  # fallback: convert to string to avoid exceptions
 
 
 if __name__ == '__main__':
