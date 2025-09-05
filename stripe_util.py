@@ -1,11 +1,13 @@
 __author__ = 'brock'
 
 import ast
-import stripe as _stripe
+
+from stripe import StripeObject
+
+from stripe_util.stripe_service import StripeAPIBasilService
+
 
 def stripe_object_to_dict(stripeObj):
-
-    from stripe import StripeObject
 
     def _serialize(o):
         if isinstance(o, StripeObject):
@@ -26,7 +28,8 @@ def dict_to_stripe_object(data):
 
     dataDict = ast.literal_eval(data)
 
-    stripeObj = _stripe.convert_to_stripe_object(dataDict,
-                                               _stripe.api_key)
+    # Updated to Stripe SDK 12.5.0 2025-08-27.Basil
+    obj = StripeAPIBasilService()
+    stripeObj = obj.convert_to_stripe_object(dataDict)
 
     return stripeObj
