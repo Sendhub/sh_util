@@ -28,7 +28,7 @@ def stringify(obj):
             obj[stringify(k)] = stringify(v)
     elif type(obj) is list:
         return map(stringify, obj)
-    elif type(obj) is int or type(obj) is long:
+    elif isinstance(obj, int):
         return str(obj)
     return obj
 

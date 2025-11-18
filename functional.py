@@ -4,7 +4,7 @@
 
 __author__ = 'Jay Taylor [@jtaylor]'
 
-import collections as _collections
+from collections.abc import Iterable
 import logging
 
 try:
@@ -13,13 +13,21 @@ except ImportError:
     import pickle as _pickle
 
 
-def flatten(l, generator=True):
-    """Flatten an arbitrarily nested sequence of iterables."""
-    for el in l:
-        if isinstance(el, _collections.Iterable) and \
-           not isinstance(el, basestring):
-            for sub in flatten(el):
-                yield sub
+# def flatten(l, generator=True):
+#     """Flatten an arbitrarily nested sequence of iterables."""
+#     for el in l:
+#         if isinstance(el, _collections.Iterable) and \
+#            not isinstance(el, basestring):
+#             for sub in flatten(el):
+#                 yield sub
+#         else:
+#             yield el
+
+def flatten(seq):
+    """Flatten an arbitrarily nested sequence of iterables (but not strings/bytes)."""
+    for el in seq:
+        if isinstance(el, Iterable) and not isinstance(el, (str, bytes, bytearray)):
+            yield from flatten(el)
         else:
             yield el
 
@@ -62,16 +70,23 @@ def memoize(fn):
     """Memoization decorator wraps Memoize class."""
     class Memoize(object):
         """Class to abstract away the details for method memoization."""
+
+
         def __init__(self, f):
             """@param f Function to memoize."""
-            from inspect import getargspec
-
             self.f = f
             self._cached = {}
+            from inspect import signature, Signature, getfullargspec
 
-            # Determine whether or not the function accepts keyword arguments.
-            # NB: getargspec return format is: args, varargs, varkw, defaults
-            self._acceptsKw = getargspec(self.f)[2] is not None
+            # Determine whether or not the function accepts keyword args.
+            # Prefer inspect.signature (modern). If signature() fails for a builtin/C
+            # object, fall back to getfullargspec.
+            try:
+                sig = signature(self.f)
+                self._acceptsKw = any(param.kind == param.VAR_KEYWORD for param in sig.parameters.values())
+            except (ValueError, TypeError):
+                # valueerror/typeerror sometimes raised for builtins — safe fallback
+                self._acceptsKw = getfullargspec(self.f).varkw is not None
 
         def __call__(self, *args, **kw):
             """Generate the unique key and rtrieve the memoized result."""
@@ -215,7 +230,7 @@ class distMemoizeWithExpiry(memoizeWithExpiry):
                         #else:
                         #    logging.info('found mcKey={0}'.format(mcKey))
 
-                except pylibmc.Error, e:
+                except (pylibmc.Error, e):
                     logging.error('distMemoizeWithExpiry caught {0}'.format(e))
 
                 if result is None:
@@ -229,7 +244,7 @@ class distMemoizeWithExpiry(memoizeWithExpiry):
                     # Store result in memcache.
                     cli().set(mcKey, self._cached[key], time=self.ttlSeconds)
 
-                except pylibmc.Error, e:
+                except (pylibmc.Error, e):
                     logging.error('distMemoizeWithExpiry caught {0}'.format(e))
 
 
@@ -240,14 +255,85 @@ class distMemoizeWithExpiry(memoizeWithExpiry):
         return wrapped
 
 
-def saferHash(o):
-    """Get a consistent hash for objects, even when they are a dictionary or contain dictionaries."""
-    def tuplifyDicts(o):
-        """Recursively turn dicts into sorted tuples."""
-        if not hasattr(o, '__iter__'):
-            return o
-        if isinstance(o, dict):
-            return tuple(sorted(map(tuplifyDicts, o.items())))
-        return tuple(sorted(map(tuplifyDicts, o)))
-    return hash(tuplifyDicts(o))
+# def saferHash(o):
+#     """Get a consistent hash for objects, even when they are a dictionary or contain dictionaries."""
+#     def tuplifyDicts(o):
+#         """Recursively turn dicts into sorted tuples."""
+#         if not hasattr(o, '__iter__'):
+#             return o
+#         if isinstance(o, dict):
+#             return tuple(sorted(map(tuplifyDicts, o.items())))
+#         return tuple(sorted(map(tuplifyDicts, o)))
+#     return hash(tuplifyDicts(o))
 
+def saferHash(obj):
+    """
+    Return a stable hash for nested structures (dicts, lists, sets, tuples),
+    safe for recursive / self-referential objects and for heterogeneous contents.
+
+    - Strings/bytes are treated as atomic.
+    - dicts are converted to tuples sorted by key representation to be deterministic.
+    - lists/tuples preserve order.
+    - sets/frozensets are converted to sorted tuples (order-independent).
+    - cycles are detected and represented by a sentinel so recursion cannot loop.
+    """
+    from collections.abc import Mapping, Sequence, Set
+
+    seen = set()  # track object ids to break cycles
+    CYCLE = ("<CYCLIC>",)  # sentinel for cyclic references
+
+    def _tuplify(x):
+        oid = id(x)
+        # break cycles
+        if oid in seen:
+            return CYCLE
+
+        # atomic/scalar types we treat as-is
+        if x is None or isinstance(x, (bool, int, float)):
+            return ("_val", x)
+        if isinstance(x, (str, bytes, bytearray)):
+            # treat text/bytes as atomic
+            return ("_str", bytes(x) if isinstance(x, (bytes, bytearray)) else x)
+
+        # mappings (dict-like)
+        if isinstance(x, Mapping):
+            seen.add(oid)
+            try:
+                # sort by key repr to get deterministic order even with mixed-type keys
+                items = tuple(
+                    (repr(k), _tuplify(v)) for k, v in sorted(x.items(), key=lambda kv: repr(kv[0]))
+                )
+            finally:
+                seen.remove(oid)
+            return ("_dict",) + items
+
+        # sets: order-independent
+        if isinstance(x, Set) and not isinstance(x, (str, bytes, bytearray)):
+            seen.add(oid)
+            try:
+                members = tuple(sorted((_tuplify(v) for v in x)))
+            finally:
+                seen.remove(oid)
+            return ("_set",) + members
+
+        # sequences (list/tuple) — preserve order
+        if isinstance(x, Sequence) and not isinstance(x, (str, bytes, bytearray)):
+            seen.add(oid)
+            try:
+                seq = tuple(_tuplify(v) for v in x)
+            finally:
+                seen.remove(oid)
+            return ("_seq",) + seq
+
+        # fallback: try to use object's hash if available, else repr
+        try:
+            h = hash(x)
+            return ("_hashable", h)
+        except Exception:
+            try:
+                return ("_repr", repr(x))
+            except Exception:
+                # last resort: use id placeholder
+                return ("_id", oid)
+
+    return hash(_tuplify(obj))

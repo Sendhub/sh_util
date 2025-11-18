@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+from functools import reduce
 """Things which don't seem to cleanly fit anywhere else."""
 
 def lineno():

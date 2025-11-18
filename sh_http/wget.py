@@ -13,7 +13,11 @@ import logging
 #socket.socket = socks.socksocket
 
 # For G-Zip decompression.
-import gzip, StringIO, re, urlparse, urllib, urllib2
+import gzip
+import re
+from io import StringIO
+from urllib import parse              # replaces urlparse
+from urllib import request, error      # replaces urllib + urllib2
 
 socket.setdefaulttimeout(30)
 
@@ -152,7 +156,7 @@ def wget(
 
         return receivedData
 
-    except urllib2.URLError, e:
+    except (urllib2.URLError, e):
         if numTries > 1:
             return wget(
                 url=url,

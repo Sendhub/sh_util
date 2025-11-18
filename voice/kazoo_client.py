@@ -3,7 +3,7 @@ from sh_util.retry import retry
 import kazoo.exceptions as exceptions
 import logging
 import tempfile
-from sh_util.http.wget import wget
+from sh_util.sh_http.wget import wget
 import pycurl
 import os
 import cStringIO

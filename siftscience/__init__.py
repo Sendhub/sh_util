@@ -40,7 +40,7 @@ def labelUser(userId, isBad, reason):
     """
     Send the sift science label to sift science
     """
-    from sh_util.http.wget import wget
+    from sh_util.sh_http.wget import wget
 
     SIFTSCIENCE_203_API_URL = 'https://api.siftscience.com/v203/'
 
