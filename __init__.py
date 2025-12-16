@@ -54,3 +54,5 @@ dynImport = lambda path: reduce(
     path.split('.')[1:],
     __import__(path[0:path.index('.')])
 )
+
+__all__ = ["dynImport"]
