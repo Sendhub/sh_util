@@ -1,15 +1,19 @@
-import settings
-from sh_util.retry import retry
-import kazoo.exceptions as exceptions
 import logging
-import tempfile
-from sh_util.sh_http.wget import wget
-import pycurl
 import os
-import cStringIO
-from urlparse import urlparse
-from os.path import basename
+import tempfile
 from copy import deepcopy
+
+# import cStringIO
+from io import BytesIO
+from os.path import basename
+from urllib.parse import urlparse
+
+import kazoo.exceptions as exceptions
+import pycurl
+from sh_util.retry import retry
+from sh_util.sh_http.wget import wget
+
+import settings
 
 DEFAULT_RING_TIMEOUT = 30
 DEFAULT_KAZOO_CALL_FLOW = {
@@ -56,6 +60,7 @@ class KazooClient(object):
     redisCli = settings.REDIS
     authTokenCacheKey = 'kazooAuthToken'
     authToken = None
+    ttl = int(settings.KAZOO_AUTH_TOKEN_CACHE_EXPIRY_SECONDS)
 
     def __init__(self):
         try:
@@ -64,7 +69,10 @@ class KazooClient(object):
             if self.authToken is None:
                 self.authToken = self.kazooCli.authenticate()
                 logging.info('Authenticated against kazoo. Caching result.')
-                self.redisCli.setex(self.authTokenCacheKey, self.authToken, settings.KAZOO_AUTH_TOKEN_CACHE_EXPIRY_SECONDS)
+                logging.info(f"Key: {self.authTokenCacheKey}")
+                logging.info(f"AuthToken: {self.authToken}")
+                logging.info(f"settings.KAZOO_AUTH_TOKEN_CACHE_EXPIRY_SECONDS: {self.ttl} and type: {type(self.ttl)}")
+                self.redisCli.setex(name=self.authTokenCacheKey, value=self.authToken, time=self.ttl)
             else:
                 logging.info('Using cached kazoo authentication')
                 self.kazooCli.auth_token = self.authToken
@@ -320,7 +328,7 @@ class KazooClient(object):
             c.setopt(pycurl.POST, 1)
             c.setopt(pycurl.HTTPHEADER, ["Content-type: audio/mp3", "X-Auth-Token: {}".format(self.kazooCli.auth_token)])
             c.setopt(pycurl.POSTFIELDSIZE, os.path.getsize(fh.name))
-            response = cStringIO.StringIO()
+            response = BytesIO()
             c.setopt(c.WRITEFUNCTION, response.write)
 
             logging.info(u'Uploading file %s to url %s' % (fh.name, toUrl))

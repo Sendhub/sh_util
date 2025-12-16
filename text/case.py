@@ -119,39 +119,110 @@ def dictKeysToSnakeCase(struct):
         )
 
 
+# def dictKeysToCamelCase(struct, seen=None):
+#     """
+#     Recursively convert all snake_case dict keys to camelCase.
+#     Supports dicts, lists, objects with .to_dict(), and primitives.
+#     Handles circular references safely.
+#     """
+#     if seen is None:
+#         seen = set()
+
+#     # Avoid infinite recursion for circular references
+#     obj_id = id(struct)
+#     if obj_id in seen:
+#         return "<circular_reference>"
+#     seen.add(obj_id)
+
+#     if struct is None:
+#         return None
+
+#     if isinstance(struct, (str, int, float, bool)):
+#         return struct
+
+#     if isinstance(struct, dict):
+#         return {snakeToCamel(k): dictKeysToCamelCase(v, seen) for k, v in struct.items()}
+
+#     if isinstance(struct, list):
+#         return [dictKeysToCamelCase(item, seen) for item in struct]
+
+#     # If the object has a to_dict method, convert and recurse
+#     if hasattr(struct, "to_dict") and callable(struct.to_dict):
+#         return dictKeysToCamelCase(struct.to_dict(), seen)
+
+#     # Unknown type
+#     return str(struct)  # fallback: convert to string to avoid exceptions
+
 def dictKeysToCamelCase(struct, seen=None):
     """
-    Recursively convert all snake_case dict keys to camelCase.
-    Supports dicts, lists, objects with .to_dict(), and primitives.
-    Handles circular references safely.
+    Recursively convert snake_case dict keys to camelCase.
+    Uses `seen` to detect true circular references. `seen` is a set of ids.
+    We add id(obj) before recursing and remove it after finishing that branch,
+    which avoids false positives on shared (non-circular) objects.
     """
     if seen is None:
         seen = set()
 
-    # Avoid infinite recursion for circular references
-    obj_id = id(struct)
-    if obj_id in seen:
-        return "<circular_reference>"
-    seen.add(obj_id)
-
     if struct is None:
         return None
 
+    # primitives — return as-is
     if isinstance(struct, (str, int, float, bool)):
         return struct
 
+    obj_id = id(struct)
+
+    # If we've already started processing this exact object on the current stack,
+    # it's a circular reference.
+    if obj_id in seen:
+        return "<circular_reference>"
+
+    # Dicts
     if isinstance(struct, dict):
-        return {snakeToCamel(k): dictKeysToCamelCase(v, seen) for k, v in struct.items()}
+        seen.add(obj_id)
+        try:
+            result = {}
+            for k, v in struct.items():
+                new_key = snakeToCamel(k) if isinstance(k, str) else k
+                result[new_key] = dictKeysToCamelCase(v, seen)
+            return result
+        finally:
+            seen.remove(obj_id)
 
+    # Lists
     if isinstance(struct, list):
-        return [dictKeysToCamelCase(item, seen) for item in struct]
+        seen.add(obj_id)
+        try:
+            return [dictKeysToCamelCase(item, seen) for item in struct]
+        finally:
+            seen.remove(obj_id)
 
-    # If the object has a to_dict method, convert and recurse
+    # Tuples -> return tuple
+    if isinstance(struct, tuple):
+        seen.add(obj_id)
+        try:
+            return tuple(dictKeysToCamelCase(item, seen) for item in struct)
+        finally:
+            seen.remove(obj_id)
+
+    # Sets -> convert to list (preserves elements, order lost)
+    if isinstance(struct, set):
+        seen.add(obj_id)
+        try:
+            return [dictKeysToCamelCase(item, seen) for item in struct]
+        finally:
+            seen.remove(obj_id)
+
+    # Objects exposing to_dict()
     if hasattr(struct, "to_dict") and callable(struct.to_dict):
-        return dictKeysToCamelCase(struct.to_dict(), seen)
+        seen.add(obj_id)
+        try:
+            return dictKeysToCamelCase(struct.to_dict(), seen)
+        finally:
+            seen.remove(obj_id)
 
-    # Unknown type
-    return str(struct)  # fallback: convert to string to avoid exceptions
+    # Fallback — stringify unknown objects
+    return str(struct)
 
 
 if __name__ == '__main__':
