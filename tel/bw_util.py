@@ -12,7 +12,7 @@ import phonenumbers
 import requests
 import xmltodict
 # from main.models import ShUser
-from sh_util.tel import cleanupPhoneNumber
+from utils.sh_util.tel import cleanupPhoneNumber
 
 try:
     import settings
@@ -22,11 +22,11 @@ except ImportError:
     import settings
 
 try:
-    from sh_util.tel import AreaCodeUnavailableError, displayNumber, validatePhoneNumber
+    from utils.sh_util.tel import AreaCodeUnavailableError, displayNumber, validatePhoneNumber
 except ImportError:
     sys.path.append("/opt/sendhub/inforeach/app")
-    from sh_util.tel import validatePhoneNumber, AreaCodeUnavailableError
-    from sh_util.tel import displayNumber
+    from utils.sh_util.tel import validatePhoneNumber, AreaCodeUnavailableError
+    from utils.sh_util.tel import displayNumber
 
 import bandwidth
 

@@ -181,7 +181,7 @@ def _resolveConnectionsOrShards(connections=None):
     """
     if connections is None:
         # Default to all shards.
-        from sh_util.sharding import ShardedResource
+        from utils.sh_util.sharding import ShardedResource
         return ShardedResource.allShardConnectionNames()
 
     else:
@@ -873,7 +873,7 @@ def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None)
 
 def multiShardExec(sql):
     """Execute a statement across all shards."""
-    from sh_util.sharding import ShardedResource
+    from utils.sh_util.sharding import ShardedResource
     from . import db_exec
     for connectionName in ShardedResource.allShardConnectionNames():
         db_exec(sql, using=connectionName)

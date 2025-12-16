@@ -106,7 +106,7 @@ def wget(
     try:
         url = normalizeUrl(url)
         logging.info('w\'%sting %s' % (requestType.lower(), url))
-        if requestType is 'GET':
+        if requestType == 'GET':
             res = opener.open(url, timeout=timeout)
 
             if asDict:

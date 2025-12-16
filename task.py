@@ -53,7 +53,7 @@ einfo: {einfo}
 '''.format(exc=exc, task_id=task_id, args=args, kwargs=kwargs, einfo=einfo)
     logging.error(body)
 
-    from sh_util.mail import sendEmail
+    from utils.sh_util.mail import sendEmail
     sendEmail(
         subject=_generateSubject(str(einfo)),
         body=body,

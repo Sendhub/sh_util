@@ -1,11 +1,11 @@
 import unittest
 from mock import patch
 import settings
-from sh_util.tel import BuyPhoneNumberFromCarrier, \
+from utils.sh_util.tel import BuyPhoneNumberFromCarrier, \
     ReleaseNumberSafely, FindPhoneNumberInAreaCode, \
     SHBandwidthClient, AreaCodeUnavailableError, \
     BWTollFreeUnavailableError, BWNumberUnavailableError
-from sh_util.tel.tel_util import SHBoughtNumberObject
+from utils.sh_util.tel.tel_util import SHBoughtNumberObject
 
 
 class TelUtilTestCases(unittest.TestCase):

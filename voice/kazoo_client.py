@@ -10,8 +10,8 @@ from urllib.parse import urlparse
 
 import kazoo.exceptions as exceptions
 import pycurl
-from sh_util.retry import retry
-from sh_util.sh_http.wget import wget
+from utils.sh_util.retry import retry
+from utils.sh_util.sh_http.wget import wget
 
 import settings
 
@@ -183,7 +183,7 @@ class KazooClient(object):
 
     def createDevice(self, type, accountId, userId, ownerId, number, username=u'', password=u''):
         assert type in (u'softphone', u'cellphone')
-        from sh_util.tel import validatePhoneNumber
+        from utils.sh_util.tel import validatePhoneNumber
 
         logging.info(u'createDevice invoked with type={},accountId={},userId={},ownerId={},username={},password={}'.format(type, accountId, userId, ownerId, number, username))
 

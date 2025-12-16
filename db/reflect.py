@@ -269,10 +269,10 @@ def discoverDependencies(tables, using='default', discovered=None):
 
     e.g.:
     main_usermessage referenced by ._____ main_usermessage_contacts
-                                    \____ main_usermessage_groups
-                                     \___ main_receipt
-                                      \__ main_block .___ etc..
-                                                      \__ etc..
+                                    |____ main_usermessage_groups
+                                    |____ main_receipt
+                                    |____ main_block    .___ etc..
+                                                        |__ etc..
     NB: That textual image is inaccurate -JT
     """
     foundAny = False

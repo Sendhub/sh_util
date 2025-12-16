@@ -9,10 +9,10 @@ from bandwidth.account import BandwidthAccountAPIException
 import settings
 
 try:
-    from sh_util.tel import AreaCodeUnavailableError
+    from utils.sh_util.tel import AreaCodeUnavailableError
 except:
     sys.path.append('/opt/sendhub/inforeach/app')
-    from sh_util.tel import AreaCodeUnavailableError
+    from utils.sh_util.tel import AreaCodeUnavailableError
 
 from bw_util import SHBandwidthClient
 from bw_util import BWTollFreeUnavailableError, BWNumberUnavailableError

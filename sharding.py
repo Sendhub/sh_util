@@ -7,7 +7,7 @@ __author__ = 'Jay Taylor [@jtaylor]'
 import pylibmc
 import logging
 import settings
-from sh_util.db import connections
+from utils.sh_util.db import connections
 from .singleton import Singleton
 from .memcache import getMemcacheClient
 from .retry import retry
@@ -270,7 +270,7 @@ class ShardedResource(object):
         """
         Query the db to determine which physical shard a user-id exists on.
         """
-        from sh_util.db import db_query
+        from utils.sh_util.db import db_query
 
         res = db_query(
             'SELECT "physicalShardId" FROM "LogicalShard" WHERE "id" = {0}' \

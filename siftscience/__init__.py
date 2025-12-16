@@ -1,7 +1,7 @@
 import settings
 import logging
 import simplejson as json
-from sh_util.retry import retry
+from utils.sh_util.retry import retry
 
 
 SIFTSCIENCE_CHOICES = (
@@ -40,7 +40,7 @@ def labelUser(userId, isBad, reason):
     """
     Send the sift science label to sift science
     """
-    from sh_util.sh_http.wget import wget
+    from utils.sh_util.sh_http.wget import wget
 
     SIFTSCIENCE_203_API_URL = 'https://api.siftscience.com/v203/'
 
