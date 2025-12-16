@@ -49,10 +49,17 @@ def getFullyQualifiedClassName(o):
 
 
 # Dynamically import a module resource.
-dynImport = lambda path: reduce(
-    lambda module, next: getattr(module, next),
-    path.split('.')[1:],
-    __import__(path[0:path.index('.')])
-)
+# dynImport = lambda path: reduce(
+#     lambda module, next: getattr(module, next),
+#     path.split('.')[1:],
+#     __import__(path[0:path.index('.')])
+# )
+
+from importlib import import_module
+
+def dynImport(path: str):
+    module_path, _, attr = path.rpartition(".")
+    module = import_module(module_path)
+    return getattr(module, attr)
 
 __all__ = ["dynImport"]
