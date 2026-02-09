@@ -1,13 +1,19 @@
 """
-siftscience
-"""
-# pylint: disable=E0611,E0401,E1101,W0703
-from sh_util.http.wget import wget
-import logging
-import settings
-import simplejson as json
-from sh_util.retry import retry
+siftscience module.
 
+Providing utilities for mapping suspension reasons and sending user labels
+to the Sift Science API.
+
+"""
+
+import logging
+
+import simplejson as json
+
+import settings
+
+from ..retry import retry
+from ..sh_http.wget import wget
 
 SIFTSCIENCE_CHOICES = (
     ('$spam', 'spam'),
@@ -22,8 +28,14 @@ SIFTSCIENCE_CHOICES = (
 
 def is_bad_reason(reason):
     """
-    Confirms that the passed in reason (which will be stored in SH db,
-    maps to a siftscience label we would consider a bad user
+    Confirming whether the provided reason is recognized as a bad reason.
+
+    Args:
+        reason: The reason entry from `SIFTSCIENCE_CHOICES` to validate.
+
+    Returns:
+        True if `reason` is a valid bad reason choice, otherwise False.
+
     """
 
     try:
@@ -36,9 +48,18 @@ def is_bad_reason(reason):
 
 def map_reason_to_sift_science_label(reason):
     """
-    Fetches the sift science label for the given suspension reason.
-    There are multiple types of spam reasons (nigerian, high_block_rate)
-    that we want to track but siftscience only needs to label them as spam.
+    Fetching the Sift Science label for the given suspension reason.
+
+    There are multiple internal spam reason variants (for example, 'nigerian' or
+    'high_block_rate') that are tracked separately but are mapped to the same
+    Sift Science label (for example, '$spam').
+
+    Args:
+        reason: The reason entry from `SIFTSCIENCE_CHOICES` to map.
+
+    Returns:
+        The corresponding Sift Science label string.
+
     """
 
     return SIFTSCIENCE_CHOICES[SIFTSCIENCE_CHOICES.index(reason)][0]
@@ -46,13 +67,23 @@ def map_reason_to_sift_science_label(reason):
 
 def label_user(user_id, is_bad, reason):
     """
-    Send the sift science label to sift science
+    Sending the label for a user to the Sift Science API.
+
+    This function is building the payload for Sift Science and POSTing the
+    label for the specified user. When `is_bad` is True, the `reason` is being
+    mapped to the appropriate Sift Science label and included in the payload.
+
+    Args:
+        user_id: The numeric identifier for the user.
+        is_bad: Boolean indicating whether the user is being labeled as bad.
+        reason: The reason entry from `SIFTSCIENCE_CHOICES` when `is_bad` is True.
+
     """
 
     siftscience_203_api_url = 'https://api.siftscience.com/v203/'
 
     if settings.SIFTSCIENCE_ENABLED != '1':
-        logging.warning('Siftscience disabled. Exiting.')
+        logging.warning(f'Siftscience disabled. Exiting.')
         return
 
     if is_bad:
@@ -60,33 +91,36 @@ def label_user(user_id, is_bad, reason):
     else:
         label = 'n/a'
 
-    logging.info('Labelling user %i as bad==%r label ==%r '
-                 'because of reason==%s', user_id, is_bad, label, reason)
+    logging.info(f'Labelling user {user_id} as bad=={is_bad} label =={label} because of reason=={reason}')
 
-    assert (is_bad is False) or (is_bad is True and is_bad_reason(reason)), \
-        '{} is not a valid reason to label as bad'.format(reason)
+    assert (is_bad is False) or (is_bad is True and is_bad_reason(reason)),  f'{reason} is not a valid reason to label as bad'
 
     post_data = {
         '$is_bad': is_bad,
         '$api_key': settings.SIFTSCIENCE_API_KEY
     }
 
-    # only add the reasons if the user is bad
+    # Adding the reasons only when the user is bad
     if is_bad:
         post_data['$reasons'] = [label]
 
     post_data = json.dumps(post_data)
 
-    @retry(3, desiredOutcome=lambda x: x is not None)
+    @retry(3, desired_outcome=lambda x: x is not None)
     def do_label_with_retry():
-        """POST labeled user to SiftScience."""
+        """
+        Posting the labeled user to the Sift Science API.
+
+        Returns:
+            True on success, or None on failure to trigger a retry.
+
+        """
         try:
-            wget('{0}users/{1}/labels'.format(siftscience_203_api_url, user_id),  # noqa
-                 request_type='POST', body=post_data)
+            wget(f'{siftscience_203_api_url}users/{user_id}/labels', request_type='POST', body=post_data)
             return True
 
         except Exception as err:
-            logging.error('Caught exception: %s, returning False', str(err))
+            logging.error(f'Caught exception: {err}, returning False')
             return None
 
     do_label_with_retry()

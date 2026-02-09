@@ -6,7 +6,10 @@ __author__ = 'Jay Taylor [@jtaylor]'
 # pylint: disable=C0103,C0103,C0301,C0415,R0913
 import logging
 import re
+
+# Note: settings import kept at module level for critical configuration
 import settings  # , time
+
 from ..text import toSingleLine
 
 
@@ -442,8 +445,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         def _findSelecting():
             """Watch for the "FROM" keyword and set a flag
             once it's been seen."""
-            isInteresting = lambda token: isinstance(token, IdentifierList) or \  # noqa
-                isinstance(token, Identifier) or isinstance(token, Function)  # noqa
+            isInteresting = lambda token: isinstance(token, IdentifierList) or isinstance(token, Identifier) or isinstance(token, Function)  # noqa
 
             found = []
 

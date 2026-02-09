@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 Real-world use case:
 --------------------
@@ -26,8 +23,6 @@ in manually.
 """
 
 __author__ = 'Jay Taylor [@jtaylor]'
-
-# pylint: disable=W0107,R0903
 
 
 def dynamically_generate_transformed_attributes(transform_fn, suffix, *attributes):  # noqa
@@ -124,22 +119,14 @@ def dynamically_generate_transformed_attributes(transform_fn, suffix, *attribute
 
     # Generate and attach "suffix" property alias for each specified attribute.
     for attr in attributes:
-        setattr(
-            GeneratedClass,
-            '{0}{1}'.format(attr, suffix) if isinstance(suffix, str) else
-            suffix(attr), generate_transformed_property(attr)
-        )
+        setattr( GeneratedClass, f'{attr}{suffix}' if isinstance(suffix, str) else suffix(attr), generate_transformed_property(attr))
 
     return GeneratedClass
 
 
 def with_str_attrs(*attributes):
     """Convenience method."""
-    return dynamically_generate_transformed_attributes(
-                                                        str,
-                                                        '_str',
-                                                        *attributes
-                                                        )
+    return dynamically_generate_transformed_attributes(str, '_str', *attributes)
 
 
 if __name__ == '__main__':

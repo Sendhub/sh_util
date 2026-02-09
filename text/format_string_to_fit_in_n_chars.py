@@ -1,7 +1,9 @@
-# encoding: utf-8
-
 """
-Textual helpers.
+Textual helpers for formatting and trimming strings.
+
+This module provides utilities for formatting strings to fit within a
+specified character limit, and for trimming tokens when formatted output
+exceeds the allowed length.
 """
 
 __author__ = 'Jay Taylor [@jtaylor]'
@@ -12,7 +14,16 @@ from functools import reduce
 
 
 def squeeze_sms_message(string, *args):
-    """Squeezes a message to fit inside 160 characters."""
+    """Squeezing a message to fit within the SMS character limit.
+
+    Args:
+        string (str): The message template to format.
+        *args: Positional arguments applied to ``string.format``.
+
+    Returns:
+        str: The formatted message, trimmed to the configured SMS length.
+    """
+
     maxLength = 160
 
     try:
@@ -24,32 +35,38 @@ def squeeze_sms_message(string, *args):
     return format_string_to_fit_in_n_chars(*([string, maxLength] + list(args)))
 
 
-def format_string_to_fit_in_n_chars(
-    string,
-    max_number_of_characters,
-    *args
-):
+def format_string_to_fit_in_n_chars(string, max_number_of_characters, *args):
     """
-    Format a string and make a valiant effort to ensure that is remains within
-    a certain maximum length.
+    Formatting a string and ensuring it remains within a maximum length.
 
-    arg1 = string to format
-    arg2 = number of characters allowed in string
-    arg[2:] = args which will be passed to str.format.
+    This function is formatting ``string`` with the provided positional
+    arguments and is attempting to trim the longest substitution tokens if
+    the result exceeds ``max_number_of_characters``.
+
+    Args:
+        string (str): The format string.
+        max_number_of_characters (int): Maximum allowed characters.
+        *args: Values to be substituted into ``string``.
+
+    Returns:
+        str: A formatted string not exceeding ``max_number_of_characters``.
+
+    Raises:
+        TypeError: If insufficient args are provided or ``string`` is longer
+            than ``max_number_of_characters``.
+        Exception: If formatting cannot be reduced to fit within the limit.
     """
+
     if len(args) == 0:
-        raise TypeError('format_string_to_fit_in_n_chars() takes 2 or more arguments ({0} given)'.format(len(args)))  # noqa
+        raise TypeError(f'format_string_to_fit_in_n_chars() takes 2 or more arguments ({len(args)} given)')  # noqa
 
     max_number_of_characters = int(max_number_of_characters)
 
-    # Validate initial conditions.
+    # Checking initial conditions.
     if len(string) > max_number_of_characters:
-        raise TypeError(
-            'format_string_to_fit_in_n_chars() argument 1 must not exceed the length indicated by argument 2 ({0} > {1}'  # noqa
-            .format(len(string), max_number_of_characters)
-        )
+        raise TypeError(f'format_string_to_fit_in_n_chars() argument 1 must not exceed the length indicated by argument 2 ({len(string)} > {max_number_of_characters})')
 
-    # First try the naiive strategy of just hoping that everything works out.
+    # First trying the naive strategy of formatting without trimming.
     test = string.format(*args)
     if len(test) <= max_number_of_characters:
         return test
@@ -60,43 +77,59 @@ def format_string_to_fit_in_n_chars(
         test = string.format(*trimmed_args)
 
     if len(test) > max_number_of_characters:
-        raise Exception(
-            'Failed to format string {0} to fit inside of {1} characters'
-            .format(string, max_number_of_characters)
-        )
+        raise Exception(f'Failed to format string {string} to fit inside of {max_number_of_characters} characters')
 
     return test
 
 
 def _trim_percentage_off_tail(s, pct):
-    """
-    Trims a string down by a specific percentage of it's original length.
+    """Trimming a string by a percentage of its original length.
+
+    Args:
+        s (str): The input string.
+        pct (float): Fraction to trim (0.0 - 1.0).
+
+    Returns:
+        str: The trimmed string, using '..' to indicate truncation when
+        applicable.
     """
     s_len = len(s)
     if s_len > 0:
         if s_len < 3:
             return s
         offset = int(math.floor(s_len - (s_len * pct)))
-        s = '{0}..'.format(s[0: offset])
+        s = f'{s[0: offset]}..'
     return s
 
 
 def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
     """
-    Trim a list of words starting with the longer words until a target
-    number of characters reduction has been reached.
+    Trimming tokens starting with the longest until a target reduction is reached.
+
+    This function is using a simple, brute-force approach to iteratively
+    shorten the longest tokens until the cumulative length reduction meets
+    ``reduce_by_n_chars``.
+
+    Args:
+        tokens (list[str]): List of strings to be considered for trimming.
+        reduce_by_n_chars (int): Number of characters to reduce in total.
+
+    Returns:
+        list[str]: A list of tokens possibly trimmed to achieve the target
+        reduction.
+
+    Raises:
+        TypeError: If ``tokens`` is empty.
     """
     # NB: this is a brute force type of approach, I'm sure it will be
-    # improved if someone spends some time on it.
+    # being used; it can be improved with further work.
     if len(tokens) == 0:
-        raise TypeError('trim_longest_tokens_to_reduce_length() does not accept empty lists')  # noqa
+        raise TypeError('trim_longest_tokens_to_reduce_length() does not accept empty lists')
 
     start_length = reduce(lambda a, b: a + len(b), tokens, 0)
     n_characters_cut = 0
     unique_tokens = set(tokens)
     step = len(tokens)
-
-    # print 'start_len=',start_length,'need_to_reduce_by=',reduce_by_n_chars
 
     shrunk = tokens
 
@@ -104,29 +137,26 @@ def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
         pct = 0.05
 
         while pct < 0.86 and n_characters_cut < reduce_by_n_chars:
-            # Calculate the index offset of the top n records desired.
+            # Calculating the index offset of the top n tokens to trim.
             n = int(math.ceil(len(unique_tokens) / (step * 1.0)))
 
-            top = sorted(unique_tokens, key=lambda x: len(x), reverse=True)[0:n]  # noqa
-            # print 'top=',top
+            top = sorted(unique_tokens, key=lambda x: len(x), reverse=True)[0:n]
+            # Printing the current top tokens being considered.
 
-            transformed = dict([(t, _trim_percentage_off_tail(t, pct)) for t in top])  # noqa
+            transformed = {t: _trim_percentage_off_tail(t, pct) for t in top}
 
-            # Reintegrate with original list.
+            # Reintegrating with the original list.
             shrunk = [transformed.get(t, t) for t in tokens]
 
-            # The doubling strategy here yields reasonable results and cuts
-            # down on the number of iterations by quite a bit.
-            # pct += pct
-
-            # Let's try a linear approach instead (slower but yields nicer
-            # and more precise results.)
+            # The doubling strategy had been considered as an optimization
+            # but a linear approach is being used instead (slower but
+            # yielding nicer and more precise results).
             pct += 0.05
 
             updated_length = reduce(lambda a, b: a + len(b), shrunk, 0)
             n_characters_cut = start_length - updated_length
 
-            # print 'numcut=',n_characters_cut
+            # Printing the number of characters cut so far.
 
         step -= 1
 

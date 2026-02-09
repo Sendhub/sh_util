@@ -1,21 +1,17 @@
-# -*- coding: utf-8 -*-
-
 """
-Fake Django request object, useful for passing serializable request-like
-objects around.
+Fake Django request object, useful for passing serializable request-like objects around.
 """
 
 __author__ = 'Jay Taylor [@jtaylor]'
-# pylint: disable=E0307,R1705
-
 
 try:
     from django.contrib.auth.models import AnonymousUser
 except ImportError:
     class AnonymousUser():
         """
-        Anonymous User class implementation.
+        Represents an anonymous user with default properties and methods.
         """
+
         id = None
         username = ''
         is_staff = False
@@ -27,11 +23,8 @@ except ImportError:
         def __init__(self):
             pass
 
-        def __unicode__(self):
-            return 'AnonymousUser'
-
         def __str__(self):
-            return str(self).encode('utf-8')
+            return 'AnonymousUser'
 
         def __eq__(self, other):
             return isinstance(other, self.__class__)
@@ -40,42 +33,42 @@ except ImportError:
             return not self.__eq__(other)
 
         def __hash__(self):
-            return 1  # instances always return the same hash value
+            return 1  # Instances are always returning the same hash value.
 
         def save(self):
             """
-            Save
+            Raising NotImplementedError when attempting to save.
             """
             raise NotImplementedError
 
         def delete(self):
             """
-            Delete
+            Raising NotImplementedError when attempting to delete.
             """
             raise NotImplementedError
 
         def set_password(self, raw_password):
             """
-            Set Password
+            Raising NotImplementedError when setting a password.
             """
             raise NotImplementedError
 
         def check_password(self, raw_password):
             """
-            Check Password
+            Raising NotImplementedError when checking a password.
             """
             raise NotImplementedError
 
         def _get_groups(self):
             """
-            Get groups
+            Returning the groups associated with the user.
             """
             return self._groups
         groups = property(_get_groups)
 
         def _get_user_permissions(self):
             """
-            Get uSer Permission
+            Raising NotImplementedError when getting user permissions.
             """
             raise NotImplementedError
         user_permissions = property(_get_user_permissions)
@@ -83,25 +76,25 @@ except ImportError:
         @staticmethod
         def get_group_permissions():
             """
-            Get group permission
+            Returning an empty set of group permissions.
             """
             return set()
 
         def get_all_permissions(self, obj=None):
             """
-            Get all permission
+            Raising NotImplementedError when getting all permissions.
             """
             raise NotImplementedError
 
         def has_perm(self, perm, obj=None):
             """
-            check permission
+            Raising NotImplementedError when checking a specific permission.
             """
             raise NotImplementedError
 
         def has_perms(self, perm_list, obj=None):
             """
-            check permission
+            Checking if the user has all permissions in the provided list.
             """
             for perm in perm_list:
                 if not self.has_perm(perm, obj):
@@ -110,40 +103,52 @@ except ImportError:
 
         def has_module_perms(self, module):
             """
-            Has module permission
+            Raising NotImplementedError when checking module permissions.
             """
             raise NotImplementedError
 
         @staticmethod
         def is_anonymous():
             """
-            check identity
+            Returning True to indicate the user is anonymous.
             """
             return True
 
         @staticmethod
         def is_authenticated():
             """
-            check if authentic
+            Returning False to indicate the user is not authenticated.
             """
             return False
 
 
 class FakeRequest():
     """
-    This encapsulates some of the static properties of a request which are
-    required for VoiceCalls to work properly.  This is required because Django
-    Request objects cannot be serialized.
+    Encapsulates static properties of a request required for VoiceCalls to work properly.
+    This is necessary because Django Request objects cannot be serialized.
     """
 
     def __init__(self, request=None, **kw):
-        """Initialize a new FakeRequest instance."""
+        """
+        Initializes a new FakeRequest instance.
+
+        Args:
+            request: The original Django request object (optional).
+            **kw: Additional keyword arguments for request attributes.
+        """
 
         def _get_attribute_value(attribute_name, default=None):
             """
-            Attempts to extract the named attribute from the request.  if the
+            Attempts to extract the named attribute from the request. If the
             attribute value is callable, the attribute will be invoked and the
             value returned.
+
+            Args:
+                attribute_name: The name of the attribute to retrieve.
+                default: The default value to return if the attribute is not found.
+
+            Returns:
+                The value of the attribute or the default value.
             """
             if (request is not None and hasattr(request, attribute_name)) or \
                     attribute_name in kw:
@@ -169,19 +174,31 @@ class FakeRequest():
             if request is None:
                 setattr(self, attr, {})
             else:
-                setattr(self, attr,
-                    dict(  # noqa
-                        (k, v) for k, v in list(getattr(request, attr).items())
-                    ))
+                setattr(self, attr, { k: v for k, v in list(getattr(request, attr).items()) })
 
     def is_secure(self):
-        """Part of django Request objects."""
+        """
+        Indicates whether the request is secure.
+
+        Returns:
+            True if the request is secure, False otherwise.
+        """
         return self._is_secure
 
     def get_host(self):
-        """Part of django Request objects."""
+        """
+        Retrieves the host of the request.
+
+        Returns:
+            The host as a string.
+        """
         return self._get_host
 
     def build_absolute_uri(self):
-        """Copy of value from original request, when possible."""
+        """
+        Retrieves the absolute URI from the original request, if available.
+
+        Returns:
+            The absolute URI as a string.
+        """
         return self._build_absolute_uri

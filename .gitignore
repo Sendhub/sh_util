@@ -1,41 +1,112 @@
-*.py[cod]
+########################
+# OS-specific
+########################
+.DS_Store
+._.DS_Store
 
-# C extensions
+########################
+# Python: Bytecode / Extensions
+########################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 *.so
 
-# Packages
+########################
+# Python: Virtual Environments
+########################
+.env
+.env/
+env/
+venv/
+.venv/
+bin/
+lib/
+lib64/
+
+########################
+# Python: Packaging / Distribution
+########################
+.Python
+build/
+dist/
+develop-eggs/
+eggs/
+parts/
+sdist/
+var/
 *.egg
-*.egg-info
-dist
-build
-eggs
-parts
-bin
-var
-sdist
-develop-eggs
+*.egg-info/
 .installed.cfg
-lib
-lib64
 
-# Installer logs
+########################
+# Python: Logs & Reports
+########################
+*.log
 pip-log.txt
+pip-delete-this-directory.txt
+celerybeat-schedule
 
-# Unit test / coverage reports
+########################
+# Python: Testing & Coverage
+########################
 .coverage
-.tox
+.tox/
+.pytest_cache/
+.cache
 nosetests.xml
+coverage.xml
+htmlcov/
+**/tests_reports/*
 
-# Translations
-*.mo
-
-# Mr Developer
+########################
+# Python: Misc Tools
+########################
 .mr.developer.cfg
 .project
 .pydevproject
+.ropeproject
 
-# OS Cache Files #
-##################
-.DS_Store
-Thumbs.db
+########################
+# Django
+########################
+*.pot
+src/local_settings.py
 
+########################
+# Documentation (Sphinx)
+########################
+docs/_build/
+
+########################
+# Frontend: Node / AngularJS / BackboneJS
+########################
+node_modules/
+bower_components/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.pnp.js
+coverage/   # JS test coverage reports
+
+########################
+# IDE / Editor Config
+########################
+.idea/
+.vscode/
+
+# Workspace-specific additions
+# pyenv/virtualenv helper
+.python-version
+
+# Python type check / analysis caches
+.mypy_cache/
+.pyre/
+.pytype/
+
+# environment files
+.env.*
+
+.ruff_cache/

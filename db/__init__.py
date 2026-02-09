@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """Django database tools."""
 
 __author__ = 'Jay Taylor [@jtaylor]'
@@ -22,7 +20,7 @@ if _use_django_driver():
 elif _use_sqlalchemy_driver():
     from .drivers.sa import *  # noqa
 else:
-    raise Exception('Unrecognized sh_util db driver: {0}'.format(settings.SH_UTIL_DB_DRIVER))  # noqa
+    raise Exception(f'Unrecognized sh_util db driver: {settings.SH_UTIL_DB_DRIVER}')  # noqa
 
 
 def begin(using):
@@ -36,5 +34,5 @@ def commit(using):
 
 
 def rollback(using):
-    """Commit a transaction."""
+    """Rollback a transaction."""
     return db_exec('ROLLBACK', using=using)  # noqa

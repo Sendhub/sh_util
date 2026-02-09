@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
-
 """Django sh_util database driver."""
 
 __author__ = 'Jay Taylor [@jtaylor]'
-# pylint: disable=C0415,C0103
+
 import logging
+
 import settings
 
 
@@ -39,16 +38,13 @@ def getRealShardConnectionName(using):
     return using
 
 
-def db_query(sql, args=None, as_dict=False, using='default',
-             force=False, debug=False):
+def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=False):
     """
-    Execute raw select queries.  Not tested or guaranteed to work with any
-    other type of query.
+    Execute raw select queries.  Not tested or guaranteed to work with any other type of query.
 
-    @param force boolean Defaults to False. Whether or not to force the
-    named connection to be used.
+    @param force boolean Defaults to False. Whether or not to force the named connection to be used.
     """
-    from ..import DEBUG
+    from .. import DEBUG
 
     if args is None:
         args = tuple()
@@ -57,8 +53,7 @@ def db_query(sql, args=None, as_dict=False, using='default',
     cursor = connections()[using].cursor()
 
     if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s',
-                     str(using), str(sql))
+        logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s', str(using), str(sql))
 
     cursor.execute(sql, args)
 
@@ -71,17 +66,15 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
     """
     Execute a raw query on the requested database connection.
 
-    @param force boolean Defaults to False. Whether or not to force the
-    named connection to be used.
+    @param force boolean Defaults to False. Whether or not to force the named connection to be used.
     """
-    from ..import DEBUG
+    from .. import DEBUG
 
     if args is None:
         args = tuple()
 
     if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_EXEC, using=%s ::\n%s',
-                     str(using), str(sql))
+        logging.info(f'-- [DEBUG] DB_EXEC, using={using} ::\n{sql}')
 
     cursor = connections()[using].cursor()
     result = cursor.execute(sql, args)
@@ -101,8 +94,7 @@ _djangoConfigToPsql = (
 
 def getPsqlConnectionString(connectionName, secure=True):
     """Generate a PSQL-format connection string for a given connection."""
-    assert connectionName in settings.DATABASES, \
-        'Requested connection missing: {0}'.format(connectionName)
+    assert connectionName in settings.DATABASES,  f'Requested connection missing: {connectionName}'
 
     dbConfig = settings.DATABASES[connectionName]
 
@@ -110,7 +102,7 @@ def getPsqlConnectionString(connectionName, secure=True):
 
     filtered = [key__ for key__ in _djangoConfigToPsql if key__[0] in dbConfig and dbConfig[key__[0]] is not None and dbConfig[key__[0]] != '']  # noqa
 
-    psqlTuples = ['{0}={1}'.format(key_param[1], dbConfig[key_param[0]]) for key_param in filtered]  # noqa
+    psqlTuples = [f'{key_param[1]}={dbConfig[key_param[0]]}' for key_param in filtered]  # noqa
 
     out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
     return out

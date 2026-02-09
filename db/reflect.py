@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
-
 """Postgres-specific meta-data reflection querying tools."""
 
 __author__ = 'Jay Taylor [@jtaylor]'
 
-import re
 import logging
+import re
+
 from ..functional import memoize
 
 
@@ -57,7 +56,7 @@ def updatePrimaryKeyId(table, currentId, newId, using):
     pkColumns = getPrimaryKeyColumns(table)
     assert len(pkColumns) == 1, \
         'updatePrimaryKeyId can only operate on tables with 1 primary key, ' \
-        'but table "{0}" had {1}'.format(table, len(pkColumns))
+        'but table "{}" had {}'.format(table, len(pkColumns))
     discoveredRelations = discoverDependencies([table])
     # NB: If the table is not in the returned dict,
     # then there are no dependencies.
@@ -98,7 +97,7 @@ def isNullable(table, column, using='default'):
     sql = '''
         SELECT "is_nullable"
         FROM "information_schema"."columns"
-        WHERE "table_name" = '{0}' AND "column_name" = '{1}'
+        WHERE "table_name" = '{}' AND "column_name" = '{}'
     '''.format(table.replace('"', ''), column.replace("'", ''))
 
     result = db_query(sql, using=using)
@@ -268,7 +267,7 @@ def findTablesWithUserIdColumn(using='default'):
 
 @memoize
 def discoverDependencies(tables, using='default', discovered=None):
-    """
+    r"""
     Build an inverse dependency mapping of new pairs of (table, column) for the
     requested tables.
 
@@ -284,10 +283,10 @@ def discoverDependencies(tables, using='default', discovered=None):
 
     e.g.:
     main_usermessage referenced by ._____ main_usermessage_contacts
-                                    \____ main_usermessage_groups  # noqa
-                                     \___ main_receipt  # noqa
-                                      \__ main_block .___ etc..  # noqa
-                                                      \__ etc..  # noqa
+                                    |____ main_usermessage_groups
+                                    |____ main_receipt
+                                    |____ main_block    .___ etc..
+                                                        |__ etc..
     NB: That textual image is inaccurate -JT
     """
     foundAny = False

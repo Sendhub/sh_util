@@ -1,45 +1,40 @@
 """
+Utility functions for performing simple HTTP requests similar to wget.
+
 @author Jay Taylor [@jtaylor]
 @date 2010-11-01
 
 Copyright Jay Taylor 2010
 """
-# pylint: disable=W0107,R0913,R0914,R1721,R0123,W1201,C0415,W0707,R0912
-import socket
-import logging
 
-# For G-Zip decompression.
 import gzip
 import io
+import logging
 import re
-import urllib.parse
-import urllib.request
-import urllib.error
+import socket
+import urllib
 
-socket.setdefaulttimeout(30)
-
-#  USER_AGENT = 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; ' \
-#    'rv:1.9.0.10) Gecko/2009042316 Firefox/3.0.10)'
-USER_AGENT = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; ' \
-    'rv:1.9.2.15) Gecko/20110303 Firefox/3.6.15'
+USER_AGENT = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2.15) Gecko/20110303 Firefox/3.6.15'
 
 
 class WgetError(Exception):
-    """WgetError class."""
+    """
+    WgetError is being raised for wget-related errors.
+
+    """
     pass
 
 
-_urlRe = re.compile(
-    r'^https?://(?P<host>[^/:]+(?P<port>[1-9][0-9]*)?)(?P<path>/.*)?$'
-)
+_urlRe = re.compile(r'^https?://(?P<host>[^/:]+(?P<port>[1-9][0-9]*)?)(?P<path>/.*)?$')
 
 
 def normalize_url(url):
     """
-    Normalize a url to be properly url-encoded.
+    Normalize a URL to be properly URL-encoded.
 
-    @see http://stackoverflow.com/a/120959/293064 and
-        http://docs.python.org/library/urlparse.html for more info.
+    See also: http://stackoverflow.com/a/120959/293064 and
+    http://docs.python.org/library/urlparse.html for more info.
+
     """
     parts = urllib.parse.urlparse(url)
     path = urllib.parse.quote_plus(parts.path, safe='&=/.')
@@ -58,7 +53,10 @@ def normalize_url(url):
 
 
 def wget_opener(referer='http://www.google.com/GOBBLEGOBBLEGOBBLE'):
-    """Custom opener."""
+    """
+    Create and return a custom urllib opener with sensible headers.
+
+    """
     opener = urllib.request.build_opener()
     opener.addheaders = [
         ('User-agent', USER_AGENT),
@@ -80,8 +78,9 @@ def wget(
     as_dict=False
 ):
     """
-    Execute an HTTP request.  This is called 'wget' but it is really more like
-    curl..
+    Execute an HTTP request. This function is being implemented as a lightweight
+    helper similar to wget/curl.
+
     """
     timeout = timeout if timeout is not None else socket.getdefaulttimeout()
 
@@ -103,8 +102,8 @@ def wget(
 
     try:
         url = normalize_url(url)
-        logging.info('w\'%sting %s' % (request_type.lower(), url))
-        if request_type == 'GET':  # noqa
+        logging.info(f"w'{request_type.lower()}ting {url}")
+        if request_type == 'GET':
             res = opener.open(url, timeout=timeout)
 
             if as_dict:
@@ -114,14 +113,14 @@ def wget(
                 received_data = res.read()
         else:
             if as_dict:
-                # this is just because I haven't implemented this functionality
-                # yet for calls that don't use urllib
+                # This is being used because the functionality is not yet
+                # being implemented for calls that are not using urllib
                 raise WgetError('as_dict can only be True for GETs')
 
             import http.client
             parsed = _urlRe.match(url)
             if not parsed:
-                raise WgetError('Invalid hostname: {0}'.format(url))
+                raise WgetError(f'Invalid hostname: {url}')
 
             maybe_port = parsed.group('port')
             port = int(maybe_port) if maybe_port is not None else \
@@ -144,10 +143,10 @@ def wget(
             resp = conn.getresponse()
             received_data = resp.read()
         try:
-            compressedstream = io.StringIO(received_data)
+            compressedstream = io.BytesIO(received_data)
             gzipper = gzip.GzipFile(fileobj=compressedstream)
             received_data = gzipper.read()
-        except IOError:
+        except OSError:
             pass
 
         return received_data
@@ -160,4 +159,4 @@ def wget(
                 headers=headers,
                 num_tries=num_tries - 1
             )
-        raise WgetError(url + b' failed, ' + str(_e))
+        raise WgetError(f"{url} failed, {_e}") from _e

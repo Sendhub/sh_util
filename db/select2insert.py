@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 Utility to enable generation of SELECT SQL which executes to INSERT SQL.
 
@@ -8,8 +5,6 @@ NB: Only tested for compatibility with Postgres.
 """
 
 __author__ = 'Jay Taylor [@jtaylor]'
-# pylint: disable=C0415,C0103
-
 
 def select2insert(table, description, whereClause=None):
     """
@@ -51,15 +46,15 @@ def select2insert(table, description, whereClause=None):
     || \\',\\' || quote_nullable("date_joined") || \\');\\' FROM "auth_user";'
 
     """
-    columns = ','.join(['"{0}"'.format(tup[0]) for tup in description])
+    columns = ','.join([f'"{tup[0]}"' for tup in description])
 
-    values = " || ',' || ".join(['quote_nullable("{0}")'.format(tup[0]) for tup in description])  # noqa
+    values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
     if whereClause is not None and \
             not whereClause.lower().strip().startswith('where '):
-        whereClause = 'WHERE {0}'.format(whereClause)
+        whereClause = f'WHERE {whereClause}'
 
-    where = '{0}'.format(whereClause) if whereClause is not None else ''
+    where = f'{whereClause}' if whereClause is not None else ''
 
     intermediateSql = \
         '''SELECT 'INSERT INTO "{table}" ({columns}) VALUES
@@ -74,13 +69,13 @@ def select2multiInsert(using, table, description, whereClause=None):
     multi-insert statement."""
     from . import db_query
 
-    values = " || ',' || ".join(['quote_nullable("{0}")'.format(tup[0]) for tup in description])  # noqa
+    values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
     if whereClause is not None and \
             not whereClause.lower().strip().startswith('where '):
-        whereClause = 'WHERE {0}'.format(whereClause)
+        whereClause = f'WHERE {whereClause}'
 
-    where = '{0}'.format(whereClause) if whereClause is not None else ''
+    where = f'{whereClause}' if whereClause is not None else ''
 
     intermediateSql = \
         '''SELECT '(' || {values} || ')' FROM
@@ -90,7 +85,7 @@ def select2multiInsert(using, table, description, whereClause=None):
     if len(actualValues) == 0:
         return None
 
-    columns = ','.join(['"{0}"'.format(tup[0]) for tup in description])
+    columns = ','.join([f'"{tup[0]}"' for tup in description])
 
     finalSql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};' \
         .format(table=table, columns=columns, actualValues=actualValues)

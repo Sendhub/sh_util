@@ -1,24 +1,20 @@
-# encoding: utf-8
+"""
+    Phone number management abstraction layer
+"""
 
-"""
-Phone number management abstraction layer
-"""
+import logging
 
 import settings
-import logging
-from .bw_util import SHBandwidthClient, BandwidthNumberObject
-from .bw_util import BandwidthAvailablePhoneNumber
-from .bw_util import BWTollFreeUnavailableError
-from .twilio_util import twilioBuyPhoneNumber, twilioFindNumberInAreaCode
-from .twilio_util import AreaCodeUnavailableError
+
+from .bw_util import BandwidthAvailablePhoneNumber, BandwidthNumberObject, BWTollFreeUnavailableError, SHBandwidthClient
+from .twilio_util import AreaCodeUnavailableError, twilioBuyPhoneNumber, twilioBuyTollFreePhoneNumber, twilioFindNumberInAreaCode, twilioFindTollFreeNumberInAreaCode
 
 
 class SHBoughtNumberObject:
     """
-       returns an object with number and sid
-          (sid is not used)
-       to be compatible with twilio number object
-       to minimize changes
+       Returns an object with number and sid (sid is not used)
+       - Compatible with twilio number object
+       - Minimizing changes
     """
     def __init__(self, number, sid, gateway):
         self.phone_number = number
@@ -28,7 +24,7 @@ class SHBoughtNumberObject:
 
 class ReleaseNumberSafely:
     """
-        wrapper that releases numbers back to the carrier.
+        Wrapper that releases numbers back to the carrier.
     """
     def __init__(self, number, gateway, sid):
         self.number = number
@@ -37,58 +33,56 @@ class ReleaseNumberSafely:
 
     def __call__(self):
         '''
-        releases the number back to carrier
-        :return:
-            True if successfully released
-            False otherwise
+        Releasing the number back to carrier
+
+        Returns:
+            deleted bool: If the number was successfully released then True or else False.
         '''
         if self.gateway == settings.SMS_GATEWAY_TWILIO:
             return self._twilio_safe_number_release()
         elif self.gateway == settings.SMS_GATEWAY_BANDWIDTH:
             return self._bandwidth_safe_number_release()
         else:
-            logging.info('Invalid Carrier {} for number release'.
-                         format(self.gateway))
+            logging.info(f"Invalid Carrier {self.gateway} for number release")
+
         return False
 
     def _twilio_safe_number_release(self):
-        '''
-        Looks up this number on twilio and releases if the app sid matches
-        the app sid configured for this environment.
-        :return:
-        '''
+        """
+        Looks up this number on twilio and releases if the app sid matches the app sid configured for this environment.
+
+        Returns:
+            deleted bool: If the number was successfully released then True or else False.
+        """
+
         deleted = False
         try:
             nbr_object = settings.TWILIO_CLIENT.phone_numbers.get(self.sid)
 
             if nbr_object.voice_application_sid == settings.TWILIO_APP_SID:
-                logging.info('Releasing number: '
-                             '{}'.format(nbr_object.phone_number))
+                logging.info(f"Releasing number: {nbr_object.phone_number}")
                 nbr_object.delete()
                 deleted = True
         except Exception as e:
-            logging.warning(
-                'Unable to delete number {} on twilio: '
-                '{}'.format(self.number, e))
+            logging.warning(f"Unable to delete number {self.number} on twilio: {e}")
 
         return deleted
 
     def _bandwidth_safe_number_release(self):
-        '''
-        Looks up this number on Bandwidth and releases the number
-        the app sid configured for this environment. APP ID will be
-        added by BW client based on configuration so staging wont
-        remove prod and vice-versa.
-        :return:
-        '''
+        """
+        Looks up this number on Bandwidth and releases the number the app sid configured for this environment.
+        APP ID will be added by BW client based on configuration so staging wont remove prod and vice-versa.
+
+        Returns:
+            deleted bool: If the number was successfully released then True or else False.
+        """
+
         deleted = False
         try:
             SHBandwidthClient().release_phone_number(self.number)
             deleted = True
         except Exception as e:
-            logging.warning(
-                'Unable to delete number {} on Bandwidth: '
-                '{}'.format(self.number, e))
+            logging.warning(f"Unable to delete number {self.number} on Bandwidth: {e}")
 
         return deleted
 
@@ -97,61 +91,42 @@ class BuyPhoneNumberFromCarrier:
     """
         wrapper that buys phone numbers from the carrier.
     """
-    def _sendhub_buy_number(self, gateway, sid, area_code,
-                            country_code, phone_number,
-                            toll_free, user):
+    def _sendhub_buy_number(self, gateway, sid, area_code, country_code, phone_number, toll_free, user):
         """
-           router that routes calls to the appropriate carrier-specific driver - internal only.
+           Router that routes calls to appropriate carrier specific driver - internal only.
         """
+
         nbr_obj = None
+
         if gateway == settings.SMS_GATEWAY_TWILIO:
-            nbr_obj = twilioBuyPhoneNumber(
-                twilioClient=settings.TWILIO_CLIENT,
-                appSid=sid,
-                areaCode=area_code,
-                countryCode=country_code,
-                phoneNumber=phone_number
-            )
+            nbr_obj = self._twilio_buy_number(sid, area_code, country_code='US', phone_number=phone_number, toll_free=False)
         elif gateway == settings.SMS_GATEWAY_BANDWIDTH:
-            nbr_obj = self._bandwidth_buy_number(area_code, country_code,
-                                                 phone_number, toll_free,
-                                                 user)
+            nbr_obj = self._bandwidth_buy_number(area_code, country_code, phone_number, toll_free, user)
         else:
-            logging.info('Invalid gateway {} to buy a number'.
-                         format(gateway))
+            logging.info(f'Invalid gateway {gateway} to buy a number')
+
+        logging.info(f"Purchased Number Object: {nbr_obj} and Gateway: {gateway}")
 
         if nbr_obj:
-            logging.info('buy phone number %s', str(nbr_obj.phone_number))
-            return SHBoughtNumberObject(
-                nbr_obj.phone_number,
-                nbr_obj.sid,
-                gateway
-            )
-        return
+            return nbr_obj
 
-    def __call__(self, gateway, sid, area_code=None,
-                 country_code='US', phone_number=None,
-                 toll_free=False, user=None, alt_gateway=False):
+
+    def __call__(self, gateway, sid, area_code=None, country_code='US', phone_number=None, toll_free=False, user=None, alt_gateway=False):
         """
-            cycles through supported gateways.
-            tries preferred gateway first and then tries alternate gateway
+            Cycles through supported gateways..
+            Tries preferred gateway first and then tries alternate gateway
         """
         if gateway not in settings.SUPPORTED_GATEWAYS:
-            raise AreaCodeUnavailableError(
-                'Invalid gateway: {}'.format(gateway)
-            )
+            raise AreaCodeUnavailableError(f'Invalid gateway: {gateway}')
 
-        alternate_gateways = [gw for gw in settings.SUPPORTED_GATEWAYS
-                              if gw != gateway]
+        alternate_gateways = [gw for gw in settings.SUPPORTED_GATEWAYS if gw != gateway]
 
         nbr_obj = None
         exception_msg = None
         try:
-            nbr_obj = self._sendhub_buy_number(
-                gateway, sid, area_code, country_code,
-                phone_number, toll_free, user
-            )
-        # Only for area codes specifics... not for toll-free or
+            nbr_obj = self._sendhub_buy_number(gateway, sid, area_code, country_code, phone_number, toll_free, user)
+            return nbr_obj
+        # only for area codes specifics... not for toll-free or
         # complete number.
         # Bandwidth driver raises different exceptions for different
         # error cases and area code only should be caught
@@ -159,24 +134,18 @@ class BuyPhoneNumberFromCarrier:
         # number bought case rather returns None
         except AreaCodeUnavailableError as e:
             exception_msg = e
-            logging.info('Unable to buy a number, exception: {}, '
-                         'gateway: {}'.format(exception_msg, gateway))
+            logging.info(f'Unable to buy a number, exception: {exception_msg}, gateway: {gateway}')
 
             # if backup GW should be tried
             if not alt_gateway:
                 raise
 
             for a_gateway in alternate_gateways:
-                logging.info('trying alternate gateway: {}'.format(a_gateway))
+                logging.info(f'Trying alternate gateway: {a_gateway}')
                 try:
-                    nbr_obj = self._sendhub_buy_number(
-                        a_gateway, sid, area_code, country_code,
-                        phone_number, toll_free, user
-                    )
+                    nbr_obj = self._sendhub_buy_number(a_gateway, sid, area_code, country_code, phone_number, toll_free, user)
                 except AreaCodeUnavailableError as e:
-                    logging.info('Unable to buy number alternate gateway, '
-                                 'exception: {}, gateway: {}'.
-                                 format(e, a_gateway))
+                    logging.info(f'Unable to buy number alternate gateway, exception: {e}, gateway: {a_gateway}')
                     pass
                 else:
                     return nbr_obj
@@ -191,85 +160,78 @@ class BuyPhoneNumberFromCarrier:
 
         # number isn't available, raise an exception for upper layers
         # that are dependent on this exception
-        raise AreaCodeUnavailableError('{}'.format(exception_msg))
+        raise AreaCodeUnavailableError(f'{exception_msg}')
 
-    def _bandwidth_buy_number(self, area_code, country_code='US',
-                              phone_number=None, toll_free=False,
-                              user=None):
+    def _bandwidth_buy_number(self, area_code, country_code='US', phone_number=None, toll_free=False, user=None):
         """
-            makes a call to the appropriate function to buy
-            a regular or toll-free phone number
+            Makes a call to appropriate function to buy a regular or toll free phone number
         """
         bw_client = SHBandwidthClient()
         if toll_free:
-            number = bw_client.buy_toll_free_number(
-                user_id=user
-            )
+            number = bw_client.buy_toll_free_number(quantity=1, pattern=area_code, site_id=settings.BW_SITE_ID, user_id=user)
         else:
-            number = bw_client.buy_phone_number(
-                phone_number=phone_number,
-                area_code=area_code,
-                user_id=user,
-                country_code=country_code
-            )
+            number, sid = bw_client.buy_phone_number(phone_number=phone_number, area_code=area_code, user_id=user, country_code=country_code)
 
-        return BandwidthNumberObject(number, None)
+        return BandwidthNumberObject(number, sid)
+
+    def _twilio_buy_number(self, sid, area_code, country_code='US', phone_number=None, toll_free=False):
+        """
+            Making a call to appropriate function to buy a regular or toll free phone number.
+        """
+        if toll_free:
+            number = twilioBuyTollFreePhoneNumber(twilioClient=settings.TWILIO_CLIENT, appSid=settings.TWILIO_APP_SID_STAGING, pattern=area_code, countryCode='US', phoneNumber=phone_number)
+        else:
+            number = twilioBuyPhoneNumber(twilioClient=settings.TWILIO_CLIENT, appSid=sid, areaCode=area_code, countryCode=country_code, phoneNumber=phone_number)
+
+        return number
 
 
 class FindPhoneNumberInAreaCode:
     """
-        wrapper that finds phone numbers from the carrier
-        in a given area code.
+        Wrapper that finds phone numbers from the carrier in a given area code.
     """
 
-    def __call__(self, gateway, area_code=None,
-                 country_code='US', quantity=4,
-                 toll_free=False, toll_free_area_code='8**'):
+    def __call__(self, gateway, area_code=None, country_code='US', quantity=4, toll_free=False, toll_free_area_code=None):
         """
-           router that routes calls to the appropriate carrier-specific driver.
+           Router that routes calls to appropriate carrier specific driver.
+        """
 
-        """
         if gateway == settings.SMS_GATEWAY_TWILIO:
-            return twilioFindNumberInAreaCode(
-                twilioClient=settings.TWILIO_CLIENT,
-                areaCode=area_code,
-                countryCode=country_code
-            )
-        elif gateway == settings.SMS_GATEWAY_BANDWIDTH:
             if toll_free:
-                # TODO: add support for pattern via portal
                 try:
-                    avail_numbers = SHBandwidthClient().\
-                        search_available_toll_free_number(
-                        quantity=quantity,
-                        pattern=str(toll_free_area_code[:-1])+'*'
-                    )
-                    logging.info('avail toll free numbers are : %r',
-                                 avail_numbers)
-                except BWTollFreeUnavailableError as e:
-                    logging.info('exception {} while searching for toll-free '
-                                 'numbers'.format(e))
+                    avail_numbers = twilioFindTollFreeNumberInAreaCode(settings.TWILIO_CLIENT, pattern=toll_free_area_code, countryCode='US', max_limit=quantity)
+                except AreaCodeUnavailableError as e:
+                    logging.info(f"Exception {e} while searching for toll-free numbers which contain: {toll_free_area_code}")
                     avail_numbers = []
             else:
                 try:
-                    avail_numbers = SHBandwidthClient().find_number_in_area_code(  # noqa
-                        area_code=area_code,
-                        country_code=country_code,
-                        quantity=quantity
-                    )
-                    logging.info('avail numbers in area code are : %r',
-                                 avail_numbers)
+                    avail_numbers = twilioFindNumberInAreaCode(twilioClient=settings.TWILIO_CLIENT, areaCode=area_code, countryCode=country_code, max_limit=quantity, only_list=False)
                 except AreaCodeUnavailableError as e:
-                    logging.info('exception {} while searching for numbers '
-                                 'in area code: {}'.format(e, area_code))
+                    logging.info(f"Exception {e} while searching for numbers in area code: {area_code}")
+                    avail_numbers = []
+
+            # BandwidthAvailablePhoneNumber similar implementation is not required for Twilio as the objects contain the necessary information
+
+            return avail_numbers
+
+        elif gateway == settings.SMS_GATEWAY_BANDWIDTH:
+            if toll_free:
+                try:
+                    avail_numbers = SHBandwidthClient().search_available_toll_free_number(pattern=toll_free_area_code, quantity=quantity)
+                except BWTollFreeUnavailableError as e:
+                    logging.info(f"Exception {e} while searching for toll-free numbers with pattern: {toll_free_area_code}")
+                    avail_numbers = []
+            else:
+                try:
+                    avail_numbers = SHBandwidthClient().find_number_in_area_code(area_code=area_code, country_code=country_code, quantity=quantity)
+                except AreaCodeUnavailableError as e:
+                    logging.info(f"Exception {e} while searching for numbers in area code: {area_code}")
                     avail_numbers = []
 
             if not isinstance(avail_numbers, list):
-                avail_numbers = [avail_numbers]  # convert to list
+                avail_numbers = [avail_numbers]
 
-            return [BandwidthAvailablePhoneNumber(number,country_code) for number in avail_numbers]  # noqa
-
+            return [BandwidthAvailablePhoneNumber(number) for number in avail_numbers]
         else:
-            logging.info('Invalid Carrier {} to search a number'.
-                         format(gateway))
+            logging.info(f"Invalid Carrier {gateway} to search a number")
             return []

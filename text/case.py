@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
 Convert camel-case to snake-case in python.
 
@@ -39,9 +37,11 @@ __author__ = 'Jay Taylor [@jtaylor]'
 
 import re
 
-
 _underscorer1 = re.compile(r'(.)([A-Z][a-z]+)')
 _underscorer2 = re.compile('([a-z0-9])([A-Z])')
+
+
+_snakeFinder = re.compile(r'_(\w)')
 
 
 def camelToSnake(s):
@@ -51,9 +51,6 @@ def camelToSnake(s):
     """
     subbed = _underscorer1.sub(r'\1_\2', s)
     return _underscorer2.sub(r'\1_\2', subbed).lower()
-
-
-_snakeFinder = re.compile(r'_(\w)')
 
 
 def snakeToCamel(s):
@@ -97,8 +94,7 @@ def dictKeysToSnakeCase(struct):
 
     elif t is dict or hasattr(struct, 'to_dict'):
 
-        # if the object is not a dictionary but knows how to transform
-        # into a dict, then do so
+        # If the object is not a dictionary but knows how to transform into a dict, then do so
         if t is not dict:
             struct = struct.to_dict()
 
@@ -114,41 +110,79 @@ def dictKeysToSnakeCase(struct):
         return None
 
     else:
-        raise Exception(
-            '_dictKeysToSnakeCase: unsupported type `{0}\''.format(t)
-        )
+        raise Exception(f"_dictKeysToSnakeCase: unsupported type `{t}\'")
 
 
-def dictKeysToCamelCase(struct):
+def dictKeysToCamelCase(struct, seen=None):
     """
-    Recursively convert all snake_case dict keys to be CamelCase.
+    Recursively converting snake_case dict keys to camelCase.
+
+    Uses `seen` to detect true circular references. `seen` is a set of ids.
+    We are adding `id(obj)` before recursing and removing it after finishing that branch, which is avoiding false positives on shared (non-circular) objects.
     """
-    t = type(struct)
 
-    if t is str or t is int or t is bool or t is float:
-        return struct
+    if seen is None:
+        seen = set()
 
-    elif t is dict or hasattr(struct, 'to_dict'):
-
-        # if the object is not a dictionary but knows how to transform
-        # into a dict, then do so
-        if t is not dict:
-            struct = struct.to_dict()
-
-        for k, v in list(struct.items()):
-            del struct[k]
-            struct[snakeToCamel(k)] = dictKeysToCamelCase(v)
-        return struct
-
-    elif t is list or hasattr(struct, '__iter__'):
-        return [dictKeysToCamelCase(item) for item in struct]
-
-    elif struct is None:
+    if struct is None:
         return None
-    else:
-        raise Exception(
-            'dictKeysToCamelCase: unsupported type `{0}\''.format(t)
-        )
+
+    # Returning primitives as-is
+    if isinstance(struct, (str, int, float, bool)):
+        return struct
+
+    obj_id = id(struct)
+
+    # Detecting circular references on the current stack
+    if obj_id in seen:
+        return "<circular_reference>"
+
+    # Handling dicts
+    if isinstance(struct, dict):
+        seen.add(obj_id)
+        try:
+            result = {}
+            for k, v in struct.items():
+                new_key = snakeToCamel(k) if isinstance(k, str) else k
+                result[new_key] = dictKeysToCamelCase(v, seen)
+            return result
+        finally:
+            seen.remove(obj_id)
+
+    # Handling lists
+    if isinstance(struct, list):
+        seen.add(obj_id)
+        try:
+            return [dictKeysToCamelCase(item, seen) for item in struct]
+        finally:
+            seen.remove(obj_id)
+
+    # Returning tuples
+    if isinstance(struct, tuple):
+        seen.add(obj_id)
+        try:
+            return tuple(dictKeysToCamelCase(item, seen) for item in struct)
+        finally:
+            seen.remove(obj_id)
+
+    # Converting sets to lists (preserving elements; order may be lost)
+    if isinstance(struct, set):
+        seen.add(obj_id)
+        try:
+            return [dictKeysToCamelCase(item, seen) for item in struct]
+        finally:
+            seen.remove(obj_id)
+
+    # Handling objects exposing `to_dict()`
+    if hasattr(struct, "to_dict") and callable(struct.to_dict):
+        seen.add(obj_id)
+        try:
+            return dictKeysToCamelCase(struct.to_dict(), seen)
+        finally:
+            seen.remove(obj_id)
+
+    # Stringifying unknown objects
+    return str(struct)
 
 
 if __name__ == '__main__':
