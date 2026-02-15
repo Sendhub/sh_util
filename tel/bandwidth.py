@@ -55,12 +55,15 @@ def store_purchase(db_conn, phone_number: str, metadata: Dict) -> int:
     """
     if isinstance(db_conn, sqlite3.Connection):
         cur = db_conn.cursor()
-        cur.execute(
-            "INSERT INTO purchases (phone_number, metadata) VALUES (?, ?);",
-            (phone_number, str(metadata)),
-        )
-        db_conn.commit()
-        return cur.lastrowid
+        try:
+            cur.execute(
+                "INSERT INTO purchases (phone_number, metadata) VALUES (?, ?);",
+                (phone_number, str(metadata)),
+            )
+            db_conn.commit()
+            return cur.lastrowid
+        finally:
+            cur.close()
     else:
         # duck-typed generic DB object, assume execute() returns a rowid attribute or similar
         res = db_conn.execute(

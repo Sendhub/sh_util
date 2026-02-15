@@ -109,9 +109,11 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     else:
         resultProxy = ScopedSessions[using]().execute(clause)
 
-    res = _dictfetchall(resultProxy) if as_dict is True else resultProxy.fetchall()  # noqa
-    resultProxy.close()
-    return res
+    try:
+        res = _dictfetchall(resultProxy) if as_dict is True else resultProxy.fetchall()  # noqa
+        return res
+    finally:
+        resultProxy.close()
 
 
 def db_exec(sql, args=None, using='default', force=False, debug=False):
