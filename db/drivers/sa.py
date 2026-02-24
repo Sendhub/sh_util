@@ -5,9 +5,8 @@ __author__ = 'Jay Taylor [@jtaylor]'
 import logging
 import re
 
-from sqlalchemy.sql.expression import bindparam, text
-
 import settings
+from sqlalchemy.sql.expression import bindparam, text
 
 # _argRe = re.compile(r'([^%])%s')
 _argRe = re.compile(r'(?<!%)%s|(\?)')
@@ -94,6 +93,18 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     if force is False:
         using = getRealShardConnectionName(using)
 
+    # Safety net: if callers request 'default' but only a non-default connection
+    # was initialized (e.g., read_slave), fall back to the first available session.
+    if using == 'default' and using not in ScopedSessions:
+        fallback = next(iter(ScopedSessions), None)
+        if fallback is not None:
+            logging.warning(
+                "Requested DB session '%s' not configured; falling back to '%s'",
+                using,
+                fallback,
+            )
+            using = fallback
+
     if DEBUG is True or debug is True:
         logging.debug(f'-- [DEBUG] DB_QUERY, using={using} ::\n{sql} {args}')
 
@@ -137,6 +148,16 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
 
     if force is False:
         using = getRealShardConnectionName(using)
+
+    if using == 'default' and using not in ScopedSessions:
+        fallback = next(iter(ScopedSessions), None)
+        if fallback is not None:
+            logging.warning(
+                "Requested DB session '%s' not configured; falling back to '%s'",
+                using,
+                fallback,
+            )
+            using = fallback
 
     if DEBUG is True or debug is True:
         logging.debug('-- [DEBUG] DB_EXEC, using={using} ::\n{sql}')
