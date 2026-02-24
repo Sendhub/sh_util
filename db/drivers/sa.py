@@ -93,17 +93,21 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     if force is False:
         using = getRealShardConnectionName(using)
 
-    # Safety net: if callers request 'default' but only a non-default connection
-    # was initialized (e.g., read_slave), fall back to the first available session.
-    if using == 'default' and using not in ScopedSessions:
+    # Safety net: avoid KeyError when the requested connection name isn't configured.
+    # Common in deployments where only one bind is initialized or names differ.
+    if using not in ScopedSessions:
         fallback = next(iter(ScopedSessions), None)
-        if fallback is not None:
-            logging.warning(
-                "Requested DB session '%s' not configured; falling back to '%s'",
-                using,
-                fallback,
+        if fallback is None:
+            raise RuntimeError(
+                "No database sessions configured (ScopedSessions is empty). "
+                "Check DATABASE_URL / DATABASE_URLS and DB initialization logs."
             )
-            using = fallback
+        logging.warning(
+            "Requested DB session '%s' not configured; falling back to '%s'",
+            using,
+            fallback,
+        )
+        using = fallback
 
     if DEBUG is True or debug is True:
         logging.debug(f'-- [DEBUG] DB_QUERY, using={using} ::\n{sql} {args}')
@@ -149,15 +153,19 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
     if force is False:
         using = getRealShardConnectionName(using)
 
-    if using == 'default' and using not in ScopedSessions:
+    if using not in ScopedSessions:
         fallback = next(iter(ScopedSessions), None)
-        if fallback is not None:
-            logging.warning(
-                "Requested DB session '%s' not configured; falling back to '%s'",
-                using,
-                fallback,
+        if fallback is None:
+            raise RuntimeError(
+                "No database sessions configured (ScopedSessions is empty). "
+                "Check DATABASE_URL / DATABASE_URLS and DB initialization logs."
             )
-            using = fallback
+        logging.warning(
+            "Requested DB session '%s' not configured; falling back to '%s'",
+            using,
+            fallback,
+        )
+        using = fallback
 
     if DEBUG is True or debug is True:
         logging.debug('-- [DEBUG] DB_EXEC, using={using} ::\n{sql}')
