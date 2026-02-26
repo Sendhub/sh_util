@@ -42,13 +42,15 @@ def sqlAndArgsToText(sql, args=None):
 def connections():
     """Infer and return appropriate set of connections."""
     try:
-        from app import app
+        # Prefer the canonical package import to avoid importing src/app.py as
+        # a top-level module named "app" (which can result in a separate module
+        # namespace and an empty ScopedSessions registry).
+        from src.app import app as flask_app
+    except Exception:
+        from app import app as flask_app
 
-    except ImportError:
-        from src.app import app
-
-    logging.info(f"Engines: {app.engines}")
-    return app.engines
+    logging.info(f"Engines: {flask_app.engines}")
+    return flask_app.engines
 
 
 def switchDefaultDatabase(name):
@@ -83,9 +85,12 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     """
     from .. import DEBUG
     try:
-        from app import ScopedSessions
-    except ImportError:
-        from src.app import ScopedSessions
+        from src.database import ScopedSessions
+    except Exception:
+        try:
+            from src.app import ScopedSessions
+        except Exception:
+            from app import ScopedSessions
 
     if args is None:
         args = tuple()
@@ -141,11 +146,13 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
     from sqlalchemy.exc import InvalidRequestError
 
     from .. import DEBUG
-
     try:
-        from app import ScopedSessions
-    except ImportError:
-        from src.app import ScopedSessions
+        from src.database import ScopedSessions
+    except Exception:
+        try:
+            from src.app import ScopedSessions
+        except Exception:
+            from app import ScopedSessions
 
     if args is None:
         args = tuple()
