@@ -58,7 +58,7 @@ def dict_to_stripe_object(data):
 
     # Import moved here to avoid hard dependency at import time.
     try:
-        from stripe_util.stripe_service import StripeAPIBasilService
+        from stripe_util.stripe_service import StripeAPICloverService
     except ImportError as exc:
         raise ImportError("stripe_util.stripe_service is required for dict_to_stripe_object") from exc
 
@@ -66,7 +66,7 @@ def dict_to_stripe_object(data):
     data_dict = ast.literal_eval(data)
 
     # Using the Stripe API service to convert the dictionary to a Stripe object.
-    obj = StripeAPIBasilService()
+    obj = StripeAPICloverService()
     stripeObj = obj.convert_to_stripe_object(data_dict)
 
     return stripeObj
