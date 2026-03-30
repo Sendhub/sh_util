@@ -12,11 +12,22 @@ from sqlalchemy.sql.expression import bindparam, text
 _argRe = re.compile(r'(?<!%)%s|(\?)')
 
 
+def _normalize_sql_and_args(sql, args=None):
+    """Support callers that pass `(sql, args)` as the first argument."""
+    if isinstance(sql, tuple):
+        if len(sql) != 2:
+            raise ValueError("SQL tuple must be in the form (sql, args)")
+        inline_sql, inline_args = sql
+        if args not in (None, (), []):
+            raise ValueError("SQL args provided twice")
+        return inline_sql, inline_args
+    return sql, args
+
+
 
 def sqlAndArgsToText(sql, args=None):
 
-    if isinstance(sql, tuple):
-        sql = sql[0]
+    sql, args = _normalize_sql_and_args(sql, args)
 
     if not args:
         return text(sql)
@@ -92,6 +103,8 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
         except Exception:
             from app import ScopedSessions
 
+    sql, args = _normalize_sql_and_args(sql, args)
+
     if args is None:
         args = tuple()
 
@@ -153,6 +166,8 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
             from src.app import ScopedSessions
         except Exception:
             from app import ScopedSessions
+
+    sql, args = _normalize_sql_and_args(sql, args)
 
     if args is None:
         args = tuple()
