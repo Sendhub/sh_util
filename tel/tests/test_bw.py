@@ -13,6 +13,7 @@ Test coverage includes:
 """
 
 import base64
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -666,6 +667,43 @@ class TestSHBandwidthClientBuyPhoneNumber:
 
             assert isinstance(result, BandwidthNumberObject)
             assert result.phone_number == '+14155551234'
+
+    @patch('..bw_util.cleanupPhoneNumber')
+    @patch('..bw_util.validatePhoneNumber', return_value=False)
+    @patch('..bw_util.time.sleep', return_value=None)
+    @patch.object(SHBandwidthClient, 'fetch_placed_purchased_order_details')
+    @patch('..bw_util.xmltodict.parse')
+    @patch('..bw_util.requests.post')
+    def test_buy_phone_number_with_area_code_ca_uses_na_endpoint(
+        self,
+        mock_post,
+        mock_parse,
+        mock_fetch_order_details,
+        mock_sleep,
+        mock_validate_phone_number,
+        mock_cleanup_phone_number,
+        bw_client,
+    ):
+        mock_cleanup_phone_number.side_effect = lambda number, country_code='US': number
+        mock_parse.return_value = {
+            'OrderResponse': {
+                'OrderStatus': 'RECEIVED',
+                'Order': {'id': 'order_123'},
+            }
+        }
+        mock_fetch_order_details.return_value = ['+14165551234']
+        mock_post.return_value = MagicMock(status_code=201, text='<xml/>')
+
+        result = bw_client.buy_phone_number(area_code='416', country_code='CA')
+
+        assert result == ([], 'order_123')
+        assert mock_post.call_args.args[0] == (
+            f"{bw_client.bw_account_api_url_na}/api/v2/accounts/{bw_client.user_id_na}/orders"
+        )
+
+        payload = json.loads(mock_post.call_args.kwargs['data'])
+        assert payload['orderType']['countryCodeA3'] == 'CAN'
+        assert payload['subAccountId'] == bw_client.bw_site_id_na
 
     @patch('..tel.bw_util.bandwidth')
     def test_buy_phone_number_with_specific_number_success(self, mock_bandwidth, bw_client):

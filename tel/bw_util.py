@@ -1248,11 +1248,12 @@ class SHBandwidthClient:
         if country_code == "US":
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders"
             countryCodeA3 = "USA"
+        elif country_code == "CA":
+            endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders"
+            countryCodeA3 = "CAN"
         elif country_code == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/orders"
             countryCodeA3 = "AUS"
-        elif country_code == "CA":
-            countryCodeA3 = "CAN"
 
         headers = {"Authorization": f"Basic {self._get_encoded_credentials()}", "Content-Type": "application/json"}
 
