@@ -30,6 +30,7 @@ from ..bw_util import (
     SHBandwidthClient,
     phonenumber_as_e164,
 )
+from ..twilio_util import AreaCodeUnavailableError
 
 
 @pytest.fixture
@@ -127,7 +128,7 @@ class TestBandwidthAvailablePhoneNumber:
         assert phone.phone_number == '+14155551234'
         assert phone.friendly_name == '(415) 555-1234'
         assert phone.gateway == 'bandwidth'
-        mock_display.assert_called_once_with('+14155551234')
+        mock_display.assert_called_once_with('+14155551234', 'US')
 
 
 class TestBandwidthNumberObject:
@@ -521,6 +522,24 @@ class TestSHBandwidthClientFindNumberInAreaCode:
 
             assert result == ['+447700900123']
             assert 'countryCodeA3=GBR' in mock_get.call_args.args[0]
+            mock_cleanup_phone_number.assert_called_once_with('447700900123', 'GB')
+            mock_cleanup.assert_called_once_with(['+447700900123'], 1, 'GB')
+
+    @patch('..tel.bw_util.xmltodict.parse')
+    @patch('..tel.bw_util.requests.get')
+    def test_find_number_in_area_code_empty_international_results_raise_area_code_error(self, mock_get, mock_parse, bw_client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<xml/>'
+        mock_get.return_value = mock_response
+        mock_parse.return_value = {
+            'SearchResult': {
+                'ResultCount': '0',
+            }
+        }
+
+        with pytest.raises(AreaCodeUnavailableError):
+            bw_client.find_number_in_area_code(None, 1, country_code='IN', country_code_a3='IND')
 
     @patch('..tel.bw_util.bandwidth')
     def test_find_number_in_area_code_no_results_raises_error(self, mock_bandwidth, bw_client):

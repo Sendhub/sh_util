@@ -245,7 +245,7 @@ class FindPhoneNumberInAreaCode:
             if not isinstance(avail_numbers, list):
                 avail_numbers = [avail_numbers]
 
-            return [BandwidthAvailablePhoneNumber(number) for number in avail_numbers]
+            return [BandwidthAvailablePhoneNumber(number, country_code) for number in avail_numbers]
         else:
             logging.info(f"Invalid Carrier {gateway} to search a number")
             return []

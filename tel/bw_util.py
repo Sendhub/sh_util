@@ -68,8 +68,8 @@ class BandwidthAvailablePhoneNumber:
     {"friendly_name":"(580) 271-9612", "phone_number":"+15802719612"}
     """
 
-    def __init__(self, number):
-        self.friendly_name = displayNumber(number)
+    def __init__(self, number, region="US"):
+        self.friendly_name = displayNumber(number, region)
         self.phone_number = number
         self.gateway = settings.SMS_GATEWAY_BANDWIDTH
 
@@ -206,6 +206,23 @@ class SHBandwidthClient:
         except ValueError as err:
             logging.error(f"Phone number error {err}")
             raise ValueError
+
+    @staticmethod
+    def _extract_available_numbers(response_data):
+        search_result = response_data.get("SearchResult") or {}
+        telephone_number_list = search_result.get("TelephoneNumberList") or {}
+        numbers = telephone_number_list.get("TelephoneNumber")
+
+        if not numbers:
+            return []
+
+        if isinstance(numbers, str):
+            return [numbers]
+
+        if isinstance(numbers, list):
+            return [number for number in numbers if number]
+
+        return [numbers]
 
     def _parse_number_to_bw_format(self, number, country_code="US"):
         """Stripts the prefix '+1' from the 12 char number like '+12123456789'"""
@@ -572,15 +589,17 @@ class SHBandwidthClient:
                     {'SearchResult': {'ResultCount': '1', 'TelephoneNumberList': {'TelephoneNumber': '9192052618'}}}
                     {'SearchResult': {'ResultCount': '2', 'TelephoneNumberList': {'TelephoneNumber': ['9192052618', '9192053260']}}}
                 """
-                numbers = response_data.get("SearchResult").get("TelephoneNumberList").get("TelephoneNumber")
-                logging.info(f"Calling cleanupPhoneNumber() on the received phone numbers(s) {numbers} from bandwidth")
+                numbers = self._extract_available_numbers(response_data)
+                if not numbers:
+                    raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG)
 
-                if isinstance(numbers, str):
-                    numbers = [numbers]
-                cleaned_numbers = list(map(cleanupPhoneNumber, numbers))
+                logging.info(f"Calling cleanupPhoneNumber() on the received phone numbers(s) {numbers} from bandwidth")
+                cleaned_numbers = [cleanupPhoneNumber(number, country_code) for number in numbers]
+                return self._cleanup_and_return_numbers(cleaned_numbers, quantity, country_code)
             else:
                 logging.info(f"Error Response from bandwidth: {response.__dict__}")
-
+        except AreaCodeUnavailableError:
+            raise
         except Exception as e:
             if country_code in ("US", "CA", "AU"):
                 logging.error(f"Failed to search for phone number(s) in given area code - error: {e}")
@@ -593,8 +612,7 @@ class SHBandwidthClient:
                 )
             logging.error(traceback.print_exc())
             raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG) from e
-
-        return self._cleanup_and_return_numbers(cleaned_numbers, quantity)
+        raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG)
 
     # Updated To Bandwidth-SDK 20.2.1
     def search_available_toll_free_number(self, pattern=None, quantity=1, country_code="US"):
