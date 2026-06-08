@@ -191,7 +191,16 @@ class FindPhoneNumberInAreaCode:
         Wrapper that finds phone numbers from the carrier in a given area code.
     """
 
-    def __call__(self, gateway, area_code=None, country_code='US', quantity=4, toll_free=False, toll_free_area_code=None):
+    def __call__(
+        self,
+        gateway,
+        area_code=None,
+        country_code='US',
+        quantity=4,
+        toll_free=False,
+        toll_free_area_code=None,
+        country_code_a3=None,
+    ):
         """
            Router that routes calls to appropriate carrier specific driver.
         """
@@ -223,7 +232,12 @@ class FindPhoneNumberInAreaCode:
                     avail_numbers = []
             else:
                 try:
-                    avail_numbers = SHBandwidthClient().find_number_in_area_code(area_code=area_code, country_code=country_code, quantity=quantity)
+                    avail_numbers = SHBandwidthClient().find_number_in_area_code(
+                        area_code=area_code,
+                        country_code=country_code,
+                        quantity=quantity,
+                        country_code_a3=country_code_a3,
+                    )
                 except AreaCodeUnavailableError as e:
                     logging.info(f"Exception {e} while searching for numbers in area code: {area_code}")
                     avail_numbers = []

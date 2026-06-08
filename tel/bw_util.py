@@ -9,6 +9,7 @@ import traceback
 from typing import List
 
 import phonenumbers
+import pycountry
 import requests
 import xmltodict
 
@@ -71,6 +72,15 @@ class BandwidthAvailablePhoneNumber:
         self.friendly_name = displayNumber(number)
         self.phone_number = number
         self.gateway = settings.SMS_GATEWAY_BANDWIDTH
+
+
+def alpha2_to_alpha3(country_code):
+    normalized = str(country_code or "").strip().upper()
+    if len(normalized) != 2 or not normalized.isalpha():
+        return None
+
+    country = pycountry.countries.get(alpha_2=normalized)
+    return getattr(country, "alpha_3", None) if country else None
 
 
 def phonenumber_as_e164(number, country_code="US"):
@@ -500,7 +510,7 @@ class SHBandwidthClient:
         return retval
 
     # Updated To Bandwidth-SDK 20.2.1
-    def find_number_in_area_code(self, area_code, quantity=1, country_code="US"):
+    def find_number_in_area_code(self, area_code, quantity=1, country_code="US", country_code_a3=None):
         """
         Find a number within an area code.
 
@@ -522,17 +532,38 @@ class SHBandwidthClient:
         if quantity < 1:
             raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+        country_code = str(country_code or "").strip().upper()
+
+        if country_code in ("US", "CA"):
             endpoint = (f"{str(self.bw_account_api_url_na)}/api/accounts/{str(self.user_id_na)}/availableNumbers?areaCode={area_code}&quantity={quantity}")
         elif country_code == "AU":
             endpoint = (f"{str(self.bw_account_api_url_au)}/api/accounts/{str(self.user_id_au)}/availableNumbers?areaCode={area_code}&quantity={quantity}")
+        else:
+            normalized_country_code_a3 = (country_code_a3 or alpha2_to_alpha3(country_code) or "").strip().upper()
+            if len(normalized_country_code_a3) != 3 or not normalized_country_code_a3.isalpha():
+                raise ValueError(f"Unable to determine countryCodeA3 for requested country: {country_code}")
+
+            endpoint = (
+                f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/availableNumbers"
+                f"?countryCodeA3={normalized_country_code_a3}&quantity={quantity}"
+            )
 
         try:
-            logging.info(f"Making Request to bandwidth to get {quantity} number for Area Code {area_code}")
+            if country_code in ("US", "CA", "AU"):
+                logging.info(f"Making Request to bandwidth to get {quantity} number for Area Code {area_code}")
+            else:
+                logging.info(
+                    f"Making Request to bandwidth to get {quantity} number(s) in country "
+                    f"{normalized_country_code_a3}"
+                )
             response = requests.get(endpoint, headers=self._get_common_auth_header())
-            logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
+            if country_code in ("US", "CA", "AU"):
+                logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
+            else:
+                logging.info(
+                    f"Response Status Code received from bandwidth to get {quantity} number(s) in country "
+                    f"{normalized_country_code_a3} is {response.status_code}"
+                )
 
             if response.status_code == 200:
                 response_data = xmltodict.parse(response.text)
@@ -551,8 +582,15 @@ class SHBandwidthClient:
                 logging.info(f"Error Response from bandwidth: {response.__dict__}")
 
         except Exception as e:
-            logging.error(f"Failed to search for phone number(s) in given area code - error: {e}")
-            logging.info(f"Response received from bandwidth to get {quantity} number(s) for Area Code {area_code} is {response.__dict__}")
+            if country_code in ("US", "CA", "AU"):
+                logging.error(f"Failed to search for phone number(s) in given area code - error: {e}")
+                logging.info(f"Response received from bandwidth to get {quantity} number(s) for Area Code {area_code} is {response.__dict__}")
+            else:
+                logging.error(f"Failed to search for phone number(s) in country {normalized_country_code_a3} - error: {e}")
+                logging.info(
+                    f"Response received from bandwidth to get {quantity} number(s) in country "
+                    f"{normalized_country_code_a3} is {response.__dict__}"
+                )
             logging.error(traceback.print_exc())
             raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG) from e
 

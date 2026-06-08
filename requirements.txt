@@ -1,5 +1,6 @@
 boto3==1.40.52
 phonenumbers==9.0.16
+pycountry==22.3.5
 psycopg[binary]==3.3.2
 pylibmc==1.6.3
 requests==2.32.5
