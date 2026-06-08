@@ -224,7 +224,8 @@ class FindPhoneNumberInAreaCode:
 
     def __call__(self, gateway, area_code=None,
                  country_code='US', quantity=4,
-                 toll_free=False, toll_free_area_code='8**'):
+                 toll_free=False, toll_free_area_code='8**',
+                 country_code_a3=None):
         """
            router that routes calls to the appropriate carrier-specific driver.
 
@@ -252,11 +253,19 @@ class FindPhoneNumberInAreaCode:
                     avail_numbers = []
             else:
                 try:
-                    avail_numbers = SHBandwidthClient().find_number_in_area_code(  # noqa
-                        area_code=area_code,
-                        country_code=country_code,
-                        quantity=quantity
-                    )
+                    if country_code in ('US', 'CA', 'AU'):
+                        avail_numbers = SHBandwidthClient().find_number_in_area_code(  # noqa
+                            area_code=area_code,
+                            country_code=country_code,
+                            quantity=quantity,
+                            country_code_a3=country_code_a3
+                        )
+                    else:
+                        avail_numbers = SHBandwidthClient().find_number_by_country_code(  # noqa
+                            country_code=country_code,
+                            country_code_a3=country_code_a3,
+                            quantity=quantity
+                        )
                     logging.info('avail numbers in area code are : %r',
                                  avail_numbers)
                 except AreaCodeUnavailableError as e:

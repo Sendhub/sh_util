@@ -1,3 +1,4 @@
+import base64
 import os
 import sys
 import logging
@@ -5,6 +6,10 @@ import phonenumbers
 import json
 import requests
 import xmltodict
+try:
+    import pycountry
+except ImportError:
+    pycountry = None
 
 try:
     import settings
@@ -14,11 +19,11 @@ except ImportError:
     import settings
 
 try:
-    from sh_util.tel import validatePhoneNumber, AreaCodeUnavailableError
+    from sh_util.tel import cleanupPhoneNumber, validatePhoneNumber, AreaCodeUnavailableError
     from sh_util.tel import displayNumber
 except ImportError:
     sys.path.append('/opt/sendhub/inforeach/app')
-    from sh_util.tel import validatePhoneNumber, AreaCodeUnavailableError
+    from sh_util.tel import cleanupPhoneNumber, validatePhoneNumber, AreaCodeUnavailableError
     from sh_util.tel import displayNumber
 
 import bandwidth
@@ -57,6 +62,15 @@ class BandwidthAvailablePhoneNumber:
         self.friendly_name = displayNumber(number, region)
         self.phone_number = number
         self.gateway = settings.SMS_GATEWAY_BANDWIDTH
+
+
+def alpha2_to_alpha3(country_code):
+    normalized = str(country_code or '').strip().upper()
+    if pycountry is None or len(normalized) != 2 or not normalized.isalpha():
+        return None
+
+    country = pycountry.countries.get(alpha_2=normalized)
+    return getattr(country, 'alpha_3', None) if country else None
 
 
 def phonenumber_as_e164(number, country_code='US'):
@@ -262,6 +276,23 @@ class SHBandwidthClient(object):
         else:
             raise ValueError('Quantity can not be < 1 - passed: %i',
                              quantity)
+
+    @staticmethod
+    def _extract_available_numbers(response_data):
+        search_result = response_data.get('SearchResult') or {}
+        telephone_number_list = search_result.get('TelephoneNumberList') or {}
+        numbers = telephone_number_list.get('TelephoneNumber')
+
+        if not numbers:
+            return []
+
+        if isinstance(numbers, str):
+            return [numbers]
+
+        if isinstance(numbers, list):
+            return [number for number in numbers if number]
+
+        return [numbers]
 
     def _parse_number_to_bw_format(self, number, country_code='US'):
         """
@@ -474,12 +505,18 @@ class SHBandwidthClient(object):
     def find_number_in_area_code(self,
                                  area_code,
                                  quantity=1,
-                                 country_code='US'):
+                                 country_code='US',
+                                 country_code_a3=None):
         """Find a number within an area code."""
 
+        country_code = str(country_code or 'US').strip().upper()
+
         if country_code not in ('US', 'CA', 'AU'):
-            logging.info('Only numbers in US/CA and AUS are supported, requested '
-                         'country: %i', country_code)
+            return self.find_number_by_country_code(
+                quantity=quantity,
+                country_code=country_code,
+                country_code_a3=country_code_a3
+            )
 
         if quantity < 1:
             raise ValueError('Quantity can not be < 1 - passed: %i',
@@ -512,6 +549,92 @@ class SHBandwidthClient(object):
                     SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
                 )
             return self._cleanup_and_return_numbers(numbers, quantity, country_code)
+
+    def find_number_by_country_code(self, quantity=1,
+                                    country_code='US',
+                                    country_code_a3=None):
+        """Find numbers using Bandwidth's countryCodeA3 API."""
+
+        response = None
+        country_code = str(country_code or 'US').strip().upper()
+
+        if quantity < 1:
+            raise ValueError('Quantity can not be < 1 - passed: %i',
+                             quantity)
+
+        normalized_country_code_a3 = (
+            str(country_code_a3 or alpha2_to_alpha3(country_code) or '')
+            .strip().upper()
+        )
+        if len(normalized_country_code_a3) != 3 or \
+                not normalized_country_code_a3.isalpha():
+            raise AreaCodeUnavailableError(
+                SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
+            )
+
+        endpoint = (
+            '{}/api/v2/accounts/{}/availableNumbers?countryCodeA3={}&quantity={}'
+            .format(settings.BW_ACCOUNT_API_URL,
+                    self.userid,
+                    normalized_country_code_a3,
+                    quantity)
+        )
+
+        credentials = self.username + ':' + self.password
+        encoded_credentials = base64.b64encode(
+            credentials.encode('utf-8')
+        ).decode('utf-8')
+        headers = {
+            'Authorization': 'Basic {}'.format(encoded_credentials)
+        }
+
+        try:
+            logging.info('Making Request to bandwidth to get %s number(s) in '
+                         'country %s',
+                         quantity, normalized_country_code_a3)
+            response = requests.get(endpoint, headers=headers)
+            logging.info('Response received from bandwidth to get %s number(s) '
+                         'in country %s is %s',
+                         quantity, normalized_country_code_a3,
+                         response.status_code)
+
+            if response.status_code != 200:
+                logging.info('Error Response from bandwidth: %r',
+                             response.__dict__)
+                raise AreaCodeUnavailableError(
+                    SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
+                )
+
+            response_data = xmltodict.parse(response.text)
+            numbers = self._extract_available_numbers(response_data)
+            if not numbers:
+                raise AreaCodeUnavailableError(
+                    SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
+                )
+
+            cleaned_numbers = [
+                cleanupPhoneNumber(number, country_code)
+                for number in numbers
+            ]
+            return self._cleanup_and_return_numbers(
+                cleaned_numbers,
+                quantity,
+                country_code
+            )
+        except AreaCodeUnavailableError:
+            raise
+        except Exception as err:
+            logging.info('Failed to search for phone number in country %s - '
+                         'error: %r',
+                         normalized_country_code_a3, str(err))
+            if response is not None:
+                logging.info('Response received from bandwidth to get %s '
+                             'number(s) in country %s is %r',
+                             quantity, normalized_country_code_a3,
+                             response.__dict__)
+            raise AreaCodeUnavailableError(
+                SHBandwidthClient.NUMBER_UNAVAILABLE_MSG
+            )
 
     def search_available_toll_free_number(self, pattern=None, quantity=1):
         """search toll-free number."""

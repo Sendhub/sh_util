@@ -720,6 +720,32 @@ class TelUtilTestCases(unittest.TestCase):
                 self.assertEqual(exp_return_value[i],
                                  avail_numbers[i].phone_number)
 
+    @patch.object(SHBandwidthClient, 'find_number_by_country_code')
+    @patch.object(SHBandwidthClient, 'find_number_in_area_code')
+    def test_avail_number_bw_international(self, mock_bw_area_code,
+                                           mock_bw_country_code):
+        """
+           tests that international bandwidth search uses countryCodeA3.
+        """
+        return_value = '+919876543210'
+        mock_bw_country_code.return_value = return_value
+
+        avail_numbers = FindPhoneNumberInAreaCode()(
+            settings.SMS_GATEWAY_BANDWIDTH,
+            country_code='IN',
+            quantity=1,
+            country_code_a3='IND'
+        )
+
+        mock_bw_country_code.assert_called_with(
+            country_code='IN',
+            country_code_a3='IND',
+            quantity=1
+        )
+        mock_bw_area_code.assert_not_called()
+        self.assertEqual(1, len(avail_numbers))
+        self.assertEqual(return_value, avail_numbers[0].phone_number)
+
     @patch.object(SHBandwidthClient, 'search_available_toll_free_number')
     def test_avail_tf_number_bw(self, mock_bw):
         """
