@@ -561,7 +561,7 @@ class SHBandwidthClient:
                 raise ValueError(f"Unable to determine countryCodeA3 for requested country: {country_code}")
 
             endpoint = (
-                f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/availableNumbers"
+                f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/availableNumbers"
                 f"?countryCodeA3={normalized_country_code_a3}&quantity={quantity}"
             )
 

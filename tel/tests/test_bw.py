@@ -521,7 +521,10 @@ class TestSHBandwidthClientFindNumberInAreaCode:
             result = bw_client.find_number_in_area_code(None, 1, country_code='GB')
 
             assert result == ['+447700900123']
-            assert 'countryCodeA3=GBR' in mock_get.call_args.args[0]
+            assert mock_get.call_args.args[0] == (
+                'https://api.test.au/api/v2/accounts/test_user_id_au/availableNumbers'
+                '?countryCodeA3=GBR&quantity=1'
+            )
             mock_cleanup_phone_number.assert_called_once_with('447700900123', 'GB')
             mock_cleanup.assert_called_once_with(['+447700900123'], 1, 'GB')
 
