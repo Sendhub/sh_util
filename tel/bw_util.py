@@ -574,8 +574,8 @@ class SHBandwidthClient(object):
 
         endpoint = (
             '{}/api/v2/accounts/{}/availableNumbers?countryCodeA3={}&quantity={}'
-            .format(settings.BW_ACCOUNT_API_URL,
-                    self.userid,
+            .format(settings.BW_ACCOUNT_API_URL_AU,
+                    self.userid_au,
                     normalized_country_code_a3,
                     quantity)
         )
