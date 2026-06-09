@@ -573,6 +573,7 @@ class SHBandwidthClient:
                     f"Making Request to bandwidth to get {quantity} number(s) in country "
                     f"{normalized_country_code_a3}"
                 )
+            print("#######{endpoint}#######".format(endpoint=endpoint))
             response = requests.get(endpoint, headers=self._get_common_auth_header())
             if country_code in ("US", "CA", "AU"):
                 logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
