@@ -224,6 +224,25 @@ class SHBandwidthClient:
 
         return [numbers]
 
+    @staticmethod
+    def _parse_country_code_a3_numbers(numbers, country_code):
+        parsed_numbers = []
+
+        for number in numbers:
+            normalized_number = str(number or "").strip()
+            if not normalized_number:
+                continue
+
+            # Universal Platform responses can already be in displayable E.164-like form
+            # even when they do not pass our domestic validation rules.
+            if normalized_number.startswith("+"):
+                parsed_numbers.append(normalized_number)
+                continue
+
+            parsed_numbers.append(cleanupPhoneNumber(normalized_number, country_code))
+
+        return parsed_numbers
+
     def _parse_number_to_bw_format(self, number, country_code="US"):
         """Stripts the prefix '+1' from the 12 char number like '+12123456789'"""
         parsed = phonenumbers.parse(str(number), country_code)
@@ -573,7 +592,6 @@ class SHBandwidthClient:
                     f"Making Request to bandwidth to get {quantity} number(s) in country "
                     f"{normalized_country_code_a3}"
                 )
-            print("#######{endpoint}#######".format(endpoint=endpoint))
             response = requests.get(endpoint, headers=self._get_common_auth_header())
             if country_code in ("US", "CA", "AU"):
                 logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
@@ -594,9 +612,19 @@ class SHBandwidthClient:
                 if not numbers:
                     raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG)
 
-                logging.info(f"Calling cleanupPhoneNumber() on the received phone numbers(s) {numbers} from bandwidth")
-                cleaned_numbers = [cleanupPhoneNumber(number, country_code) for number in numbers]
-                return self._cleanup_and_return_numbers(cleaned_numbers, quantity, country_code)
+                logging.info(f"Normalizing received phone number(s) {numbers} from bandwidth")
+                if country_code in ("US", "CA", "AU"):
+                    cleaned_numbers = [cleanupPhoneNumber(number, country_code) for number in numbers]
+                    return self._cleanup_and_return_numbers(cleaned_numbers, quantity, country_code)
+
+                cleaned_numbers = self._parse_country_code_a3_numbers(numbers, country_code)
+                if not cleaned_numbers:
+                    raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG)
+
+                if quantity == 1:
+                    return cleaned_numbers[0]
+
+                return cleaned_numbers
             else:
                 logging.info(f"Error Response from bandwidth: {response.__dict__}")
         except AreaCodeUnavailableError:

@@ -499,10 +499,9 @@ class TestSHBandwidthClientFindNumberInAreaCode:
 
             assert result == '+14155551234'
 
-    @patch('..tel.bw_util.cleanupPhoneNumber', side_effect=lambda number, country_code='US': f'+{number}')
     @patch('..tel.bw_util.xmltodict.parse')
     @patch('..tel.bw_util.requests.get')
-    def test_find_number_in_area_code_with_country_code_a3_success(self, mock_get, mock_parse, mock_cleanup_phone_number, bw_client):
+    def test_find_number_in_area_code_with_country_code_a3_success(self, mock_get, mock_parse, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = '<xml/>'
@@ -515,18 +514,32 @@ class TestSHBandwidthClientFindNumberInAreaCode:
             }
         }
 
-        with patch.object(bw_client, '_cleanup_and_return_numbers') as mock_cleanup:
-            mock_cleanup.return_value = ['+447700900123']
+        result = bw_client.find_number_in_area_code(None, 1, country_code='GB')
 
-            result = bw_client.find_number_in_area_code(None, 1, country_code='GB')
+        assert result == '+447700900123'
+        assert mock_get.call_args.args[0] == (
+            'https://api.test.au/api/v2/accounts/test_user_id_au/availableNumbers'
+            '?countryCodeA3=GBR&quantity=1'
+        )
 
-            assert result == ['+447700900123']
-            assert mock_get.call_args.args[0] == (
-                'https://api.test.au/api/v2/accounts/test_user_id_au/availableNumbers'
-                '?countryCodeA3=GBR&quantity=1'
-            )
-            mock_cleanup_phone_number.assert_called_once_with('447700900123', 'GB')
-            mock_cleanup.assert_called_once_with(['+447700900123'], 1, 'GB')
+    @patch('..tel.bw_util.xmltodict.parse')
+    @patch('..tel.bw_util.requests.get')
+    def test_find_number_in_area_code_with_country_code_a3_invalid_domestic_validation_number(self, mock_get, mock_parse, bw_client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<xml/>'
+        mock_get.return_value = mock_response
+        mock_parse.return_value = {
+            'SearchResult': {
+                'TelephoneNumberList': {
+                    'TelephoneNumber': '+910008009191167',
+                }
+            }
+        }
+
+        result = bw_client.find_number_in_area_code(None, 1, country_code='IN', country_code_a3='IND')
+
+        assert result == '+910008009191167'
 
     @patch('..tel.bw_util.xmltodict.parse')
     @patch('..tel.bw_util.requests.get')
