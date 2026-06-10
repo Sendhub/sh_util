@@ -155,6 +155,7 @@ class SHBandwidthClient:
 
     def _get_encoded_credentials(self):
         credentials = self.username + ":" + self.password
+        print(f"###### Credentials before encoding: {credentials} ######")
         encoded_credentials = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
         return encoded_credentials
 
@@ -592,6 +593,7 @@ class SHBandwidthClient:
                     f"Making Request to bandwidth to get {quantity} number(s) in country "
                     f"{normalized_country_code_a3}"
                 )
+            print("###### Requesting BW with endpoint: ", endpoint,"self._get_common_auth_header(): ", self._get_common_auth_header(),"######")
             response = requests.get(endpoint, headers=self._get_common_auth_header())
             if country_code in ("US", "CA", "AU"):
                 logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
