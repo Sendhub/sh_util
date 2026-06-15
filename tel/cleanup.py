@@ -62,42 +62,92 @@ def isSpecialTwilioNumber(number):
 
 def validatePhoneNumber(number, allowShortcode=True, country_code='US'):
     """
-    Validate a phone number for the given country/region.
+    Validate a phone number globally — no country context required.
 
-    This function is returning True for allowed shortcodes (when
-    ``allowShortcode`` is True) and for numbers that are valid for the
-    specified ``country_code`` according to the ``phonenumbers`` library.
+    For numbers in E.164 format (starting with ``+``), the ITU calling code
+    embedded in the number is used directly and ``country_code`` is ignored.
+    For bare national numbers without a ``+`` prefix, ``country_code`` is
+    used only as a last-resort parsing hint.
 
     Args:
-        number (str): The phone number to validate.
+        number (str|bytes): The phone number to validate.
         allowShortcode (bool): Whether to treat short numeric codes (3-6
             digits) as valid (default True).
-        country_code (str): The country/region code to validate against
-            (default 'US').
+        country_code (str): Fallback region hint for bare national numbers
+            that lack a ``+`` prefix (default 'US').
 
     Returns:
         bool: True if the number is considered valid, False otherwise.
     """
 
-    valid = False
-
     try:
-        # Leaving shortcodes alone
-        if number is not None:
-            if allowShortcode and len(number) in (3, 4, 5, 6) and number.isdigit():  # noqa
-                return True
+        if number is None:
+            return False
 
-            # Using the given country_code to parse the number
+        if isinstance(number, bytes):
+            number = number.decode('utf-8')
+
+        if allowShortcode and len(number) in (3, 4, 5, 6) and number.isdigit():
+            return True
+
+        # Parse region-free first: works for any E.164 number (+XXXXXXXXX).
+        # The phonenumbers library reads the ITU calling code from the number
+        # itself, so no country context is needed at all.
+        try:
+            p = phonenumbers.parse(number, None)
+        except phonenumbers.NumberParseException:
+            # Bare national number with no '+' — use the hint as a last resort.
             p = phonenumbers.parse(number, country_code)
 
-            # Checking that the parsed number is valid for the region
-            if phonenumbers.is_valid_number_for_region(p, country_code):
-                phonenumbers.format_number(p,  phonenumbers.PhoneNumberFormat.E164)
-                valid = True
-    except phonenumbers.NumberParseException as e:
-        logging.warning(f'Detected invalid phone number: {number} - {e}')
+        return phonenumbers.is_valid_number(p)
 
-    return valid
+    except (phonenumbers.NumberParseException, UnicodeDecodeError) as e:
+        logging.warning(f'Detected invalid phone number: {number} - {e}')
+        return False
+
+
+def validatePhoneNumberByCountry(number, country_code):
+    """
+    Validate a phone number against a specific country's calling-code group.
+
+    Numbers sharing the same ITU country calling code are accepted together.
+    For example, US and Canada both use ``+1``, so a Canadian number passes
+    validation for ``country_code='US'`` and vice versa.
+
+    Args:
+        number (str|bytes): The phone number to validate (E.164 preferred).
+        country_code (str): The ISO 3166-1 alpha-2 region code to validate
+            against (e.g. ``'US'``, ``'CA'``, ``'AU'``).
+
+    Returns:
+        bool: True if the number is valid and its calling code matches the
+        calling code of the given ``country_code``, False otherwise.
+    """
+
+    if number is None or country_code is None:
+        return False
+
+    if isinstance(number, bytes):
+        try:
+            number = number.decode('utf-8')
+        except UnicodeDecodeError:
+            return False
+
+    if not number:
+        return False
+
+    try:
+        calling_code = phonenumbers.country_code_for_region(country_code)
+        if calling_code == 0:
+            return False
+
+        p = phonenumbers.parse(number, country_code)
+        if not phonenumbers.is_valid_number(p):
+            return False
+
+        return p.country_code == calling_code
+    except phonenumbers.NumberParseException:
+        return False
 
 
 def displayNumber(number, region='US'):
