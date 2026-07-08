@@ -41,7 +41,7 @@ def fetch_number_info(api_url: str, phone_number: str, timeout: float = 5.0) -> 
         raise ExternalAPIError(f"bad status: {resp.status_code}")
 
     data = resp.json()
-    if not isinstance(data, dict) or 'available' not in data:
+    if not isinstance(data, dict) or "available" not in data:
         raise ExternalAPIError("invalid payload")
     return data
 
@@ -94,14 +94,14 @@ def purchase_number(api_url: str, phone_number: str, db_conn, prefer_available: 
     Raises ExternalAPIError if API call fails.
     """
     info = fetch_number_info(api_url, phone_number)
-    price = float(info.get('price', 0.0))
-    available = bool(info.get('available', False))
+    price = float(info.get("price", 0.0))
+    available = bool(info.get("available", False))
 
     # If prefer_available is True we only purchase when available
     if prefer_available and not available:
-        return {'phone_number': phone_number, 'purchased': False, 'price': price, 'rowid': None}
+        return {"phone_number": phone_number, "purchased": False, "price": price, "rowid": None}
 
     # simulate a purchase action by storing to DB
     meta = {"from_api": info}
     rowid = store_purchase(db_conn, phone_number, meta)
-    return {'phone_number': phone_number, 'purchased': True, 'price': price, 'rowid': rowid}
+    return {"phone_number": phone_number, "purchased": True, "price": price, "rowid": rowid}

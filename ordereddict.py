@@ -3,7 +3,7 @@ This module defines an `OrderedDict` class, which extends the functionality of P
 It maintains the order of keys as they are inserted, providing additional methods for sorting and reversing.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 from collections.abc import MutableMapping
 
@@ -27,8 +27,8 @@ class OrderedDict(dict, MutableMapping):
             TypeError: If more than one positional argument is provided.
         """
         if len(args) > 1:
-            raise TypeError('expected at 1 argument, got %d', len(args))
-        if not hasattr(self, '_keys'):
+            raise TypeError("expected at 1 argument, got %d", len(args))
+        if not hasattr(self, "_keys"):
             self._keys = []
         self.update(*args, **kwds)
 
@@ -98,7 +98,7 @@ class OrderedDict(dict, MutableMapping):
         """
         items = [[k, self[k]] for k in self]
         inst_dict = vars(self).copy()
-        inst_dict.pop('_keys', None)
+        inst_dict.pop("_keys", None)
         return (self.__class__, (items,), inst_dict)
 
     # Methods with indirect access via the above methods
@@ -117,8 +117,8 @@ class OrderedDict(dict, MutableMapping):
         Returns:
             str: The string representation of the dictionary.
         """
-        pairs = ', '.join(map('%r: %r'.__mod__, list(self.items())))
-        return '{}({{{}}})'.format(self.__class__.__name__, pairs)
+        pairs = ", ".join(map("%r: %r".__mod__, list(self.items())))
+        return "{}({{{}}})".format(self.__class__.__name__, pairs)
 
     def copy(self):
         """

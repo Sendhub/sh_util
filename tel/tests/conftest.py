@@ -74,16 +74,12 @@ def _import_stdlib_json_safely():
     except Exception as e:
         # restore and raise with context
         sys.path[:] = orig_sys_path
-        raise RuntimeError(f"Failed to import json after removing {removed_entries}: {e}\n"
-                           f"sys.path head: {orig_sys_path[:10]}") from e
+        raise RuntimeError(f"Failed to import json after removing {removed_entries}: {e}\nsys.path head: {orig_sys_path[:10]}") from e
 
     # If we still didn't get stdlib json, restore and explain
     if not hasattr(json_mod, "load"):
         sys.path[:] = orig_sys_path
-        raise RuntimeError(
-            "Imported module 'json' does not have 'load' even after removing project paths. "
-            f"json.__file__={getattr(json_mod, '__file__', None)} removed_entries={removed_entries}"
-        )
+        raise RuntimeError(f"Imported module 'json' does not have 'load' even after removing project paths. json.__file__={getattr(json_mod, '__file__', None)} removed_entries={removed_entries}")
 
     # Restore original sys.path
     sys.path[:] = orig_sys_path
@@ -93,6 +89,7 @@ def _import_stdlib_json_safely():
     # For convenience, also print what we removed (only prints in verbose runs)
     if removed_entries:
         print("Temporarily removed sys.path entries while importing stdlib json:", removed_entries)
+
 
 # Execute early
 _import_stdlib_json_safely()

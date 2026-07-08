@@ -13,17 +13,17 @@ e.g.: If the input is
 'This should come back unchanged'
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 import re as _re
 
 _ec2HostnameRe = _re.compile(
-    r'''
+    r"""
         ^(?P<start>.*)
         ec2-(?P<ip>(?:\d+-?){4,4})\.compute-\d\.amazonaws\.com
         (?P<end>.*)$
-    ''',
-    _re.X
+    """,
+    _re.X,
 )
 
 
@@ -41,7 +41,7 @@ def ec2HostnameToIp(s):
     m = _ec2HostnameRe.match(s)
     while m is not None:
         # Replacing the matched EC2 hostname with the bare IP
-        ip = m.group('ip').replace('-', '.')
+        ip = m.group("ip").replace("-", ".")
         s = f"{m.group('start')}{ip}{m.group('end')}"
         # Continuing to search for additional EC2 hostnames
         m = _ec2HostnameRe.match(s)

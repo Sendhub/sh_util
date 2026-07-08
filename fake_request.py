@@ -2,18 +2,19 @@
 Fake Django request object, useful for passing serializable request-like objects around.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 try:
     from django.contrib.auth.models import AnonymousUser
 except ImportError:
-    class AnonymousUser():
+
+    class AnonymousUser:
         """
         Represents an anonymous user with default properties and methods.
         """
 
         id = None
-        username = ''
+        username = ""
         is_staff = False
         is_active = False
         is_superuser = False
@@ -24,7 +25,7 @@ except ImportError:
             pass
 
         def __str__(self):
-            return 'AnonymousUser'
+            return "AnonymousUser"
 
         def __eq__(self, other):
             return isinstance(other, self.__class__)
@@ -64,6 +65,7 @@ except ImportError:
             Returning the groups associated with the user.
             """
             return self._groups
+
         groups = property(_get_groups)
 
         def _get_user_permissions(self):
@@ -71,6 +73,7 @@ except ImportError:
             Raising NotImplementedError when getting user permissions.
             """
             raise NotImplementedError
+
         user_permissions = property(_get_user_permissions)
 
         @staticmethod
@@ -122,7 +125,7 @@ except ImportError:
             return False
 
 
-class FakeRequest():
+class FakeRequest:
     """
     Encapsulates static properties of a request required for VoiceCalls to work properly.
     This is necessary because Django Request objects cannot be serialized.
@@ -150,11 +153,8 @@ class FakeRequest():
             Returns:
                 The value of the attribute or the default value.
             """
-            if (request is not None and hasattr(request, attribute_name)) or \
-                    attribute_name in kw:
-                attribute = getattr(request, attribute_name) if \
-                    hasattr(request, attribute_name) else \
-                    kw.get(attribute_name)
+            if (request is not None and hasattr(request, attribute_name)) or attribute_name in kw:
+                attribute = getattr(request, attribute_name) if hasattr(request, attribute_name) else kw.get(attribute_name)
                 if callable(attribute):
                     return attribute()
                 else:
@@ -162,19 +162,18 @@ class FakeRequest():
             else:
                 return default
 
-        self._is_secure = _get_attribute_value('is_secure', False)
-        self._get_host = _get_attribute_value('get_host', '')
-        self.path = _get_attribute_value('path', '')
-        self.user = _get_attribute_value('user', AnonymousUser())
-        self.body = _get_attribute_value('body', '')
-        self._build_absolute_uri = request.build_absolute_uri() if \
-            request is not None else ''
+        self._is_secure = _get_attribute_value("is_secure", False)
+        self._get_host = _get_attribute_value("get_host", "")
+        self.path = _get_attribute_value("path", "")
+        self.user = _get_attribute_value("user", AnonymousUser())
+        self.body = _get_attribute_value("body", "")
+        self._build_absolute_uri = request.build_absolute_uri() if request is not None else ""
 
-        for attr in ('GET', 'POST', 'REQUEST'):
+        for attr in ("GET", "POST", "REQUEST"):
             if request is None:
                 setattr(self, attr, {})
             else:
-                setattr(self, attr, { k: v for k, v in list(getattr(request, attr).items()) })
+                setattr(self, attr, {k: v for k, v in list(getattr(request, attr).items())})
 
     def is_secure(self):
         """

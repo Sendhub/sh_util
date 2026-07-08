@@ -24,11 +24,11 @@ except ImportError:
     import settings
 
 try:
-    from .twilio_util import AreaCodeUnavailableError
     from .cleanup import displayNumber, validatePhoneNumber
+    from .twilio_util import AreaCodeUnavailableError
 except ImportError:
     sys.path.append("/opt/sendhub/inforeach/app")
-    from .cleanup import validatePhoneNumber, displayNumber
+    from .cleanup import displayNumber, validatePhoneNumber
     from .twilio_util import AreaCodeUnavailableError
 
 
@@ -103,7 +103,7 @@ class BandwidthNumberObject:
 class SHBandwidthClient:
     NUMBER_UNAVAILABLE_MSG = "We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again or choose a different area code."
 
-    def __init__(self, userid=None, token=None, secret=None, username=None, password=None, debug=False):
+    def __init__(self, userid=None, token=None, secret=None, username=None, password=None, debug=False, client_id=None, client_secret=None, use_oauth2=None):
         # Import moved here to avoid missing package dependency
         import bandwidth
 
@@ -120,10 +120,22 @@ class SHBandwidthClient:
         if not password:
             password = settings.BW_PASSWORD
 
+        # OAuth2 client-credentials auth - disabled by default (settings.BW_USE_OAUTH2),
+        # see _get_auth_header for the switchover.
+        if use_oauth2 is None:
+            use_oauth2 = getattr(settings, "BW_USE_OAUTH2", False)
+        if not client_id:
+            client_id = getattr(settings, "BW_CLIENT_ID", None)
+        if not client_secret:
+            client_secret = getattr(settings, "BW_CLIENT_SECRET", None)
+
         self.token = token
         self.secret = secret
         self.username = username
         self.password = password
+        self.use_oauth2 = use_oauth2
+        self.client_id = client_id
+        self.client_secret = client_secret
 
         self.bw_app_id = settings.BW_APP_ID
 
@@ -136,12 +148,16 @@ class SHBandwidthClient:
         self.bw_site_id_na = settings.BW_SITE_ID
         self.bw_site_id_au = settings.BW_SITE_ID_AU
 
-        self.configuration = bandwidth.Configuration(username=self.username, password=self.password)
-
-        if not userid or not token or not secret or not username or not password:
-            raise ValueError(f"Appropriate Bandwidth Keys are not available supplied userid: {userid}, token: {token}, secret: {secret}, username: {username}, password: {password}")
+        if self.use_oauth2:
+            self.configuration = bandwidth.Configuration(client_id=self.client_id, client_secret=self.client_secret)
+            if not userid or not client_id or not client_secret:
+                raise ValueError(f"Appropriate Bandwidth OAuth2 Keys are not available supplied userid: {userid}, client_id: {client_id}, client_secret: {client_secret}")
         else:
-            logging.info(f"Inside the __init__ of SHBandwidthClient")
+            self.configuration = bandwidth.Configuration(username=self.username, password=self.password)
+            if not userid or not token or not secret or not username or not password:
+                raise ValueError(f"Appropriate Bandwidth Keys are not available supplied userid: {userid}, token: {token}, secret: {secret}, username: {username}, password: {password}")
+
+        logging.info("Inside the __init__ of SHBandwidthClient")
 
     def _get_encoded_credentials(self):
         credentials = self.username + ":" + self.password
@@ -151,6 +167,21 @@ class SHBandwidthClient:
     def _get_common_auth_header(self):
         headers = {"Authorization": f"Basic {self._get_encoded_credentials()}"}
         return headers
+
+    def _get_oauth_bearer_header(self):
+        # Configuration.get_access_token() fetches + caches the client-credentials token
+        # (see bandwidth.Configuration.get_access_token / auth_settings in the SDK).
+        return {"Authorization": f"Bearer {self.configuration.get_access_token()}"}
+
+    def _get_auth_header(self):
+        """
+        Authorization header for Bandwidth's Numbers/Account (dashboard) APIs, used by every
+        raw ``requests`` call in this class. Switches between legacy Basic Auth and OAuth2
+        client-credentials bearer tokens based on ``settings.BW_USE_OAUTH2``.
+        """
+        if self.use_oauth2:
+            return self._get_oauth_bearer_header()
+        return self._get_common_auth_header()
 
     @staticmethod
     def _as_e164(number, country_code="US"):
@@ -166,18 +197,18 @@ class SHBandwidthClient:
 
     def check_if_valid_e164_format(self, number: str) -> bool:
         """
-            Checks if the given phone number is in valid E.164 format.
+        Checks if the given phone number is in valid E.164 format.
 
-            Valid E.164 format:
-            - Must start with '+'
-            - Followed by digits only
-            - Must contain between 8 and 15 digits total (including country code)
+        Valid E.164 format:
+        - Must start with '+'
+        - Followed by digits only
+        - Must contain between 8 and 15 digits total (including country code)
         """
         if not isinstance(number, str):
             return False
 
         # Regex for E.164 validation
-        pattern = re.compile(r'^\+[1-9]\d{7,14}$')
+        pattern = re.compile(r"^\+[1-9]\d{7,14}$")
         return bool(pattern.match(number))
 
     def _cleanup_and_return_numbers(self, numbers, quantity, country_code="US"):
@@ -211,12 +242,11 @@ class SHBandwidthClient:
     def check_msg_status(self, msg_id):
         return self.get_message_info(msg_id)
 
-
-    def check_recipient_list_validity(self, numbers)-> List:
+    def check_recipient_list_validity(self, numbers) -> List:
         """
-            This method's purpose is to check if the to_numbers are in valid E.164 format.
-            In case they are not then it will attempt it to convert the number to valid E.164 format.
-            If the formatting to E.164 fails then at number will not make it to the final to_list.
+        This method's purpose is to check if the to_numbers are in valid E.164 format.
+        In case they are not then it will attempt it to convert the number to valid E.164 format.
+        If the formatting to E.164 fails then at number will not make it to the final to_list.
         """
         result = []
         if isinstance(numbers, List):
@@ -297,7 +327,7 @@ class SHBandwidthClient:
                 api_instance = bandwidth.MessagesApi(api_client)
                 message_request = bandwidth.MessageRequest(application_id=self.bw_app_id, to=to_number, var_from=from_number, text=msg, tag=tag)
                 try:
-                    logging.info(f"Calling the MessagesApi -> create_message for SMS")
+                    logging.info("Calling the MessagesApi -> create_message for SMS")
                     api_response = api_instance.create_message(account_id, message_request)
                     logging.info(f"The response of MessagesApi -> create_message: {api_response}")
                     return api_response.id
@@ -310,7 +340,6 @@ class SHBandwidthClient:
             logging.error(f"Exception occurred while sending sms via bandwidth: {e}")
             logging.error(traceback.print_exc())
             raise type(e)
-
 
     # Updated To Bandwidth-SDK 20.2.1
     def send_mms(self, from_number, to_number, msg, media, tag=None):
@@ -383,7 +412,7 @@ class SHBandwidthClient:
                 api_instance = bandwidth.MessagesApi(api_client)
                 message_request = bandwidth.MessageRequest(application_id=self.bw_app_id, to=to_number, var_from=from_number, text=msg, media=media, tag=tag)
                 try:
-                    logging.info(f"Calling the MessagesApi -> create_message for MMS")
+                    logging.info("Calling the MessagesApi -> create_message for MMS")
                     api_response = api_instance.create_message(account_id, message_request)
                     logging.info(f"The response of MessagesApi -> create_message for MMS: {api_response}")
                     return api_response.id
@@ -439,7 +468,7 @@ class SHBandwidthClient:
         with bandwidth.ApiClient(self.configuration) as api_client:
             api_instance = bandwidth.MessagesApi(api_client)
             try:
-                logging.info(f"Calling the MessagesApi -> list_messages")
+                logging.info("Calling the MessagesApi -> list_messages")
                 api_response = api_instance.list_messages(account_id=account_id, message_id=msgid)
                 logging.info(f"The response of MessagesApi -> list_messages: {api_response}")
                 return api_response
@@ -482,7 +511,7 @@ class SHBandwidthClient:
 
         try:
             logging.info(f"Making request to Bandwidth to check if number {nat_number} is in service or not")
-            response = requests.get(endpoint, headers=self._get_common_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header())
             logging.info(f"Response received from bandwidth to get InService for Phone Number {nat_number}  is {response.status_code}")
 
             if response.status_code == 200:
@@ -525,13 +554,13 @@ class SHBandwidthClient:
         if country_code not in ("US", "CA", "AU"):
             raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
         elif country_code == "US" or country_code == "CA":
-            endpoint = (f"{str(self.bw_account_api_url_na)}/api/accounts/{str(self.user_id_na)}/availableNumbers?areaCode={area_code}&quantity={quantity}")
+            endpoint = f"{str(self.bw_account_api_url_na)}/api/accounts/{str(self.user_id_na)}/availableNumbers?areaCode={area_code}&quantity={quantity}"
         elif country_code == "AU":
-            endpoint = (f"{str(self.bw_account_api_url_au)}/api/accounts/{str(self.user_id_au)}/availableNumbers?areaCode={area_code}&quantity={quantity}")
+            endpoint = f"{str(self.bw_account_api_url_au)}/api/accounts/{str(self.user_id_au)}/availableNumbers?areaCode={area_code}&quantity={quantity}"
 
         try:
             logging.info(f"Making Request to bandwidth to get {quantity} number for Area Code {area_code}")
-            response = requests.get(endpoint, headers=self._get_common_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header())
             logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
 
             if response.status_code == 200:
@@ -590,7 +619,7 @@ class SHBandwidthClient:
 
         try:
             logging.info(f"Making Request to bandwidth to get {quantity} Toll Free Number with pattern {pattern}")
-            response = requests.get(endpoint, headers=self._get_common_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header())
             logging.info(f"Response received from bandwidth to get {quantity} Toll Free Number with pattern {pattern} is {response.status_code}")
 
             if response.status_code == 200:
@@ -694,7 +723,7 @@ class SHBandwidthClient:
 
         try:
             logging.info(f"Making Request to bandwidth to get {phone_number} detail information ")
-            response = requests.get(endpoint, headers=self._get_common_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header())
             logging.info(f"Response Status Code received from bandwidth to get {phone_number} detail information is {response.status_code}")
 
             if response.status_code == 200:
@@ -761,7 +790,7 @@ class SHBandwidthClient:
         elif country_code == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{self.user_id_au}/disconnects"
 
-        headers = {"Authorization": f"Basic {self._get_encoded_credentials()}", "Content-Type": "application/json"}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
         request_payload = {"disconnectOrderType": {"disconnectMode": "NORMAL", "phoneNumbers": [number]}}
 
         json_payload = json.dumps(request_payload)
@@ -813,7 +842,7 @@ class SHBandwidthClient:
         elif country_code == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{self.user_id_au}/inserviceNumbers/totals"
 
-        headers = {"Authorization": f"Basic {self._get_encoded_credentials()}", "Content-Type": "application/json"}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
 
         try:
             logging.info(f"Making Request to bandwidth get phone numbers configured for site_id: {site_id}")
@@ -873,7 +902,7 @@ class SHBandwidthClient:
         elif country_code == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{self.user_id_au}/inserviceNumbers"
 
-        headers = {"Authorization": f"Basic {self._get_encoded_credentials()}", "Content-Type": "application/json"}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
 
         while True:
             logging.info(f"list_active_numbers pageCount: {pageCount}")
@@ -890,7 +919,6 @@ class SHBandwidthClient:
                 logging.info(f"Response Status Code received from bandwidth for phone numbers configured for site_id: {site_id} is {response.status_code}")
 
                 if response.status_code == 200:
-
                     response_data = xmltodict.parse(response.text)
                     links = response_data.get("TNs").get("Links")
                     logging.info(f"Links received in current requests: {links}")
@@ -898,7 +926,6 @@ class SHBandwidthClient:
                     TelephoneNumbersList += response_data.get("TNs").get("TelephoneNumbers").get("TelephoneNumber")
 
                     if int(TotalCount) > per_resp_number_count and RemainingCount is None:
-
                         logging.info(f"Setting RemainingCount as {TotalCount} for first time ")
                         RemainingCount = int(TotalCount) - per_resp_number_count
                         nextPage = response_data.get("TNs").get("Links").get("next")
@@ -909,10 +936,9 @@ class SHBandwidthClient:
                             additional_query_params = "?" + url.split("?")[1]
                             logging.info(f"Additional Query Parameters extracted is {additional_query_params}")
                         else:
-                            logging.info(f"Reached at the end of all numbers")
+                            logging.info("Reached at the end of all numbers")
 
                     elif RemainingCount > 0:
-
                         RemainingCount = RemainingCount - per_resp_number_count
                         logging.info(f"New RemainingCount ...... {RemainingCount}")
                         nextPage = response_data.get("TNs").get("Links").get("next")
@@ -923,7 +949,7 @@ class SHBandwidthClient:
                             additional_query_params = "?" + url.split("?")[1]
                             logging.info(f"Additional Query Parameters extracted is {additional_query_params}")
                         else:
-                            logging.info(f"Reached at the end of all numbers")
+                            logging.info("Reached at the end of all numbers")
                     else:
                         RemainingCount = 0
                 else:
@@ -980,9 +1006,8 @@ class SHBandwidthClient:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/tns/{self._parse_number_to_bw_format(phone_number)}/sites"
 
         try:
-
             logging.info(f"Making Request to bandwidth to get {phone_number} detail information ")
-            response = requests.get(endpoint, headers=self._get_common_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header())
             if response.status_code == 200:
                 logging.info(f"Response Status Code received from bandwidth to get {phone_number} site information is {response.status_code}")
                 response_data = xmltodict.parse(response.text)
@@ -1086,7 +1111,7 @@ class SHBandwidthClient:
         elif country_code == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/orders"
 
-        headers = {"Authorization": f"Basic {self._get_encoded_credentials()}", "Content-Type": "application/json"}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
         request_payload = {
             "customerOrderId": user_id.id,
             "orderType": {
@@ -1254,14 +1279,12 @@ class SHBandwidthClient:
         elif country_code == "CA":
             countryCodeA3 = "CAN"
 
-        headers = {"Authorization": f"Basic {self._get_encoded_credentials()}", "Content-Type": "application/json"}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
 
         if phone_number is None:
-            request_payload = \
-            {
-                "customerOrderId" : str(user_id)[:40],
-                "orderType":
-                {
+            request_payload = {
+                "customerOrderId": str(user_id)[:40],
+                "orderType": {
                     "areaCode": area_code,
                     "countryCodeA3": countryCodeA3,
                     "quantity": order_quantity,
@@ -1270,16 +1293,11 @@ class SHBandwidthClient:
                 "subAccountId": site_id,
             }
         else:
-            request_payload = \
-            {
+            request_payload = {
                 "autoActivate": True,
-                "customerOrderId" : str(user_id)[:40],
-                "orderType":
-                {
-                    "phoneNumbers":
-                    [
-                        phone_number
-                    ],
+                "customerOrderId": str(user_id)[:40],
+                "orderType": {
+                    "phoneNumbers": [phone_number],
                     "type": "existingPhoneNumberOrderType",
                 },
                 "subAccountId": site_id,
@@ -1309,12 +1327,11 @@ class SHBandwidthClient:
             logging.info(f"Response received from bandwidth to purchase {order_quantity} phone number(s) in country {countryCodeA3} with {area_code} is {response.__dict__}")
             logging.info(traceback.print_exc())
 
-        logging.info(f"Waiting for 10 seconds before fetching order details")
+        logging.info("Waiting for 10 seconds before fetching order details")
         time.sleep(10)  # Wait for 10 seconds
 
         try:
             if response_data is not None and response_data.get("OrderResponse").get("OrderStatus") == "RECEIVED":
-
                 successful_order_id = response_data.get("OrderResponse").get("Order").get("id")
                 numbers = self.fetch_placed_purchased_order_details(country_code=country_code, orderId=successful_order_id)
 
@@ -1450,9 +1467,8 @@ class SHBandwidthClient:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/orders/{orderId}?tndetail=true"
 
         try:
-
             logging.info(f"Making Request to bandwidth to get order details for orderId: {orderId}")
-            response = requests.get(endpoint, headers=self._get_common_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header())
             logging.info(f"Response from bandwidth to get order details for orderId: {orderId} is {response.status_code}")
 
             if response.status_code == 200:
@@ -1502,7 +1518,10 @@ class SHBandwidthClient:
                 logging.info(f"Filename {out_filename}, already exists - will be overwritten.....")
 
         try:
-            resp = requests.get(url, auth=(self.token, self.secret))
+            if self.use_oauth2:
+                resp = requests.get(url, headers=self._get_oauth_bearer_header())
+            else:
+                resp = requests.get(url, auth=(self.token, self.secret))
         except requests.exceptions.RequestException as e:
             logging.info(f"Error while fetching media: {e}")
             return

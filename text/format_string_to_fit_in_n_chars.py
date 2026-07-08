@@ -6,7 +6,7 @@ specified character limit, and for trimming tokens when formatted output
 exceeds the allowed length.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 import math
@@ -28,6 +28,7 @@ def squeeze_sms_message(string, *args):
 
     try:
         import settings
+
         maxLength = settings.MAX_SMS_MESSAGE_LENGTH
     except (ImportError, AttributeError):
         pass
@@ -58,13 +59,13 @@ def format_string_to_fit_in_n_chars(string, max_number_of_characters, *args):
     """
 
     if len(args) == 0:
-        raise TypeError(f'format_string_to_fit_in_n_chars() takes 2 or more arguments ({len(args)} given)')  # noqa
+        raise TypeError(f"format_string_to_fit_in_n_chars() takes 2 or more arguments ({len(args)} given)")  # noqa
 
     max_number_of_characters = int(max_number_of_characters)
 
     # Checking initial conditions.
     if len(string) > max_number_of_characters:
-        raise TypeError(f'format_string_to_fit_in_n_chars() argument 1 must not exceed the length indicated by argument 2 ({len(string)} > {max_number_of_characters})')
+        raise TypeError(f"format_string_to_fit_in_n_chars() argument 1 must not exceed the length indicated by argument 2 ({len(string)} > {max_number_of_characters})")
 
     # First trying the naive strategy of formatting without trimming.
     test = string.format(*args)
@@ -77,7 +78,7 @@ def format_string_to_fit_in_n_chars(string, max_number_of_characters, *args):
         test = string.format(*trimmed_args)
 
     if len(test) > max_number_of_characters:
-        raise Exception(f'Failed to format string {string} to fit inside of {max_number_of_characters} characters')
+        raise Exception(f"Failed to format string {string} to fit inside of {max_number_of_characters} characters")
 
     return test
 
@@ -98,7 +99,7 @@ def _trim_percentage_off_tail(s, pct):
         if s_len < 3:
             return s
         offset = int(math.floor(s_len - (s_len * pct)))
-        s = f'{s[0: offset]}..'
+        s = f"{s[0:offset]}.."
     return s
 
 
@@ -124,7 +125,7 @@ def _trim_longest_tokens_to_reduce_length(tokens, reduce_by_n_chars):
     # NB: this is a brute force type of approach, I'm sure it will be
     # being used; it can be improved with further work.
     if len(tokens) == 0:
-        raise TypeError('trim_longest_tokens_to_reduce_length() does not accept empty lists')
+        raise TypeError("trim_longest_tokens_to_reduce_length() does not accept empty lists")
 
     start_length = reduce(lambda a, b: a + len(b), tokens, 0)
     n_characters_cut = 0

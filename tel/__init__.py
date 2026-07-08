@@ -30,7 +30,7 @@ def is_send_hub_number(number):
     """
 
     if _contactNumberCleaner.match(number) is None:
-        logging.warning(f"Refusing to run query with invalid input")
+        logging.warning("Refusing to run query with invalid input")
         return False
 
     res = _db_query(
@@ -41,7 +41,7 @@ def is_send_hub_number(number):
             WHERE "pn"."number" = %s
         """,
         (number,),
-        as_dict=True
+        as_dict=True,
     )
     return len(res) > 0 and len(res[0].get("number", "")) > 0
 
@@ -63,5 +63,5 @@ __all__ = [
     "BuyPhoneNumberFromCarrier",
     "SHBoughtNumberObject",
     "ReleaseNumberSafely",
-    "FindPhoneNumberInAreaCode"
+    "FindPhoneNumberInAreaCode",
 ]

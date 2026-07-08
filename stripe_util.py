@@ -5,7 +5,7 @@ This module provides utility functions for working with Stripe objects, includin
 conversion between Stripe objects and Python dictionaries.
 """
 
-__author__ = 'brock'
+__author__ = "brock"
 
 import ast
 

@@ -13,6 +13,7 @@ def lineno():
     """
 
     import inspect
+
     return inspect.currentframe().f_back.f_lineno
 
 
@@ -29,7 +30,7 @@ def toId(_x):
 
     if isinstance(_x, int):
         return _x
-    if hasattr(_x, 'id'):
+    if hasattr(_x, "id"):
         return _x.id
     return _x
 
@@ -47,8 +48,9 @@ def findVariableByNameInFrame(name, depth=1):
     """
 
     import sys
+
     frame = sys._getframe(2)
-    selfSearch = [k for k in list(frame.f_locals.items()) if k == 'self']
+    selfSearch = [k for k in list(frame.f_locals.items()) if k == "self"]
     return selfSearch[0][1] if len(selfSearch) > 0 else None
 
 
@@ -109,5 +111,6 @@ def dynImport(path: str):
     module_path, _, attr = path.rpartition(".")
     module = import_module(module_path)
     return getattr(module, attr)
+
 
 __all__ = ["dynImport"]

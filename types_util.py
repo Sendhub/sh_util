@@ -9,7 +9,6 @@ Updated to be compatible with Python 3.13.8.
 Release Date: 2025-Oct-07
 """
 
-
 IntTypes = (int,)
 NumberTypes = (int, float, complex)
 
@@ -29,7 +28,7 @@ def isNumber(maybe_num):
         - Attempts to convert the value to a float if initial checks fail.
     """
 
-    ret = (maybe_num is not None and (isinstance(maybe_num, NumberTypes) or (isinstance(maybe_num, str) and maybe_num.isdigit())))
+    ret = maybe_num is not None and (isinstance(maybe_num, NumberTypes) or (isinstance(maybe_num, str) and maybe_num.isdigit()))
 
     if not ret:
         try:

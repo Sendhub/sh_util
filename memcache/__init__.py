@@ -128,8 +128,10 @@ Which **looks** like multiple tasks — but isn't.
 
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
-__contributors__ = ['Dipayan Ray',]
+__author__ = "Jay Taylor [@jtaylor]"
+__contributors__ = [
+    "Dipayan Ray",
+]
 
 import logging
 import os as _os
@@ -137,7 +139,6 @@ import threading as _threading
 import time as _time
 
 import pylibmc as _pylibmc
-
 import settings as _settings
 
 # ------------------------------------------------------------------------------
@@ -191,19 +192,20 @@ def get_memcache_client(new_connection=False):
         # Re-checking inside lock to avoid duplicate creation
         client = _settings.MEMCACHE_CLIENTS.get(key)
         if client is None or new_connection:
-            logging.info(
-                "[MEMCACHE] pid:%d threadid:%d Creating new memcache client%s",
-                pid,
-                tid,
-                " (forced reset)" if new_connection else ""
-            )
+            logging.info("[MEMCACHE] pid:%d threadid:%d Creating new memcache client%s", pid, tid, " (forced reset)" if new_connection else "")
 
             # NOTE:
             # We intentionally keep the server list minimal here.
             # pylibmc internally handles reconnection and failover.
-            client = _pylibmc.Client([_settings.MEMCACHE_SERVERS], binary=True,)
+            client = _pylibmc.Client(
+                [_settings.MEMCACHE_SERVERS],
+                binary=True,
+            )
 
-            client.behaviors = {"tcp_nodelay": True, "ketama": True,}
+            client.behaviors = {
+                "tcp_nodelay": True,
+                "ketama": True,
+            }
 
             _settings.MEMCACHE_CLIENTS[key] = client
 

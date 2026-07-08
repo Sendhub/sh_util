@@ -2,7 +2,7 @@
 This module extends Celery task decorators with additional functionality, including the ability to send error emails.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 import logging
@@ -12,12 +12,10 @@ import re
 # Other celery imports moved to function level to avoid circular import issues
 from celery import Task
 
-_fileLineFunctionExtractor = re.compile(
-    r'^File "(?:\/app\/?)?(?P<file>[^"]+)".*? (?P<line>[0-9]+), in (?P<fn>.*)$'
-)
+_fileLineFunctionExtractor = re.compile(r'^File "(?:\/app\/?)?(?P<file>[^"]+)".*? (?P<line>[0-9]+), in (?P<fn>.*)$')
 
 
-def _generateSubject(stackTraceStr, default='[Django] [ERROR] (Async worker exception)'):
+def _generateSubject(stackTraceStr, default="[Django] [ERROR] (Async worker exception)"):
     """
     Generating a subject line for error emails by incorporating file and function information from the stack trace.
 
@@ -30,15 +28,14 @@ def _generateSubject(stackTraceStr, default='[Django] [ERROR] (Async worker exce
     """
 
     out = default
-    pruned = [line for line in [line.strip() for line in stackTraceStr.split('\n')] if line.startswith('File ')]  # noqa
+    pruned = [line for line in [line.strip() for line in stackTraceStr.split("\n")] if line.startswith("File ")]  # noqa
     if len(pruned) > 0:
         m = _fileLineFunctionExtractor.match(pruned[-1])
         if m is not None:
-            fileName = m.group('file')
-            lineNo = m.group('line')
-            fn = m.group('fn')
-            out = '{0}: {fileName}.{fn} @ line {lineNo}' \
-                .format(out, fileName=fileName, lineNo=lineNo, fn=fn)
+            fileName = m.group("file")
+            lineNo = m.group("line")
+            fn = m.group("fn")
+            out = "{0}: {fileName}.{fn} @ line {lineNo}".format(out, fileName=fileName, lineNo=lineNo, fn=fn)
 
     return out
 
@@ -55,7 +52,7 @@ def _on_failure(self, exc, task_id, args, kwargs, einfo):
         einfo (ExceptionInfo): The exception information.
     """
 
-    body = '''Async task on failure triggered:
+    body = """Async task on failure triggered:
 --------------------------------------------------------------------------------
 exc: {exc}
 task_id: {task_id}
@@ -63,17 +60,13 @@ args: {args}
 kwargs: {kwargs}
 einfo: {einfo}
 --------------------------------------------------------------------------------
-'''.format(exc=exc, task_id=task_id, args=args, kwargs=kwargs, einfo=einfo)
+""".format(exc=exc, task_id=task_id, args=args, kwargs=kwargs, einfo=einfo)
     logging.error(body)
 
     # Import moved here to avoid circular import issues
     from sh_util.mail import sendEmail
-    sendEmail(
-        subject=_generateSubject(str(einfo)),
-        body=body,
-        fromAddress='devops@sendhub.com',
-        toAddress='devops@sendhub.com'
-    )
+
+    sendEmail(subject=_generateSubject(str(einfo)), body=body, fromAddress="devops@sendhub.com", toAddress="devops@sendhub.com")
 
 
 class ShTask(Task):
@@ -81,7 +74,7 @@ class ShTask(Task):
     A custom Celery Task class that implements an on_failure callback handler.
     """
 
-    name = 'sh_util.task.ShTask'
+    name = "sh_util.task.ShTask"
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """
@@ -98,7 +91,7 @@ class ShTask(Task):
         from celery.exceptions import MaxRetriesExceededError
 
         if isinstance(exc, MaxRetriesExceededError):
-            logging.error('Suppressing MaxRetriesExceededError exception')
+            logging.error("Suppressing MaxRetriesExceededError exception")
             return
 
         _on_failure(self, exc, task_id, args, kwargs, einfo)
@@ -111,27 +104,26 @@ class ShPeriodicTask(Task):
     Periodic tasks add themselves to the :setting:`CELERYBEAT_SCHEDULE` setting.
     """
 
-    name = 'sh_util.task.ShPeriodicTask'
+    name = "sh_util.task.ShPeriodicTask"
     abstract = True
     ignore_result = True
     relative = False
     options = None
     compat = True
 
-
     def __init__(self):
         """
         Initializing the periodic task and validating the presence of the run_every attribute.
         """
 
-        if not hasattr(self, 'run_every'):
-            raise NotImplementedError('Periodic tasks must have a run_every attribute')
+        if not hasattr(self, "run_every"):
+            raise NotImplementedError("Periodic tasks must have a run_every attribute")
 
         # Import moved here to avoid circular import issues
         from celery.schedules import maybe_schedule
+
         self.run_every = maybe_schedule(self.run_every, self.relative)
         super().__init__()
-
 
     @classmethod
     def on_bound(cls, app):
@@ -143,14 +135,13 @@ class ShPeriodicTask(Task):
         """
 
         app.conf.CELERYBEAT_SCHEDULE[cls.name] = {
-            'task': cls.name,
-            'schedule': cls.run_every,
-            'args': (),
-            'kwargs': {},
-            'options': cls.options or {},
-            'relative': cls.relative,
+            "task": cls.name,
+            "schedule": cls.run_every,
+            "args": (),
+            "kwargs": {},
+            "options": cls.options or {},
+            "relative": cls.relative,
         }
-
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """
@@ -181,7 +172,7 @@ def shTask(*args, **kwargs):
     # Import moved here to avoid circular import issues
     from celery import current_app
 
-    return current_app.task(*args, **dict({'base': ShTask}, **kwargs))
+    return current_app.task(*args, **dict({"base": ShTask}, **kwargs))
 
 
 def shPeriodicTask(*args, **options):
@@ -198,4 +189,4 @@ def shPeriodicTask(*args, **options):
     # Import moved here to avoid circular import issues
     from celery import current_app
 
-    return current_app.task(**dict({'base': ShPeriodicTask}, **options))
+    return current_app.task(**dict({"base": ShPeriodicTask}, **options))

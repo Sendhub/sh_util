@@ -2,7 +2,7 @@
 send email methods
 """
 
-__author__ = 'brock'
+__author__ = "brock"
 
 # Django imports moved to function level to avoid circular import issues
 

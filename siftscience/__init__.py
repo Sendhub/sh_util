@@ -8,21 +8,20 @@ to the Sift Science API.
 
 import logging
 
-import simplejson as json
-
 import settings
+import simplejson as json
 
 from ..retry import retry
 from ..sh_http.wget import wget
 
 SIFTSCIENCE_CHOICES = (
-    ('$spam', 'spam'),
-    ('$spam', 'nigeria'),
-    ('$spam', 'high block rate'),
-    ('$spam', '1k first 24 hours'),
-    ('$duplicate_account', 'duplicate'),
-    ('$chargeback', 'chargeback'),
-    ('$chargeback', 'suspicious payment'),
+    ("$spam", "spam"),
+    ("$spam", "nigeria"),
+    ("$spam", "high block rate"),
+    ("$spam", "1k first 24 hours"),
+    ("$duplicate_account", "duplicate"),
+    ("$chargeback", "chargeback"),
+    ("$chargeback", "suspicious payment"),
 )
 
 
@@ -80,29 +79,26 @@ def label_user(user_id, is_bad, reason):
 
     """
 
-    siftscience_203_api_url = 'https://api.siftscience.com/v203/'
+    siftscience_203_api_url = "https://api.siftscience.com/v203/"
 
-    if settings.SIFTSCIENCE_ENABLED != '1':
-        logging.warning(f'Siftscience disabled. Exiting.')
+    if settings.SIFTSCIENCE_ENABLED != "1":
+        logging.warning("Siftscience disabled. Exiting.")
         return
 
     if is_bad:
         label = map_reason_to_sift_science_label(reason)
     else:
-        label = 'n/a'
+        label = "n/a"
 
-    logging.info(f'Labelling user {user_id} as bad=={is_bad} label =={label} because of reason=={reason}')
+    logging.info(f"Labelling user {user_id} as bad=={is_bad} label =={label} because of reason=={reason}")
 
-    assert (is_bad is False) or (is_bad is True and is_bad_reason(reason)),  f'{reason} is not a valid reason to label as bad'
+    assert (is_bad is False) or (is_bad is True and is_bad_reason(reason)), f"{reason} is not a valid reason to label as bad"
 
-    post_data = {
-        '$is_bad': is_bad,
-        '$api_key': settings.SIFTSCIENCE_API_KEY
-    }
+    post_data = {"$is_bad": is_bad, "$api_key": settings.SIFTSCIENCE_API_KEY}
 
     # Adding the reasons only when the user is bad
     if is_bad:
-        post_data['$reasons'] = [label]
+        post_data["$reasons"] = [label]
 
     post_data = json.dumps(post_data)
 
@@ -116,11 +112,11 @@ def label_user(user_id, is_bad, reason):
 
         """
         try:
-            wget(f'{siftscience_203_api_url}users/{user_id}/labels', request_type='POST', body=post_data)
+            wget(f"{siftscience_203_api_url}users/{user_id}/labels", request_type="POST", body=post_data)
             return True
 
         except Exception as err:
-            logging.error(f'Caught exception: {err}, returning False')
+            logging.error(f"Caught exception: {err}, returning False")
             return None
 
     do_label_with_retry()

@@ -2,7 +2,7 @@
 
 """Postgres-specific distributed operations tools."""
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 # pylint: disable=C0103,C0103,C0301,C0415,R0913
 import logging
 import re
@@ -13,7 +13,7 @@ import settings  # , time
 from ..text import toSingleLine
 
 
-def tableDescriptionToDbLinkT(description, columns='*'):
+def tableDescriptionToDbLinkT(description, columns="*"):
     """
     Transform a tables description into a dblink "t" statement.
 
@@ -82,26 +82,24 @@ def tableDescriptionToDbLinkT(description, columns='*'):
     't("id" integer, "name" character varying(128))'
     """
     # Assert that description is in expected format.
-    assert len(description) > 0 and \
-        all([len(row) == 2 for row in description])
-    assert 'column' in description[0] if \
-        hasattr(description, 'keys') else True
+    assert len(description) > 0 and all([len(row) == 2 for row in description])
+    assert "column" in description[0] if hasattr(description, "keys") else True
 
     def _resolveColumnTypePairs(columns):
         """Resolve a columns specifier to a list of tuples
         of (column, type)."""
         # NB: r stands for 'row'.
-        getColumn = lambda r: r['column'] if hasattr(r, 'keys') else r[0]  # noqa
-        getType = lambda r: r['type'] if hasattr(r, 'keys') else r[1]  # noqa
+        getColumn = lambda r: r["column"] if hasattr(r, "keys") else r[0]  # noqa
+        getType = lambda r: r["type"] if hasattr(r, "keys") else r[1]  # noqa
 
-        if columns == '*':
+        if columns == "*":
             columnNames = list(map(getColumn, description))
         elif isinstance(columns, str) or isinstance(columns, str):
-            columnNames = columns.split(',')
-        elif hasattr(columns, '__iter__'):
+            columnNames = columns.split(",")
+        elif hasattr(columns, "__iter__"):
             columnNames = columns
         else:
-            raise Exception('Unexpecte columns value: {0}'.format(columns))
+            raise Exception("Unexpecte columns value: {0}".format(columns))
 
         # Prepare/organize output:
         result = [(getColumn(row), getType(row)) for row in [row for row in description if getColumn(row) in columnNames]]  # noqa
@@ -109,7 +107,7 @@ def tableDescriptionToDbLinkT(description, columns='*'):
 
     pairs = _resolveColumnTypePairs(columns)
 
-    return 't({0})'.format(', '.join(['"{0}" {1}'.format(c_t[0].strip('"'), c_t[1]) for c_t in pairs]))  # noqa
+    return "t({0})".format(", ".join(['"{0}" {1}'.format(c_t[0].strip('"'), c_t[1]) for c_t in pairs]))  # noqa
 
 
 def pgStripDoubleQuotes(s):
@@ -127,18 +125,18 @@ def pgGetPersistentConnectionHandles(using):
     """@return List of strings of connection handle names.
     Note: This is a cheap query; should only take a few ms."""
     from . import db_query
+
     # This query returns a postgres list.
-    handles = db_query('SELECT dblink_get_connections()', using=using)[0][0]
+    handles = db_query("SELECT dblink_get_connections()", using=using)[0][0]
     return handles
 
 
 def pgConnectPersistentDbLink(using, handle, psqlConnectionString):
     """Create a single persistent dblink connection."""
     from . import db_exec
-    logging.info('Connecting persistent dblink "%s" on connection %s',
-                 str(handle), str(using))
-    db_exec('''SELECT dblink_connect('{0}', '{1}')'''
-            .format(handle, psqlConnectionString), using=using)
+
+    logging.info('Connecting persistent dblink "%s" on connection %s', str(handle), str(using))
+    db_exec("""SELECT dblink_connect('{0}', '{1}')""".format(handle, psqlConnectionString), using=using)
 
 
 def pgConnectPersistentDbLinks(using, *handles, **custom):
@@ -159,8 +157,7 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
     from . import connections, db_query, getPsqlConnectionString
 
     if len(handles) == 0 and len(custom) == 0:
-        logging.warning('pgConnectPersistentDbLinks invoked with no '
-                        'handles, no action taken')
+        logging.warning("pgConnectPersistentDbLinks invoked with no handles, no action taken")
         return
 
     connectionNames = connections()
@@ -168,17 +165,17 @@ def pgConnectPersistentDbLinks(using, *handles, **custom):
     alreadyConnected = pgGetPersistentConnectionHandles(using=using) or []
 
     for c in handles:
-        assert c in connectionNames, \
-            'Connection "{0}" was not found in connections ({1})' \
-            .format(c, connectionNames)
+        assert c in connectionNames, 'Connection "{0}" was not found in connections ({1})'.format(c, connectionNames)
 
     # Generate a single statement to connect to all dblinks.
-    connectStatements = ['''dblink_connect('{0}', '{1}')'''.format(c, getPsqlConnectionString(c)) for c in [c for c in handles if c not in alreadyConnected]] + list(map(  # noqa
-        lambda c, psqlConnectionString: '''dblink_connect('{0}', '{1}')'''.format(c, psqlConnectionString),  # noqa
-        list(filter(lambda c, _: c not in alreadyConnected, list(custom.items())))  # noqa
-    ))
+    connectStatements = ["""dblink_connect('{0}', '{1}')""".format(c, getPsqlConnectionString(c)) for c in [c for c in handles if c not in alreadyConnected]] + list(
+        map(  # noqa
+            lambda c, psqlConnectionString: """dblink_connect('{0}', '{1}')""".format(c, psqlConnectionString),  # noqa
+            list(filter(lambda c, _: c not in alreadyConnected, list(custom.items()))),  # noqa
+        )
+    )
     if len(connectStatements) > 0:
-        sql = 'SELECT {0}'.format(', '.join(connectStatements))
+        sql = "SELECT {0}".format(", ".join(connectStatements))
         db_query(sql, using=using)
 
 
@@ -194,6 +191,7 @@ def _resolveConnectionsOrShards(connections=None):
     if connections is None:
         # Default to all shards.
         from sh_util.sharding import ShardedResource
+
         return ShardedResource.allShardConnectionNames()
 
     else:
@@ -216,13 +214,11 @@ def pgInitializeDbLinks(using, connections=None):
         pgConnectPersistentDbLinks(
             using,
             *(resolvedConnections if isinstance(resolvedConnections, list) else []),  # noqa
-            **(resolvedConnections if isinstance(resolvedConnections, dict) else {})  # noqa
+            **(resolvedConnections if isinstance(resolvedConnections, dict) else {}),  # noqa
         )
 
 
-def evaluatedDistributedSelect(sql, args=None, asDict=False, using='default',
-                               includeShardInfo=False, connections=None,
-                               usePersistentDbLink=None):
+def evaluatedDistributedSelect(sql, args=None, asDict=False, using="default", includeShardInfo=False, connections=None, usePersistentDbLink=None):
     """
     Generate and then evaluate a distributed query.
 
@@ -247,16 +243,9 @@ def evaluatedDistributedSelect(sql, args=None, asDict=False, using='default',
         args = tuple()
 
     # Use supplied value if not None, otherwise read from environment.
-    usePersistentDbLink = usePersistentDbLink if usePersistentDbLink is \
-        not None else getattr(settings, 'SH_UTIL_USE_PERSISTENT_DBLINK', False)
+    usePersistentDbLink = usePersistentDbLink if usePersistentDbLink is not None else getattr(settings, "SH_UTIL_USE_PERSISTENT_DBLINK", False)
 
-    sql, args = distributedSelect(
-        sql=sql,
-        args=args,
-        includeShardInfo=includeShardInfo,
-        connections=connections,
-        usePersistentDbLink=usePersistentDbLink
-    )
+    sql, args = distributedSelect(sql=sql, args=args, includeShardInfo=includeShardInfo, connections=connections, usePersistentDbLink=usePersistentDbLink)
 
     # logging.info(u'usePersistentDbLink={0}'.format(usePersistentDbLink))
 
@@ -266,13 +255,12 @@ def evaluatedDistributedSelect(sql, args=None, asDict=False, using='default',
     return db_query(sql, args, using=using, as_dict=asDict)
 
 
-_stringArgumentFinder = re.compile(r'%s')
+_stringArgumentFinder = re.compile(r"%s")
 
-_offsetLimitRe = re.compile(r'(:?OFFSET|LIMIT)\s+\d+', re.I)
+_offsetLimitRe = re.compile(r"(:?OFFSET|LIMIT)\s+\d+", re.I)
 
 
-def distributedSelect(sql, args=None, includeShardInfo=False,
-                      connections=None, usePersistentDbLink=None, alias='q0'):
+def distributedSelect(sql, args=None, includeShardInfo=False, connections=None, usePersistentDbLink=None, alias="q0"):
     """
     Generate a distributed query and associated args.  Note: when there is
     only one connection (or shard), the same
@@ -300,8 +288,9 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         persistent dblink connections exist.
     """
     import sqlparse
-    from sqlparse.sql import Identifier, IdentifierList, Function, Where
+    from sqlparse.sql import Function, Identifier, IdentifierList, Where
     from sqlparse.tokens import Keyword, Wildcard
+
     from . import getPsqlConnectionString
     # startedTs = time.time()
 
@@ -311,7 +300,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         args = tuple()
 
     # Remove trailing semicolons from sql.
-    sql = sql.rstrip(';')
+    sql = sql.rstrip(";")
 
     shards = _resolveConnectionsOrShards(connections)
     if isinstance(shards, dict):
@@ -326,8 +315,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
     #    return (sql, args)
 
     # Use supplied value if not None, otherwise read from environment.
-    usePersistentDbLink = usePersistentDbLink if usePersistentDbLink is \
-        not None else getattr(settings, 'SH_UTIL_USE_PERSISTENT_DBLINK', False)
+    usePersistentDbLink = usePersistentDbLink if usePersistentDbLink is not None else getattr(settings, "SH_UTIL_USE_PERSISTENT_DBLINK", False)
 
     parsed = sqlparse.parse(sql)[0]
 
@@ -348,7 +336,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         # logging.info('CANDIDATE IS: &{}&'.format(token))
         if not isinstance(token, str):
             # Assume this is an sqlparse token.
-            tokens = [token.value, token.value.replace('"."', '_')]
+            tokens = [token.value, token.value.replace('"."', "_")]
         else:
             tokens = [token]
 
@@ -372,20 +360,17 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         extraIdentifiers = []
         for token in _tokensWithSubTokensFor(Where, IdentifierList):
             # WHERE or GROUP BY keywords..
-            if seenInterestingKeyword is not True and \
-                    str(token).lower() in ('group', 'limit', 'order'):
+            if seenInterestingKeyword is not True and str(token).lower() in ("group", "limit", "order"):
                 seenInterestingKeyword = True
 
             if seenInterestingKeyword is True:
-                outerTokens.append(token.value.replace('"."', '_'))
-                if isinstance(token, Identifier) and token.value not in \
-                    list(columnsToAliases.values()) + \
-                        [t.value for t in extraIdentifiers]:
+                outerTokens.append(token.value.replace('"."', "_"))
+                if isinstance(token, Identifier) and token.value not in list(columnsToAliases.values()) + [t.value for t in extraIdentifiers]:
                     extraIdentifiers.append(token)
 
         # Strip offsets and limits from the outermost where tail
         # (should retain only order-by clauses).
-        outerTail = _offsetLimitRe.sub('', ''.join(map(_remapTokenToAlias, outerTokens)).replace('\n', ' ')).strip()  # noqa
+        outerTail = _offsetLimitRe.sub("", "".join(map(_remapTokenToAlias, outerTokens)).replace("\n", " ")).strip()  # noqa
         # logging.info(u'_findWhereTail ::
         # outerTail={0}\nextraIdentifiers={1}'
         # .format(outerTail, extraIdentifiers))
@@ -401,8 +386,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
             if seenFromKeyword is True and isinstance(token, Identifier):
                 return token.value
 
-            elif seenFromKeyword is not True and token.ttype is Keyword and \
-                    token.value.lower() == 'from':
+            elif seenFromKeyword is not True and token.ttype is Keyword and token.value.lower() == "from":
                 seenFromKeyword = True
 
         return None
@@ -418,8 +402,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
                 continue
 
             # Determine if we'll be interested in the next token.
-            if precededByJoinOrFromKeyword is not True and \
-                    token.value.lower() in ('from', 'join'):
+            if precededByJoinOrFromKeyword is not True and token.value.lower() in ("from", "join"):
                 precededByJoinOrFromKeyword = True
                 continue
 
@@ -428,7 +411,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
                 assert token.ttype is None
 
                 # Add this table reference to the results.
-                results.append({'table': token.value, 'alias': token.get_alias()})  # noqa
+                results.append({"table": token.value, "alias": token.get_alias()})  # noqa
 
                 # Reset to detect next interesting token.
                 precededByJoinOrFromKeyword = False
@@ -451,7 +434,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
 
             # Search for columns before a "FROM" clause.
             for token in parsed.tokens:
-                if str(token).lower() == 'from':
+                if str(token).lower() == "from":
                     break
 
                 if isInteresting(token):
@@ -468,7 +451,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
                     # clause.
                     # logging.info('>>>>>>>> {}/{}'.format(str(token),
                     # type(token)))
-                    if str(token).lower() == 'returning':
+                    if str(token).lower() == "returning":
                         active = True
 
                     if active and isInteresting(token):
@@ -484,8 +467,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
             # Maybe there is a wildcard?
             wildcards = [t for t in parsed.tokens if t.ttype is Wildcard]
             if len(wildcards) == 0:
-                raise Exception('Failed to find any columns in the select '
-                                'statement: {0}'.format(sql))
+                raise Exception("Failed to find any columns in the select statement: {0}".format(sql))
 
             # A wildcard results in all columns being included.
             return (['"{0}"'.format(tup[0]) for tup in describe(table)], {})
@@ -499,9 +481,9 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         def joiner(column):
             """Transform a sqlparse column into a SELECT-clause fragment."""
             pIdent = parseIdentifier(str(column))
-            return '{0}{1}'.format(
+            return "{0}{1}".format(
                 columns[column.value.strip('"')] if column.value.strip('"') in columns else column.value,  # noqa
-                ' AS "{0}"'.format(pIdent['alias']) if pIdent['alias'] is not None else ''  # noqa
+                ' AS "{0}"'.format(pIdent["alias"]) if pIdent["alias"] is not None else "",  # noqa
                 # c.get_alias()) if hasattr(c, 'has_alias')
                 # and c.has_alias() else ''
             )
@@ -513,17 +495,14 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
             pIdent = parseIdentifier(str(column))
             value = column.value.strip('"')
             if replacePeriods is True:
-                value = value.replace('"."', '_')
+                value = value.replace('"."', "_")
             a = columns[value] if value in columns else column.value
-            b = '"{0}"'.format((pIdent['alias'] if pIdent['alias'] is not None else a).strip('"'))  # noqa
+            b = '"{0}"'.format((pIdent["alias"] if pIdent["alias"] is not None else a).strip('"'))  # noqa
             # (column.get_alias() if hasattr(column, 'has_alias') and
             # column.has_alias() else a).strip('"')
             return (a, b)
 
-        columnsToAliases = dict(
-            list(map(columnAliasMapper, flatIdentifiers)) +
-            [columnAliasMapper(c, True) for c in flatIdentifiers]
-        )
+        columnsToAliases = dict(list(map(columnAliasMapper, flatIdentifiers)) + [columnAliasMapper(c, True) for c in flatIdentifiers])
         # logging.info(u'_findColumns ::
         # joinedOut={0}\ncolumnsToAliases={1}'
         # .format(joinedOut, columnsToAliases))
@@ -538,10 +517,13 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         """
         annotatedIdents = [parseIdentifier(c, table, listOfReferencedTables) for c in identifiers]  # noqa
 
-        description = [(
-                identifier['alias'] if identifier['alias'] is not None else identifier['column'],  # noqa
-                identifier['type']
-            ) for identifier in annotatedIdents]
+        description = [
+            (
+                identifier["alias"] if identifier["alias"] is not None else identifier["column"],  # noqa
+                identifier["type"],
+            )
+            for identifier in annotatedIdents
+        ]
         identifierNames = [x[0] for x in description]
 
         # logging.info(u'_toDbLinkT ::
@@ -551,40 +533,37 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
         dbLinkT = tableDescriptionToDbLinkT(description, identifierNames)
         return dbLinkT
 
-    def _remapFunctionIdentifiers(identifiers, table,
-                                  listOfReferencedTables,
-                                  stripFunctions=False):
+    def _remapFunctionIdentifiers(identifiers, table, listOfReferencedTables, stripFunctions=False):
         """
         For distributed queries to return correct results, count(*) needs to
         be remapped to sum(*) in the outermost query.
         """
         remapped = []
         for identifier in identifiers:
-
             p = parseIdentifier(identifier, table, listOfReferencedTables)
 
             # logging.info('........identifier={}'.format(p))
-            identifier = p['alias'] if p['alias'] is not None else p['column']
+            identifier = p["alias"] if p["alias"] is not None else p["column"]
 
             # Add quoting if appropriate.
             stripped = identifier.strip('"')
-            if not stripped.endswith('*'):
+            if not stripped.endswith("*"):
                 identifier = '"{0}"'.format(stripped)
             del stripped
 
-            if stripFunctions is False and p['function'] is not None and \
-                p['function'].lower() in \
-                    list(_aggregateFunctionTransformMappings.keys()):
+            if stripFunctions is False and p["function"] is not None and p["function"].lower() in list(_aggregateFunctionTransformMappings.keys()):
                 # Apply any remapping.
-                p['function'] = _aggregateFunctionTransformMappings[p['function']]  # noqa
-                remapped.append('{0}({1}) {2}'.format(
-                    p['function'].upper(),
-                    identifier if identifier != '*' else '"{0}"'.format(identifier), # noqa
-                    identifier if identifier != '*' else ''
-                ).strip())
+                p["function"] = _aggregateFunctionTransformMappings[p["function"]]  # noqa
+                remapped.append(
+                    "{0}({1}) {2}".format(
+                        p["function"].upper(),
+                        identifier if identifier != "*" else '"{0}"'.format(identifier),  # noqa
+                        identifier if identifier != "*" else "",
+                    ).strip()
+                )
 
             else:
-                remapped.append('{0}'.format(identifier))
+                remapped.append("{0}".format(identifier))
 
         return remapped
 
@@ -607,8 +586,7 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
                 # logging.debug('sql={0}'.format(sql))
                 # logging.debug('args={0}'.format(args))
                 # logging.debug('pos={0}'.format(positionalCallback.position))
-                if not any([isinstance(args[positionalCallback.position], t)
-                            for t in (int, int, bool)]):
+                if not any([isinstance(args[positionalCallback.position], t) for t in (int, int, bool)]):
                     # Add extra set of single quotes, which will become ''arg''
                     # once the db adds additional quotes.
                     return "''{0}''".format(match.group(0))
@@ -624,27 +602,24 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
 
         if len(args) > 0:
             # Then add 2 single quotes around any %s string arguments.
-            dbLinkSql = _stringArgumentFinder.sub(positionalCallback,
-                                                  dbLinkSql)
+            dbLinkSql = _stringArgumentFinder.sub(positionalCallback, dbLinkSql)
 
-        return re.sub(r'([\n ])FROM([\n ])', r', {0}\1FROM\2'.format(', '.join(extraIdentifiers)), dbLinkSql, 1) if len(extraIdentifiers) > 0 else dbLinkSql  # noqa
+        return re.sub(r"([\n ])FROM([\n ])", r", {0}\1FROM\2".format(", ".join(extraIdentifiers)), dbLinkSql, 1) if len(extraIdentifiers) > 0 else dbLinkSql  # noqa
 
-    def _prepareGroupingTail(identifiers, table, listOfReferencedTables,
-                             outerWhereTail):
+    def _prepareGroupingTail(identifiers, table, listOfReferencedTables, outerWhereTail):
         """Identify and extract grouping clause to generate outer query
         grouping clause."""
         # For counts or sums where that was the only thing queried,
         # chop off the
         # "where" portion of the outermost query.
         # logging.info('OOOOOOOOOOOOUTER WHERE TAIL={}'.format(outerWhereTail))
-        initial = 'GROUP BY'
+        initial = "GROUP BY"
         whereTail = outerWhereTail or initial
-        nextToken = ' ' if outerWhereTail else ', '
+        nextToken = " " if outerWhereTail else ", "
 
         if len(identifiers) == 1:
-            ident = parseIdentifier(identifiers[0], table,
-                                    listOfReferencedTables)
-            if ident['function'] == 'count' and includeShardInfo is True:
+            ident = parseIdentifier(identifiers[0], table, listOfReferencedTables)
+            if ident["function"] == "count" and includeShardInfo is True:
                 whereTail += '{0}"shard"'.format(nextToken)
 
         else:
@@ -654,20 +629,20 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
             aggregates = list(_sqlFunctionTypeMappings.keys())
             # Check for aggregate function mixed with fields, and create
             # appropriate group-by clause.
-            containsAggregate = len([pi for pi in pids if pi['function'] in aggregates]) > 0  # noqa
+            containsAggregate = len([pi for pi in pids if pi["function"] in aggregates]) > 0  # noqa
             # logging.info('PIDS={}'.format(pids))
             # logging.info('ADDING {}'.format(
             #    ', '.join(map(lambda pi: pi['column'],
             # filter(lambda pi: pi['function'] not in aggregates, pids)))
             # ))
             if containsAggregate is True:
-                whereTail += '{0}{1}'.format(
+                whereTail += "{0}{1}".format(
                     nextToken,
-                    ', '.join([pi['column'] for pi in [pi for pi in pids if pi['function'] not in aggregates]])  # noqa
+                    ", ".join([pi["column"] for pi in [pi for pi in pids if pi["function"] not in aggregates]]),  # noqa
                 )
 
         # logging.info('!!!!!!!!!!!! {}'.format(whereTail))
-        return whereTail if whereTail != initial else ''
+        return whereTail if whereTail != initial else ""
 
     table = _findTable(parsed)
     listOfReferencedTables = _findReferencedTables(parsed)
@@ -680,60 +655,61 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
     outerWhereTail, extraIdentifiers = _findWhereTail(parsed)
 
     # Create inner identifiers set.
-    innerIdentifiers = \
-        [t.value for t in [t for t in extraIdentifiers if _remapTokenToAlias(t) not in identifiers]]  # noqa
+    innerIdentifiers = [t.value for t in [t for t in extraIdentifiers if _remapTokenToAlias(t) not in identifiers]]  # noqa
 
-    dbLinkT = _toDbLinkT(identifiers + innerIdentifiers, table,
-                         listOfReferencedTables)
+    dbLinkT = _toDbLinkT(identifiers + innerIdentifiers, table, listOfReferencedTables)
 
     stdArgs = (identifiers, table, listOfReferencedTables)
 
     # Sometimes count(*) needs to be remapped to sum(*) in the outermost query.
-    remappedIdentifiers = _remapFunctionIdentifiers(*stdArgs) + (['shard'] if includeShardInfo is True else [])  # noqa
+    remappedIdentifiers = _remapFunctionIdentifiers(*stdArgs) + (["shard"] if includeShardInfo is True else [])  # noqa
 
-    groupingTail = _prepareGroupingTail(*stdArgs,
-                                        outerWhereTail=outerWhereTail)
+    groupingTail = _prepareGroupingTail(*stdArgs, outerWhereTail=outerWhereTail)
 
     # Get SQL with single quotes -> double single quotes.
     dbLinkSql = _prepareDbLinkQuery(sql, innerIdentifiers)
     # logging.info('usePersistentDbLink={}'.format(usePersistentDbLink))
 
-    multiShardSql = '\nUNION ALL\n'.join(['''SELECT *{maybeSelectShardId}
+    multiShardSql = "\nUNION ALL\n".join(
+        [
+            """SELECT *{maybeSelectShardId}
                     FROM dblink('{connectionString}', '{dbLinkSql}') AS
-                    {tClause}'''.format(maybeSelectShardId=''', '{0}' AS
-                    "shard"'''.format(shard) if includeShardInfo is True else '',  # noqa
-                    # Generate the dblink connection string if not using
-                    # persistent, otherwise just use the connection name.
-                    connectionString=getPsqlConnectionString(shard) if not usePersistentDbLink else shard,  # noqa
-                    dbLinkSql=dbLinkSql,
-                    tClause=dbLinkT
-                    ) for shard in shards]
+                    {tClause}""".format(
+                maybeSelectShardId=''', '{0}' AS
+                    "shard"'''.format(shard)
+                if includeShardInfo is True
+                else "",  # noqa
+                # Generate the dblink connection string if not using
+                # persistent, otherwise just use the connection name.
+                connectionString=getPsqlConnectionString(shard) if not usePersistentDbLink else shard,  # noqa
+                dbLinkSql=dbLinkSql,
+                tClause=dbLinkT,
+            )
+            for shard in shards
+        ]
     )
 
     if len(innerIdentifiers) > 0:
         # Sometimes count(*) needs to be remapped to
         # sum(*) in the outermost query.
-        outerRemappedIdentifiers = \
-            _remapFunctionIdentifiers(*stdArgs, stripFunctions=True) + \
-            (['shard'] if includeShardInfo is True else [])
+        outerRemappedIdentifiers = _remapFunctionIdentifiers(*stdArgs, stripFunctions=True) + (["shard"] if includeShardInfo is True else [])
 
-        distributedSql = 'SELECT {outerRemapped}\n' \
-            'FROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) ' \
-            '{alias} {tail}) q1' \
-            .format(outerRemapped=', '.join(outerRemappedIdentifiers),
-                    remapped=', '.join(remappedIdentifiers),
-                    inner=', '.join([i.replace('"."', '_') for i in innerIdentifiers]),  # noqa
-                    multiShardSql=multiShardSql,
-                    alias=alias,
-                    tail=groupingTail, ).strip()
+        distributedSql = "SELECT {outerRemapped}\nFROM (SELECT {remapped}, {inner} FROM (\n{multiShardSql}\n) {alias} {tail}) q1".format(
+            outerRemapped=", ".join(outerRemappedIdentifiers),
+            remapped=", ".join(remappedIdentifiers),
+            inner=", ".join([i.replace('"."', "_") for i in innerIdentifiers]),  # noqa
+            multiShardSql=multiShardSql,
+            alias=alias,
+            tail=groupingTail,
+        ).strip()
 
     else:
-        distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n) ' \
-                         '{alias} {tail}' \
-                         .format(remapped=', '.join(remappedIdentifiers),
-                                 multiShardSql=multiShardSql,
-                                 alias=alias,
-                                 tail=groupingTail, ).strip()
+        distributedSql = "SELECT {remapped} FROM (\n{multiShardSql}\n) {alias} {tail}".format(
+            remapped=", ".join(remappedIdentifiers),
+            multiShardSql=multiShardSql,
+            alias=alias,
+            tail=groupingTail,
+        ).strip()
 
     # distributedSql = 'SELECT {remapped} FROM (\n{multiShardSql}\n)
     # {alias} {tail0} {tail1}'.format(
@@ -749,69 +725,67 @@ def distributedSelect(sql, args=None, includeShardInfo=False,
     # logging.info(u'distributedSelect took {0}'
     # .format(finishedTs - startedTs))
     if settings.DEBUG is True:
-        logging.debug('IN: %s', str(sql))
-        logging.debug('OUT: %s', str(distributedSql))
+        logging.debug("IN: %s", str(sql))
+        logging.debug("OUT: %s", str(distributedSql))
 
     # from django_util.log_errors import print_stack
     # logging.debug('[distributedSelect stack]')
     # logging.debug(print_stack())
 
-    return (distributedSql % (args * len(shards))).replace('%', '%%'), tuple()
+    return (distributedSql % (args * len(shards))).replace("%", "%%"), tuple()
 
 
 # Some aggregate functions require remapping in the outermost
 # part of the distributed query to produce the expected
 # combined result.  e.g. count -> sum
 _aggregateFunctionTransformMappings = {
-    'count': 'sum',
+    "count": "sum",
 }
 
 _aggregateFunctionTypeMappings = {
     # NB: <T> is used to indicate the same as the underlying type of the input.
-    'avg': 'numeric',
-    'bit_and': '<T>',
-    'bit_or': '<T>',
-    'bool_and': 'bool',
-    'bool_or': 'bool',
-    'count': 'bigint',
-    'every': 'bool',
-    'max': '<T>',
-    'min': '<T>',
-    'string_agg': '<T>',
-    'sum': 'numeric',
-    'to_char': 'character varying',
-    'xmlagg': 'xml',
+    "avg": "numeric",
+    "bit_and": "<T>",
+    "bit_or": "<T>",
+    "bool_and": "bool",
+    "bool_or": "bool",
+    "count": "bigint",
+    "every": "bool",
+    "max": "<T>",
+    "min": "<T>",
+    "string_agg": "<T>",
+    "sum": "numeric",
+    "to_char": "character varying",
+    "xmlagg": "xml",
 }
 
 # Recognized functions:
 _sqlFunctionTypeMappings = dict(
-    list({
-        'to_char': 'character varying',
-        'array_agg': 'bigint[]',  # NB: actually returns array[T] (Not fully supported, bigint[] is just a common case).  # noqa
-    }.items()) + list(_aggregateFunctionTypeMappings.items())
+    list(
+        {
+            "to_char": "character varying",
+            "array_agg": "bigint[]",  # NB: actually returns array[T] (Not fully supported, bigint[] is just a common case).  # noqa
+        }.items()
+    )
+    + list(_aggregateFunctionTypeMappings.items())
 )
 
 _identifierParserRe = re.compile(
-    r'''
+    r"""
         ^\s*
         (?P<identifier>(?:[a-zA-Z0-9_]+\()?(?P<column>.*?)(?:\))?)
         (?:\s+(?:as\s+)?(?P<alias>(?:[a-z0-9_]+|"[^"]+"?)))?
         \s*$
-    ''',
-    re.I | re.X
+    """,
+    re.I | re.X,
 )
 
-_functionParserRe = re.compile(
-    r'''^(?P<function>{0})\(\s*(?P<arg1>.*?)(?P<rest>(?:\s*,\s*.*?\s*)*)\)$'''
-    .format('|'.join(list(_sqlFunctionTypeMappings.keys()))),
-    re.I
-)
+_functionParserRe = re.compile(r"""^(?P<function>{0})\(\s*(?P<arg1>.*?)(?P<rest>(?:\s*,\s*.*?\s*)*)\)$""".format("|".join(list(_sqlFunctionTypeMappings.keys()))), re.I)
 
 _tableColumnRe = re.compile(r'(?P<table>"?[a-z0-9_]+"?)\.(?P<column>"?[a-z0-9_]+"?)(?: .*)?', re.I)  # noqa
 
 
-def parseIdentifier(identifierFragment, table=None,
-                    listOfReferencedTables=None):
+def parseIdentifier(identifierFragment, table=None, listOfReferencedTables=None):
     """
     Parse an identifier (e.g. the `avg(score) myScore` portion of the
     statement `select avg(score) myScore from x` into
@@ -841,12 +815,11 @@ def parseIdentifier(identifierFragment, table=None,
 
     m = _identifierParserRe.match(identifierFragment)
     if m is None:
-        raise Exception('No identifer found in "{0}"'
-                        .format(identifierFragment))
+        raise Exception('No identifer found in "{0}"'.format(identifierFragment))
 
-    out = {'function': None}
+    out = {"function": None}
 
-    out['identifier'], out['column'], out['alias'] = list(map(pgStripDoubleQuotes, m.groups()))  # noqa
+    out["identifier"], out["column"], out["alias"] = list(map(pgStripDoubleQuotes, m.groups()))  # noqa
     # logging.info(u'in={}, column={}, alias={}'
     # .format(identifierFragment, out['column'], out['alias']))
 
@@ -854,15 +827,15 @@ def parseIdentifier(identifierFragment, table=None,
         """Try to find a specific column name from the table description."""
         # Test for table.column or "table"."column"-style column name:
         # logging.info('NAME={}'.format(name))
-        tableColumnMatch = _tableColumnRe.match(out['column'])
+        tableColumnMatch = _tableColumnRe.match(out["column"])
         if tableColumnMatch is not None:
-            name = tableColumnMatch.group('column').replace('"', '')
-            _table = tableColumnMatch.group('table').replace('"', '')
+            name = tableColumnMatch.group("column").replace('"', "")
+            _table = tableColumnMatch.group("table").replace('"', "")
 
             # Resolve prefix containing candidate table alias.
             for ref in listOfReferencedTables:
-                if ref['alias'] == _table:
-                    _table = ref['table'].strip('"')
+                if ref["alias"] == _table:
+                    _table = ref["table"].strip('"')
                     break
 
         else:
@@ -874,59 +847,55 @@ def parseIdentifier(identifierFragment, table=None,
         column = [c for c in describe(pgStripDoubleQuotes(_table or table)) if c[0].lower() == name.lower()]  # noqa
 
         if len(column) > 0:
-            out['column'] = '{0}{1}'.format(
-                '"{0}".'.format(_table) if _table is not None else '',
-                '"{0}"'.format(column[0][0].replace('"', ''))
-            )
-            out['type'] = column[0][1]
+            out["column"] = "{0}{1}".format('"{0}".'.format(_table) if _table is not None else "", '"{0}"'.format(column[0][0].replace('"', "")))
+            out["type"] = column[0][1]
 
         return column[0] if len(column) > 0 else None
 
     def _attemptTypeInference():
         """Infer the identifiers return type."""
-        aggregateTest = _functionParserRe.match(out['identifier'])
+        aggregateTest = _functionParserRe.match(out["identifier"])
         if aggregateTest is None:
             return
 
-        out['function'], arg1, rest = list(map(pgStripDoubleQuotes, aggregateTest.groups()))  # noqa
+        out["function"], arg1, rest = list(map(pgStripDoubleQuotes, aggregateTest.groups()))  # noqa
 
-        out['function'] = out['function'].lower()
+        out["function"] = out["function"].lower()
 
-        out['args'] = '{0}{1}'.format(arg1, rest)
+        out["args"] = "{0}{1}".format(arg1, rest)
 
         # @FIXME Assuming this will contain the column of interest is very
         # naiive; not a safe assumption.
-        found = _findColumn(out['column'])
+        found = _findColumn(out["column"])
         if found is None and _findColumn(arg1) is not None:
-            out['column'] = arg1
+            out["column"] = arg1
 
         # Function return type inference/lookup.
-        if out['function'] in _aggregateFunctionTypeMappings:
-            out['type'] = _sqlFunctionTypeMappings[out['function']]
+        if out["function"] in _aggregateFunctionTypeMappings:
+            out["type"] = _sqlFunctionTypeMappings[out["function"]]
 
         else:
             # If not in _aggregateFunctionTypeMappings, try to query
             # for the return type.
-            returnType = plFunctionReturnType(out['function'])
+            returnType = plFunctionReturnType(out["function"])
             if len(returnType) > 0:
-                out['type'] = returnType[0][0]
+                out["type"] = returnType[0][0]
 
-        if 'type' not in out:
-            logging.warning('[WARN] distributed.parseIdentifier type '
-                            'inference failed, out=%s', str(out))
+        if "type" not in out:
+            logging.warning("[WARN] distributed.parseIdentifier type inference failed, out=%s", str(out))
 
     _attemptTypeInference()
 
     # Do our best to infer the type if the attempt failed or resulted in
     # a '<T>'.
-    found = _findColumn(out['identifier'])
-    if 'type' not in out or out['type'] == '<T>':
+    found = _findColumn(out["identifier"])
+    if "type" not in out or out["type"] == "<T>":
         # Try to find the column type from the description of the table.
         if found is not None:
-            out['type'] = found[1]
+            out["type"] = found[1]
         else:
             # Default.
-            out['type'] = 'character varying'
+            out["type"] = "character varying"
 
     # @TODO Add support for inferring `1 as q` as bigint,
     # 'someval' as character varying, etc.
@@ -934,18 +903,21 @@ def parseIdentifier(identifierFragment, table=None,
     # NB: For our purposes, the column will always be referred to by the
     # full auto-generated alias (with underscores)
     # rather than the table.column.
-    out['column'] = out['column'].replace('"."', '_')
+    out["column"] = out["column"].replace('"."', "_")
     return out
 
 
 def multiShardExec(sql):
     """Execute a statement across all shards."""
     from sh_util.sharding import ShardedResource
+
     from . import db_exec
+
     for connectionName in ShardedResource.allShardConnectionNames():
         db_exec(sql, using=connectionName)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

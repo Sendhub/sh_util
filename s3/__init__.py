@@ -1,4 +1,3 @@
-
 """
 S3 utility functions.
 
@@ -9,11 +8,10 @@ import logging
 import re
 
 import boto3
-
 import settings
 
-_fileNameCleanerRe = re.compile(r'[^a-z0-9/_.-]+', re.I)
-_BUCKETNAME = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'fakebucket')
+_fileNameCleanerRe = re.compile(r"[^a-z0-9/_.-]+", re.I)
+_BUCKETNAME = getattr(settings, "AWS_STORAGE_BUCKET_NAME", "fakebucket")
 
 
 def get_s3_client():
@@ -41,7 +39,7 @@ def delete_file(s3_file_path):
     s3_client.delete_object(Bucket=_BUCKETNAME, Key=s3_file_path)
 
 
-def upload_file(destination_file_path, data, content_type='plain/text', policy='private', cache_contraol=None):
+def upload_file(destination_file_path, data, content_type="plain/text", policy="private", cache_contraol=None):
     """
     Uploading a file to S3.
 
@@ -57,7 +55,7 @@ def upload_file(destination_file_path, data, content_type='plain/text', policy='
     """
     s3_client = get_s3_client()
 
-    destination_file_path = _fileNameCleanerRe.sub('', destination_file_path)
+    destination_file_path = _fileNameCleanerRe.sub("", destination_file_path)
     logging.info(f"Uploading fileName={destination_file_path} to S3 bucketName={_BUCKETNAME}")  # noqa
 
     if isinstance(data, str):
@@ -100,9 +98,9 @@ def get_signed_url(s3_file_path, secure=True, expires_in=60, include_signature=T
     if include_signature:
         return signed_url
 
-    unsigned_url = signed_url[0:signed_url.rindex('?')]
+    unsigned_url = signed_url[0 : signed_url.rindex("?")]
     logging.info(f"Unsigned url={unsigned_url}")
     return unsigned_url
 
 
-__all__ = ['get_s3_client', 'delete_file', 'upload_file', 'get_signed_url']
+__all__ = ["get_s3_client", "delete_file", "upload_file", "get_signed_url"]

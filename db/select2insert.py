@@ -4,7 +4,8 @@ Utility to enable generation of SELECT SQL which executes to INSERT SQL.
 NB: Only tested for compatibility with Postgres.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
+
 
 def select2insert(table, description, whereClause=None):
     """
@@ -46,20 +47,17 @@ def select2insert(table, description, whereClause=None):
     || \\',\\' || quote_nullable("date_joined") || \\');\\' FROM "auth_user";'
 
     """
-    columns = ','.join([f'"{tup[0]}"' for tup in description])
+    columns = ",".join([f'"{tup[0]}"' for tup in description])
 
     values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
-    if whereClause is not None and \
-            not whereClause.lower().strip().startswith('where '):
-        whereClause = f'WHERE {whereClause}'
+    if whereClause is not None and not whereClause.lower().strip().startswith("where "):
+        whereClause = f"WHERE {whereClause}"
 
-    where = f'{whereClause}' if whereClause is not None else ''
+    where = f"{whereClause}" if whereClause is not None else ""
 
-    intermediateSql = \
-        '''SELECT 'INSERT INTO "{table}" ({columns}) VALUES
-        (' || {values} || ');' FROM "{table}"{where};''' \
-        .format(table=table, columns=columns, values=values, where=where)
+    intermediateSql = """SELECT 'INSERT INTO "{table}" ({columns}) VALUES
+        (' || {values} || ');' FROM "{table}"{where};""".format(table=table, columns=columns, values=values, where=where)
 
     return intermediateSql
 
@@ -71,28 +69,26 @@ def select2multiInsert(using, table, description, whereClause=None):
 
     values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
-    if whereClause is not None and \
-            not whereClause.lower().strip().startswith('where '):
-        whereClause = f'WHERE {whereClause}'
+    if whereClause is not None and not whereClause.lower().strip().startswith("where "):
+        whereClause = f"WHERE {whereClause}"
 
-    where = f'{whereClause}' if whereClause is not None else ''
+    where = f"{whereClause}" if whereClause is not None else ""
 
-    intermediateSql = \
-        '''SELECT '(' || {values} || ')' FROM
-        "{table}"{where};'''.format(values=values, table=table, where=where)
+    intermediateSql = """SELECT '(' || {values} || ')' FROM
+        "{table}"{where};""".format(values=values, table=table, where=where)
 
-    actualValues = ','.join([tup[0] for tup in db_query(intermediateSql, using=using)])  # noqa
+    actualValues = ",".join([tup[0] for tup in db_query(intermediateSql, using=using)])  # noqa
     if len(actualValues) == 0:
         return None
 
-    columns = ','.join([f'"{tup[0]}"' for tup in description])
+    columns = ",".join([f'"{tup[0]}"' for tup in description])
 
-    finalSql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};' \
-        .format(table=table, columns=columns, actualValues=actualValues)
+    finalSql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};'.format(table=table, columns=columns, actualValues=actualValues)
 
     return finalSql
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

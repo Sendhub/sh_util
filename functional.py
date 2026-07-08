@@ -3,8 +3,7 @@ This module provides utility functions for functional programming, including mem
 flattening nested sequences, and generating stable hashes for complex objects.
 """
 
-
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 import logging
@@ -104,7 +103,7 @@ def memoize(function):
         Memoize: The memoized function.
     """
 
-    class Memoize():
+    class Memoize:
         """
         Abstracts the details for method memoization.
         """
@@ -149,7 +148,7 @@ def memoize(function):
     return Memoize(function)
 
 
-class Memoizewithexpiry():
+class Memoizewithexpiry:
     """
     Decorates a function to cache its results with an expiration time.
     """
@@ -172,7 +171,7 @@ class Memoizewithexpiry():
 
         now = time()
         expired = [tup[0] for tup in [tup for tup in list(self._cached.items()) if tup[1][0] - now > self.ttl_seconds]]
-        logging.info('Cleaning expired items: %s', expired)
+        logging.info("Cleaning expired items: %s", expired)
         for key in expired:
             del self._cached[key]
 
@@ -262,7 +261,7 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
             now = time()
 
             if key not in self._cached or now - self._cached[key][0] > self.ttl_seconds:
-                mc_key = f'memoize.{func.__name__}:{key}'
+                mc_key = f"memoize.{func.__name__}:{key}"
 
                 result = None
                 try:
@@ -273,7 +272,7 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
                             result = None
 
                 except pylibmc.Error as err:
-                    logging.error('Distmemoizewithexpiry caught %s', str(err))
+                    logging.error("Distmemoizewithexpiry caught %s", str(err))
 
                 if result is None:
                     result = func(*args, **kw) if accepts_kw is True else func(*args)
@@ -284,7 +283,7 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
                     cli().set(mc_key, self._cached[key], time=self.ttl_seconds)
 
                 except pylibmc.Error as err:
-                    logging.error('Distmemoizewithexpiry caught %s', str(err))
+                    logging.error("Distmemoizewithexpiry caught %s", str(err))
 
             return deepcopy(self._cached[key][1])
 
@@ -321,9 +320,7 @@ def saferHash(obj):
         if isinstance(x, Mapping):
             seen.add(oid)
             try:
-                items = tuple(
-                    (repr(k), _tuplify(v)) for k, v in sorted(x.items(), key=lambda kv: repr(kv[0]))
-                )
+                items = tuple((repr(k), _tuplify(v)) for k, v in sorted(x.items(), key=lambda kv: repr(kv[0])))
             finally:
                 seen.remove(oid)
             return ("_dict",) + items

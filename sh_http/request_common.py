@@ -5,7 +5,7 @@ This module provides small helpers for HTTP-related tasks used across the
 project.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 def extract_parameters(query_dict, parameters, empty_value=None):

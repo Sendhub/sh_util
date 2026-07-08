@@ -28,10 +28,10 @@ import re
 
 # Matches the Build number in the user agent string.
 
-_client_app_build_number_re = re.compile(r'AppVersion\:\:(?P<versionName>[^\s:]+) \((?P<buildNumber>[0-9]+)\)$', re.IGNORECASE)  # noqa
-_client_app_platform_type_re = re.compile(r'Platform\:\:(?P<platformType>[a-z\s]+)/', re.IGNORECASE)  # noqa
-_client_ios_platform_type = re.compile(r'iOS|iPhone|iPod|iPad', re.IGNORECASE)
-_client_android_platform_type = re.compile(r'Android', re.IGNORECASE)
+_client_app_build_number_re = re.compile(r"AppVersion\:\:(?P<versionName>[^\s:]+) \((?P<buildNumber>[0-9]+)\)$", re.IGNORECASE)  # noqa
+_client_app_platform_type_re = re.compile(r"Platform\:\:(?P<platformType>[a-z\s]+)/", re.IGNORECASE)  # noqa
+_client_ios_platform_type = re.compile(r"iOS|iPhone|iPod|iPad", re.IGNORECASE)
+_client_android_platform_type = re.compile(r"Android", re.IGNORECASE)
 
 
 def get_sendhub_user_agent_string(request):
@@ -45,8 +45,8 @@ def get_sendhub_user_agent_string(request):
         str: The SendHub User Agent string if present, otherwise None.
     """
     sh_user_agent_str = None
-    if (hasattr(request, 'META') and 'HTTP_X_SH_USER_AGENT' in request.META):
-        sh_user_agent_str = request.META.get('HTTP_X_SH_USER_AGENT', None)
+    if hasattr(request, "META") and "HTTP_X_SH_USER_AGENT" in request.META:
+        sh_user_agent_str = request.META.get("HTTP_X_SH_USER_AGENT", None)
     return sh_user_agent_str
 
 
@@ -65,9 +65,9 @@ def get_sendhub_user_agent_props(request):
     agent_str = get_sendhub_user_agent_string(request)
     props = {}
     if agent_str is not None:
-        prop_pairs = agent_str.split('/')
+        prop_pairs = agent_str.split("/")
         props_serial = []
-        [props_serial.extend(pair.split('::')) for pair in prop_pairs]
+        [props_serial.extend(pair.split("::")) for pair in prop_pairs]
         props = dict(itertools.zip_longest(*[iter(props_serial)] * 2, fillvalue=""))  # noqa
     return props
 
@@ -87,7 +87,7 @@ def get_client_app_build_number(request):
     if sh_user_agent_str is not None:
         matches = _client_app_build_number_re.search(sh_user_agent_str)
         if matches is not None:
-            build_number = int(matches.group('buildNumber'))
+            build_number = int(matches.group("buildNumber"))
 
     return build_number
 
@@ -103,15 +103,15 @@ def get_client_platform_type(request):
         str: The client platform type ('ios', 'android', or 'web').
     """
     sh_user_agent_str = get_sendhub_user_agent_string(request)
-    platform_type = 'web'
+    platform_type = "web"
 
     if sh_user_agent_str is not None:
         matches = _client_app_platform_type_re.search(sh_user_agent_str)
         if matches is not None:
-            platform_type = matches.group('platformType')
+            platform_type = matches.group("platformType")
             if _client_ios_platform_type.match(platform_type):
-                platform_type = 'ios'
+                platform_type = "ios"
             elif _client_android_platform_type.match(platform_type):
-                platform_type = 'android'
+                platform_type = "android"
 
     return platform_type

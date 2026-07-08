@@ -7,7 +7,7 @@ subclasses create their own unique singleton instances.
 Originally found here: http://code.activestate.com/recipes/52558/
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 class Singleton:
@@ -54,7 +54,7 @@ class Singleton:
         pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Import only needed for this demo/test code
     import logging
 
@@ -65,22 +65,23 @@ if __name__ == '__main__':
         This class demonstrates the inheritance capability of the Singleton base
         class, allowing subclasses to create their own unique singleton instances.
         """
+
         pass
 
-    o1 = Singleton('foo')
+    o1 = Singleton("foo")
     o1.display()
-    o2 = Singleton('bar')
+    o2 = Singleton("bar")
     o2.display()
-    o3 = Subsingleton('foobar')
+    o3 = Subsingleton("foobar")
     o3.display()
-    o4 = Subsingleton('barfoo')
+    o4 = Subsingleton("barfoo")
     o4.display()
 
     # Logging the results of singleton comparisons.
-    logging.info(f'o1 = o2: {o1 == o2}')
-    logging.info(f'o1 = o3: {o1 == o3}')
-    logging.info(f'o3 = o4: {o3 == o4}')
-    logging.info(f'o1 is a singleton? {isinstance(o1, Singleton)}')
-    logging.info(f'o3 is a singleton? {isinstance(o3, Singleton)}')
-    logging.info(f'o1 is a subsingleton? {isinstance(o1, Subsingleton)}')  # noqa
-    logging.info(f'o3 is a subsingleton? {isinstance(o3, Subsingleton)}')  # noqa
+    logging.info(f"o1 = o2: {o1 == o2}")
+    logging.info(f"o1 = o3: {o1 == o3}")
+    logging.info(f"o3 = o4: {o3 == o4}")
+    logging.info(f"o1 is a singleton? {isinstance(o1, Singleton)}")
+    logging.info(f"o3 is a singleton? {isinstance(o3, Singleton)}")
+    logging.info(f"o1 is a subsingleton? {isinstance(o1, Subsingleton)}")  # noqa
+    logging.info(f"o3 is a subsingleton? {isinstance(o3, Subsingleton)}")  # noqa

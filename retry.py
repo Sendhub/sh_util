@@ -6,7 +6,7 @@ This module provides a retry decorator with exponential backoff functionality. I
 
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 import math as _math
 import time as _time
@@ -33,14 +33,14 @@ def retry(tries, delay=3, backoff=2, desired_outcome=True, fail_value=None):
     """
 
     if backoff <= 1:
-        raise ValueError('Backoff must be greater than 1.')
+        raise ValueError("Backoff must be greater than 1.")
 
     tries = _math.floor(tries)
     if tries < 0:
-        raise ValueError('Tries must be 0 or greater.')
+        raise ValueError("Tries must be 0 or greater.")
 
     if delay <= 0:
-        raise ValueError('Delay must be greater than 0.')
+        raise ValueError("Delay must be greater than 0.")
 
     def wrapped_retry(_fn):
         """

@@ -32,16 +32,16 @@ Relevant StackOverflow question: http://stackoverflow.com/a/1176023/293064
 }
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 import re
 
-_underscorer1 = re.compile(r'(.)([A-Z][a-z]+)')
-_underscorer2 = re.compile('([a-z0-9])([A-Z])')
+_underscorer1 = re.compile(r"(.)([A-Z][a-z]+)")
+_underscorer2 = re.compile("([a-z0-9])([A-Z])")
 
 
-_snakeFinder = re.compile(r'_(\w)')
+_snakeFinder = re.compile(r"_(\w)")
 
 
 def camelToSnake(s):
@@ -49,8 +49,8 @@ def camelToSnake(s):
     Is it ironic that this function is written in camel case, yet it
     converts to snake case? hmm..
     """
-    subbed = _underscorer1.sub(r'\1_\2', s)
-    return _underscorer2.sub(r'\1_\2', subbed).lower()
+    subbed = _underscorer1.sub(r"\1_\2", s)
+    return _underscorer2.sub(r"\1_\2", subbed).lower()
 
 
 def snakeToCamel(s):
@@ -92,8 +92,7 @@ def dictKeysToSnakeCase(struct):
     if t is str or t is int or t is bool:
         return struct
 
-    elif t is dict or hasattr(struct, 'to_dict'):
-
+    elif t is dict or hasattr(struct, "to_dict"):
         # If the object is not a dictionary but knows how to transform into a dict, then do so
         if t is not dict:
             struct = struct.to_dict()
@@ -103,14 +102,14 @@ def dictKeysToSnakeCase(struct):
             struct[camelToSnake(k)] = dictKeysToSnakeCase(v)
         return struct
 
-    elif t is list or hasattr(struct, '__iter__'):
+    elif t is list or hasattr(struct, "__iter__"):
         return [dictKeysToSnakeCase(item) for item in struct]
 
     elif struct is None:
         return None
 
     else:
-        raise Exception(f"_dictKeysToSnakeCase: unsupported type `{t}\'")
+        raise Exception(f"_dictKeysToSnakeCase: unsupported type `{t}'")
 
 
 def dictKeysToCamelCase(struct, seen=None):
@@ -185,12 +184,13 @@ def dictKeysToCamelCase(struct, seen=None):
     return str(struct)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()
 
-    assert camelToSnake('snakesOnAPlane') == 'snakes_on_a_plane'
-    assert camelToSnake('SnakesOnAPlane') == 'snakes_on_a_plane'
-    assert camelToSnake('snakes_on_a_plane') == 'snakes_on_a_plane'
-    assert camelToSnake('IPhoneHysteria') == 'i_phone_hysteria'
-    assert camelToSnake('iPhoneHysteria') == 'i_phone_hysteria'
+    assert camelToSnake("snakesOnAPlane") == "snakes_on_a_plane"
+    assert camelToSnake("SnakesOnAPlane") == "snakes_on_a_plane"
+    assert camelToSnake("snakes_on_a_plane") == "snakes_on_a_plane"
+    assert camelToSnake("IPhoneHysteria") == "i_phone_hysteria"
+    assert camelToSnake("iPhoneHysteria") == "i_phone_hysteria"

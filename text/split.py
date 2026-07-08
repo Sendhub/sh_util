@@ -5,7 +5,7 @@ This module provides a helper to split a long string into multiple fragments tha
 Fragments will prefer breaking at word boundaries when possible.
 """
 
-__author__ = 'brock'
+__author__ = "brock"
 
 import re
 
@@ -42,7 +42,7 @@ def splitString(strToSplit, fragmentLength=160, maxFragments=-1):
 
     i = 0
     s = 0
-    wordBoundaryRe = re.compile(r'(\s)', re.DOTALL | re.IGNORECASE | re.M)  # noqa
+    wordBoundaryRe = re.compile(r"(\s)", re.DOTALL | re.IGNORECASE | re.M)  # noqa
 
     # Making as many fragments as necessary when `maxFragments` is -1
     while i < maxFragments or maxFragments == -1:
@@ -53,16 +53,16 @@ def splitString(strToSplit, fragmentLength=160, maxFragments=-1):
             fragments.append(fragment)
         else:
             # Getting the next fragment
-            fragment = strToSplit[s:s + fragmentLength]
+            fragment = strToSplit[s : s + fragmentLength]
 
-            if fragment == '':
+            if fragment == "":
                 break
 
             # Checking the end of the slice for a word boundary.
             # Assuming that the last space from the end is the word boundary.
-            m = wordBoundaryRe.search(''.join(reverse(list(fragment))))
+            m = wordBoundaryRe.search("".join(reverse(list(fragment))))
             if m is not None:
-                fragment = fragment[:len(fragment) - m.start()]
+                fragment = fragment[: len(fragment) - m.start()]
             s = s + len(fragment)
             fragments.append(fragment)
 

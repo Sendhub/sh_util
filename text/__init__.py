@@ -12,7 +12,7 @@ from .split import splitString
 
 def ensureAscii(text):
     if isinstance(text, str):
-        encodedText = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        encodedText = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     else:
         encodedText = text
 
@@ -21,8 +21,8 @@ def ensureAscii(text):
 
 # Used to cleanup SQL queries sometimes (not always guaranteed to be safe
 # WRT messing up your SQL query, discretion required).
-_spacesRe = re.compile(r'\s+', re.M)
-toSingleLine = lambda s: _spacesRe.sub(' ', s).strip()  # noqa
+_spacesRe = re.compile(r"\s+", re.M)
+toSingleLine = lambda s: _spacesRe.sub(" ", s).strip()  # noqa
 
 
 # def stringify(obj):
@@ -35,6 +35,7 @@ toSingleLine = lambda s: _spacesRe.sub(' ', s).strip()  # noqa
 #     elif isinstance(obj, int):
 #         return str(obj)
 #     return obj
+
 
 def stringify(obj):
     """
@@ -65,13 +66,12 @@ def stringify(obj):
     return obj
 
 
-
 __all__ = [
-    'ec2HostnameToIp',
-    'squeeze_sms_message',
-    'format_string_to_fit_in_n_chars',
-    'ensureAscii',
-    'splitString',
-    'case',
-    'stringify',
+    "ec2HostnameToIp",
+    "squeeze_sms_message",
+    "format_string_to_fit_in_n_chars",
+    "ensureAscii",
+    "splitString",
+    "case",
+    "stringify",
 ]

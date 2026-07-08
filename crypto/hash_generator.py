@@ -1,6 +1,6 @@
 """Hash generator(s)."""
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 import datetime
 import hashlib
@@ -9,14 +9,15 @@ import random
 import string
 
 
-class HashGenerator():
+class HashGenerator:
     """Class for generating hashes of arbitrary lengths, one at a time."""
+
     def __init__(self, extra_salt=None):
         """Initialize the salt."""
-        self._salt = '{}{}'.format('*1337-o(]{`Rand0m1um}[)`:.x6x5x4x2x1x9x000000000::', datetime.datetime.now(datetime.timezone.utc).isoformat())
+        self._salt = "{}{}".format("*1337-o(]{`Rand0m1um}[)`:.x6x5x4x2x1x9x000000000::", datetime.datetime.now(datetime.timezone.utc).isoformat())
 
         if extra_salt is not None:
-            self._salt = f'{self._salt}{extra_salt}'
+            self._salt = f"{self._salt}{extra_salt}"
 
         self._salt = self._next_salt()
 
@@ -30,11 +31,11 @@ class HashGenerator():
         random.seed(self._salt)
         r_len = random.randrange(min_length, max_length)
         symbols = string.printable
-        return ''.join([random.choice(symbols) for _ in range(r_len)])
+        return "".join([random.choice(symbols) for _ in range(r_len)])
 
     def _next_salt(self):
         """Produces the next salt value."""
-        return f'{self._random_str()}:{datetime.datetime.now(datetime.timezone.utc).isoformat()}'
+        return f"{self._random_str()}:{datetime.datetime.now(datetime.timezone.utc).isoformat()}"
 
     def _next_hash(self):
         """
@@ -54,7 +55,7 @@ class HashGenerator():
             hashes.append(self._next_hash())
             length_so_far += len(hashes[-1])
 
-        return ''.join(hashes)[0:length]
+        return "".join(hashes)[0:length]
 
 
 _generator = HashGenerator()
@@ -69,7 +70,7 @@ def generate_hash_set(quantity, length=64):
     # If there were dupes, generate and append the requisite number of
     # additional items.
     while len(digests) < quantity:
-        logging.info('NOTICE :: generateHashSet :: initial generated digests contained duplicates (should not happen (in theory))')
+        logging.info("NOTICE :: generateHashSet :: initial generated digests contained duplicates (should not happen (in theory))")
         digest = _generator.generate(length)
         if digest not in digests:
             digests.append(digest)

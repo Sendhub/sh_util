@@ -2,7 +2,7 @@
 This module provides functionality for acquiring and releasing Redis-based locks.
 """
 
-__author__ = 'brock'
+__author__ = "brock"
 
 import uuid
 
@@ -37,6 +37,7 @@ def acquire_lock(lock_id, timeout=60):
     """
     # Import moved here to avoid circular import issues
     import settings
+
     _redis = settings.REDIS
 
     # Ensuring the timeout value is always valid
@@ -63,6 +64,7 @@ def release_lock(lock_id, lock_value=""):
     """
     # Import moved here to avoid circular import issues
     import settings
+
     _redis = settings.REDIS
 
     if lock_value:

@@ -2,12 +2,12 @@
 This module implements the exception catching class.
 """
 
-__author__ = 'brock'
+__author__ = "brock"
 
 import simplejson as json
 
 
-class ErrorResponse():
+class ErrorResponse:
     """
     Implements the Error Response class.
 
@@ -18,7 +18,7 @@ class ErrorResponse():
         more_info (str): Additional information about the error.
     """
 
-    def __init__(self, message, dev_message='', code='', more_info=''):
+    def __init__(self, message, dev_message="", code="", more_info=""):
         """
         Initializes the ErrorResponse instance.
 

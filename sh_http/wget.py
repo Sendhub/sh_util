@@ -14,7 +14,7 @@ import re
 import socket
 import urllib
 
-USER_AGENT = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2.15) Gecko/20110303 Firefox/3.6.15'
+USER_AGENT = "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10.6; en-US; rv:1.9.2.15) Gecko/20110303 Firefox/3.6.15"
 
 
 class WgetError(Exception):
@@ -22,10 +22,11 @@ class WgetError(Exception):
     WgetError is being raised for wget-related errors.
 
     """
+
     pass
 
 
-_urlRe = re.compile(r'^https?://(?P<host>[^/:]+(?P<port>[1-9][0-9]*)?)(?P<path>/.*)?$')
+_urlRe = re.compile(r"^https?://(?P<host>[^/:]+(?P<port>[1-9][0-9]*)?)(?P<path>/.*)?$")
 
 
 def normalize_url(url):
@@ -37,46 +38,28 @@ def normalize_url(url):
 
     """
     parts = urllib.parse.urlparse(url)
-    path = urllib.parse.quote_plus(parts.path, safe='&=/.')
-    params = urllib.parse.quote_plus(parts.params, safe='&=/.')
-    query = urllib.parse.quote_plus(parts.query, safe='&=/.')
-    fragment = urllib.parse.quote_plus(parts.fragment, safe='&=/.')
-    result = urllib.parse.urlunparse((
-        parts.scheme,
-        parts.netloc,
-        path,
-        params,
-        query,
-        fragment
-    ))
+    path = urllib.parse.quote_plus(parts.path, safe="&=/.")
+    params = urllib.parse.quote_plus(parts.params, safe="&=/.")
+    query = urllib.parse.quote_plus(parts.query, safe="&=/.")
+    fragment = urllib.parse.quote_plus(parts.fragment, safe="&=/.")
+    result = urllib.parse.urlunparse((parts.scheme, parts.netloc, path, params, query, fragment))
     return result
 
 
-def wget_opener(referer='http://www.google.com/GOBBLEGOBBLEGOBBLE'):
+def wget_opener(referer="http://www.google.com/GOBBLEGOBBLEGOBBLE"):
     """
     Create and return a custom urllib opener with sensible headers.
 
     """
     opener = urllib.request.build_opener()
     opener.addheaders = [
-        ('User-agent', USER_AGENT),
-        ('Referer', referer),
+        ("User-agent", USER_AGENT),
+        ("Referer", referer),
     ]
     return opener
 
 
-def wget(
-    url,
-    request_type='GET',
-    body=None,
-    referer=None,
-    num_tries=1,
-    accept_encoding=None,
-    user_agent=USER_AGENT,
-    headers=None,
-    timeout=None,
-    as_dict=False
-):
+def wget(url, request_type="GET", body=None, referer=None, num_tries=1, accept_encoding=None, user_agent=USER_AGENT, headers=None, timeout=None, as_dict=False):
     """
     Execute an HTTP request. This function is being implemented as a lightweight
     helper similar to wget/curl.
@@ -85,17 +68,17 @@ def wget(
     timeout = timeout if timeout is not None else socket.getdefaulttimeout()
 
     if num_tries <= 0:
-        raise WgetError('Not able to be opened in 0 tries left')
+        raise WgetError("Not able to be opened in 0 tries left")
 
     if headers is None:
         headers = {}
 
     if accept_encoding is not None:
-        headers['Accept-Encoding'] = accept_encoding
+        headers["Accept-Encoding"] = accept_encoding
     if user_agent is not None:
-        headers['User-Agent'] = user_agent
+        headers["User-Agent"] = user_agent
     if referer is not None:
-        headers['Referer'] = referer
+        headers["Referer"] = referer
 
     opener = urllib.request.build_opener()
     opener.addheaders = [(header, value) for header, value in list(headers.items())]  # noqa
@@ -103,43 +86,34 @@ def wget(
     try:
         url = normalize_url(url)
         logging.info(f"w'{request_type.lower()}ting {url}")
-        if request_type == 'GET':
+        if request_type == "GET":
             res = opener.open(url, timeout=timeout)
 
             if as_dict:
-                received_data = dict(body=res.read(), code=res.code,
-                                     headers=res.info(), url=res.geturl())
+                received_data = dict(body=res.read(), code=res.code, headers=res.info(), url=res.geturl())
             else:
                 received_data = res.read()
         else:
             if as_dict:
                 # This is being used because the functionality is not yet
                 # being implemented for calls that are not using urllib
-                raise WgetError('as_dict can only be True for GETs')
+                raise WgetError("as_dict can only be True for GETs")
 
             import http.client
+
             parsed = _urlRe.match(url)
             if not parsed:
-                raise WgetError(f'Invalid hostname: {url}')
+                raise WgetError(f"Invalid hostname: {url}")
 
-            maybe_port = parsed.group('port')
-            port = int(maybe_port) if maybe_port is not None else \
-                (443 if url.startswith('https') else 80)
+            maybe_port = parsed.group("port")
+            port = int(maybe_port) if maybe_port is not None else (443 if url.startswith("https") else 80)
 
             if port == 443:
-                conn = http.client.HTTPSConnection(
-                    parsed.group('host'),
-                    port=port,
-                    timeout=timeout
-                )
+                conn = http.client.HTTPSConnection(parsed.group("host"), port=port, timeout=timeout)
             else:
-                conn = http.client.HTTPConnection(
-                    parsed.group('host'),
-                    port=port,
-                    timeout=timeout
-                )
+                conn = http.client.HTTPConnection(parsed.group("host"), port=port, timeout=timeout)
 
-            conn.request(request_type, parsed.group('path'), body, headers)
+            conn.request(request_type, parsed.group("path"), body, headers)
             resp = conn.getresponse()
             received_data = resp.read()
         try:
@@ -153,10 +127,5 @@ def wget(
 
     except urllib.error.URLError as _e:
         if num_tries > 1:
-            return wget(
-                url=url,
-                referer=referer,
-                headers=headers,
-                num_tries=num_tries - 1
-            )
+            return wget(url=url, referer=referer, headers=headers, num_tries=num_tries - 1)
         raise WgetError(f"{url} failed, {_e}") from _e

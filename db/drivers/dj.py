@@ -2,7 +2,7 @@
 Django sh_util database driver.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 import logging
 
@@ -18,6 +18,7 @@ def connections():
     """
 
     from django.db import connections
+
     return connections
 
 
@@ -30,8 +31,9 @@ def switchDefaultDatabase(name):
     """
 
     from django.db import connections
-    connections['default'] = connections[name]
-    settings.DATABASES['default'] = settings.DATABASES[name]
+
+    connections["default"] = connections[name]
+    settings.DATABASES["default"] = settings.DATABASES[name]
 
 
 def _dictfetchall(cursor):
@@ -60,7 +62,7 @@ def getRealShardConnectionName(using):
         str: Resolved connection name.
     """
 
-    if using == 'default':
+    if using == "default":
         # Avoid circular imports.
         from ...sharding import ShardedResource
 
@@ -70,7 +72,7 @@ def getRealShardConnectionName(using):
     return using
 
 
-def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=False):
+def db_query(sql, args=None, as_dict=False, using="default", force=False, debug=False):
     """
     Execute raw select queries. Not tested or guaranteed to work with any
     other type of query.
@@ -96,20 +98,20 @@ def db_query(sql, args=None, as_dict=False, using='default', force=False, debug=
     cursor = connections()[using].cursor()
     try:
         if DEBUG is True or debug is True:
-            logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s', str(using), str(sql))
+            logging.info("-- [DEBUG] DB_QUERY, using=%s ::\n%s", str(using), str(sql))
 
         cursor.execute(sql, args)
 
         res = _dictfetchall(cursor) if as_dict is True else cursor.fetchall()
         return res
     except Exception as conn_err:
-        logging.error(f'Error on executing the query: {conn_err}')
+        logging.error(f"Error on executing the query: {conn_err}")
         return
     finally:
         cursor.close()
 
 
-def db_exec(sql, args=None, using='default', force=False, debug=False):
+def db_exec(sql, args=None, using="default", force=False, debug=False):
     """
     Execute a raw query on the requested database connection.
 
@@ -130,11 +132,11 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
         args = tuple()
 
     if DEBUG is True or debug is True:
-        logging.info(f'-- [DEBUG] DB_EXEC, using={using} ::\n{sql}')
+        logging.info(f"-- [DEBUG] DB_EXEC, using={using} ::\n{sql}")
 
     cursor = connections()[using].cursor()
     try:
-        logging.info(f'executing the sql {sql} using {using}')
+        logging.info(f"executing the sql {sql} using {using}")
         result = cursor.execute(sql, args)
         return result
     finally:
@@ -142,11 +144,11 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
 
 
 _djangoConfigToPsql = (
-    ('NAME', 'dbname'),
-    ('USER', 'user'),
-    ('PASSWORD', 'password'),
-    ('HOST', 'host'),
-    ('PORT', 'port'),
+    ("NAME", "dbname"),
+    ("USER", "user"),
+    ("PASSWORD", "password"),
+    ("HOST", "host"),
+    ("PORT", "port"),
 )
 
 
@@ -162,15 +164,15 @@ def getPsqlConnectionString(connectionName, secure=True):
         str: PSQL-format connection string.
     """
 
-    assert connectionName in settings.DATABASES,  f'Requested connection missing: {connectionName}'
+    assert connectionName in settings.DATABASES, f"Requested connection missing: {connectionName}"
 
     dbConfig = settings.DATABASES[connectionName]
 
-    out = 'sslmode=require' if secure is True else ''
+    out = "sslmode=require" if secure is True else ""
 
-    filtered = [key__ for key__ in _djangoConfigToPsql if key__[0] in dbConfig and dbConfig[key__[0]] is not None and dbConfig[key__[0]] != '']  # noqa
+    filtered = [key__ for key__ in _djangoConfigToPsql if key__[0] in dbConfig and dbConfig[key__[0]] is not None and dbConfig[key__[0]] != ""]  # noqa
 
-    psqlTuples = [f'{key_param[1]}={dbConfig[key_param[0]]}' for key_param in filtered]  # noqa
+    psqlTuples = [f"{key_param[1]}={dbConfig[key_param[0]]}" for key_param in filtered]  # noqa
 
-    out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
+    out = " ".join(psqlTuples) + (" sslmode=require" if secure is True else "")
     return out

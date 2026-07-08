@@ -6,7 +6,7 @@ and inspecting phone numbers using the ``phonenumbers`` library.
 
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 import logging
@@ -14,7 +14,7 @@ import logging
 import phonenumbers
 
 
-def cleanupPhoneNumber(number, region='US'):
+def cleanupPhoneNumber(number, region="US"):
     """
     Clean up a phone number and return it in E.164 format.
 
@@ -36,8 +36,8 @@ def cleanupPhoneNumber(number, region='US'):
         return number
 
     # Switching to AU region for numbers starting with +61
-    if str(number).startswith('+61'):
-        region = 'AU'
+    if str(number).startswith("+61"):
+        region = "AU"
 
     # Using the given region to parse and then formatting to E.164
     p = phonenumbers.parse(number, region)
@@ -55,12 +55,11 @@ def isSpecialTwilioNumber(number):
         bool: True if the number is in the special-numbers list.
     """
 
-    specialNumbers = ['+7378742833', '+2562533', '+8656696', '+266696687', '']
+    specialNumbers = ["+7378742833", "+2562533", "+8656696", "+266696687", ""]
     return number in specialNumbers
 
 
-
-def validatePhoneNumber(number, allowShortcode=True, country_code='US'):
+def validatePhoneNumber(number, allowShortcode=True, country_code="US"):
     """
     Validate a phone number globally — no country context required.
 
@@ -85,7 +84,7 @@ def validatePhoneNumber(number, allowShortcode=True, country_code='US'):
             return False
 
         if isinstance(number, bytes):
-            number = number.decode('utf-8')
+            number = number.decode("utf-8")
 
         if allowShortcode and len(number) in (3, 4, 5, 6) and number.isdigit():
             return True
@@ -102,7 +101,7 @@ def validatePhoneNumber(number, allowShortcode=True, country_code='US'):
         return phonenumbers.is_valid_number(p)
 
     except (phonenumbers.NumberParseException, UnicodeDecodeError) as e:
-        logging.warning(f'Detected invalid phone number: {number} - {e}')
+        logging.warning(f"Detected invalid phone number: {number} - {e}")
         return False
 
 
@@ -129,7 +128,7 @@ def validatePhoneNumberByCountry(number, country_code):
 
     if isinstance(number, bytes):
         try:
-            number = number.decode('utf-8')
+            number = number.decode("utf-8")
         except UnicodeDecodeError:
             return False
 
@@ -150,7 +149,7 @@ def validatePhoneNumberByCountry(number, country_code):
         return False
 
 
-def displayNumber(number, region='US'):
+def displayNumber(number, region="US"):
     """
     Return a human-friendly representation of the phone number.
 
@@ -170,20 +169,20 @@ def displayNumber(number, region='US'):
     try:
         # Using the given region to parse the number
         p = phonenumbers.parse(number, region)
-        if region == 'AU':
+        if region == "AU":
             formattedNumber = phonenumbers.format_number(p, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
         else:
             formattedNumber = phonenumbers.format_number(p, phonenumbers.PhoneNumberFormat.NATIONAL)
     except phonenumbers.NumberParseException:
         try:
-            formattedNumber = '-'.join([number[:3], number[3:6], number[6:]])
+            formattedNumber = "-".join([number[:3], number[3:6], number[6:]])
         except IndexError:
             formattedNumber = number
 
     return formattedNumber
 
 
-def isTollFreeNumber(number, region='US'):
+def isTollFreeNumber(number, region="US"):
     """
     Return True if the number is a toll-free number.
 
@@ -195,7 +194,7 @@ def isTollFreeNumber(number, region='US'):
         bool: True if the number is toll-free, False otherwise.
     """
     try:
-        p = phonenumbers.parse(number, 'US')
+        p = phonenumbers.parse(number, "US")
     except phonenumbers.NumberParseException:
         return False
 

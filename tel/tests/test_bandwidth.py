@@ -19,11 +19,15 @@ from sh_util.tel import bandwidth as bandwidth
 # Pure function tests
 # ---------------------------
 
-@pytest.mark.parametrize("bits,seconds,expected", [
-    (1000, 2, 500.0),
-    (0, 1, 0.0),
-    (5, 2, 2.5),
-])
+
+@pytest.mark.parametrize(
+    "bits,seconds,expected",
+    [
+        (1000, 2, 500.0),
+        (0, 1, 0.0),
+        (5, 2, 2.5),
+    ],
+)
 def test_calculate_bandwidth_normal(bits, seconds, expected):
     assert bandwidth.calculate_bandwidth(bits, seconds) == expected
 
@@ -36,6 +40,7 @@ def test_calculate_bandwidth_zero_seconds():
 # ---------------------------
 # Tests for fetch_number_info (external API)
 # ---------------------------
+
 
 def make_response(status_code=200, json_data=None):
     """Helper to create a MagicMock response object for requests.get"""
@@ -84,6 +89,7 @@ def test_fetch_number_info_invalid_payload(mock_get):
 # Tests for store_purchase (DB interactions)
 # ---------------------------
 
+
 def test_store_purchase_with_magicmock_db():
     """Unit test: pass in a duck-typed DB object (MagicMock) and ensure it's used."""
     fake_db = MagicMock()
@@ -125,6 +131,7 @@ def test_store_purchase_sqlite_integration(tmp_path):
 # ---------------------------
 # Tests for purchase_number orchestration
 # ---------------------------
+
 
 @patch("communication.bandwidth.fetch_number_info")
 @patch("communication.bandwidth.store_purchase")
@@ -177,14 +184,18 @@ def test_purchase_number_api_failure_bubbles_up(mock_fetch):
 # Edge case: malformed price values
 # ---------------------------
 
+
 @patch("communication.bandwidth.fetch_number_info")
 @patch("communication.bandwidth.store_purchase")
-@pytest.mark.parametrize("raw_price,expected_price", [
-    ("10", 10.0),
-    (10, 10.0),
-    (None, 0.0),
-    ("abc", 0.0),  # falling back to 0.0 when float conversion fails
-])
+@pytest.mark.parametrize(
+    "raw_price,expected_price",
+    [
+        ("10", 10.0),
+        (10, 10.0),
+        (None, 0.0),
+        ("abc", 0.0),  # falling back to 0.0 when float conversion fails
+    ],
+)
 def test_purchase_number_price_parsing(mock_store, mock_fetch, raw_price, expected_price):
     """
     Ensures price conversion is robust (we coerce to float, falling back to 0.0 if needed).
@@ -198,7 +209,7 @@ def test_purchase_number_price_parsing(mock_store, mock_fetch, raw_price, expect
     res = bandwidth.purchase_number("https://api", "X", MagicMock())
     # we allow slight floating diff for string->float conversion
     assert isinstance(res["price"], float)
-    if isinstance(raw_price, (int, float, str)) and str(raw_price).replace('.', '', 1).isdigit():
+    if isinstance(raw_price, (int, float, str)) and str(raw_price).replace(".", "", 1).isdigit():
         assert res["price"] == float(raw_price)
     else:
         # on invalid content the module (current impl) will raise ValueError during float() call.
@@ -211,14 +222,18 @@ def test_purchase_number_price_parsing(mock_store, mock_fetch, raw_price, expect
 # Utilities & manual-run examples
 # ---------------------------
 
+
 def test_fetch_nodeid_for_debugging(monkeypatch):
     """
     Example of using monkeypatch instead of patch to simulate requests.get returning strange payload.
     """
+
     class DummyResp:
         status_code = 200
+
         def json(self):
             return {"available": True, "price": 5.5}
+
     monkeypatch.setattr(bandwidth.requests, "get", lambda *a, **k: DummyResp())
     r = bandwidth.fetch_number_info("https://x", "z")
     assert r["price"] == 5.5
