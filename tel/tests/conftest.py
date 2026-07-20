@@ -3,6 +3,9 @@ import os
 import sys
 import sysconfig
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
 
 
 def _import_stdlib_json_safely():
@@ -96,3 +99,30 @@ def _import_stdlib_json_safely():
 
 # Execute early
 _import_stdlib_json_safely()
+
+
+@pytest.fixture
+def mock_bw_settings(monkeypatch):
+    """Provide Bandwidth settings attributes expected by bw_util."""
+    mock = MagicMock()
+    mock.BW_USER_ID = "test_user_id"
+    mock.BW_API_TOKEN = "test_token"
+    mock.BW_API_SECRET = "test_secret"
+    mock.BW_USERNAME = "test_username"
+    mock.BW_PASSWORD = "test_password"
+    mock.BW_APP_ID = "test_app_id"
+    mock.BW_USER_ID_AU = "test_user_id_au"
+    mock.BW_ACCOUNT_API_URL = "https://api.test.com"
+    mock.BW_ACCOUNT_API_URL_AU = "https://api.test.au"
+    mock.BW_SITE_ID = "test_site_id"
+    mock.BW_SITE_ID_AU = "test_site_id_au"
+    mock.SMS_GATEWAY_BANDWIDTH = "bandwidth"
+
+    for module_name in ("sh_util.tel.bw_util", "utils.sh_util.tel.bw_util"):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        monkeypatch.setattr(module, "settings", mock)
+
+    return mock

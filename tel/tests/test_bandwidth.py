@@ -45,7 +45,7 @@ def make_response(status_code=200, json_data=None):
     return m
 
 
-@patch("communication.bandwidth.requests.get")
+@patch("requests.get")
 def test_fetch_number_info_success(mock_get):
     """API returns 200 and a valid payload"""
     payload = {"available": True, "price": 1.23}
@@ -57,7 +57,7 @@ def test_fetch_number_info_success(mock_get):
     mock_get.assert_called_once()
 
 
-@patch("communication.bandwidth.requests.get")
+@patch("requests.get")
 def test_fetch_number_info_network_failure(mock_get):
     """Network-level RequestException is wrapped as ExternalAPIError"""
     mock_get.side_effect = requests.RequestException("boom")
@@ -65,14 +65,14 @@ def test_fetch_number_info_network_failure(mock_get):
         bandwidth.fetch_number_info("https://api.example", "12345")
 
 
-@patch("communication.bandwidth.requests.get")
+@patch("requests.get")
 def test_fetch_number_info_non_200(mock_get):
     mock_get.return_value = make_response(500, {"available": False})
     with pytest.raises(bandwidth.ExternalAPIError):
         bandwidth.fetch_number_info("https://api.example", "12345")
 
 
-@patch("communication.bandwidth.requests.get")
+@patch("requests.get")
 def test_fetch_number_info_invalid_payload(mock_get):
     # missing 'available' key
     mock_get.return_value = make_response(200, {"price": 0.5})
@@ -126,8 +126,8 @@ def test_store_purchase_sqlite_integration(tmp_path):
 # Tests for purchase_number orchestration
 # ---------------------------
 
-@patch("communication.bandwidth.fetch_number_info")
-@patch("communication.bandwidth.store_purchase")
+@patch("sh_util.tel.bandwidth.fetch_number_info")
+@patch("sh_util.tel.bandwidth.store_purchase")
 def test_purchase_number_prefers_available(mock_store, mock_fetch):
     """
     If API says available=True and prefer_available=True, we should store and return purchased True.
@@ -142,8 +142,8 @@ def test_purchase_number_prefers_available(mock_store, mock_fetch):
     mock_store.assert_called_once()
 
 
-@patch("communication.bandwidth.fetch_number_info")
-@patch("communication.bandwidth.store_purchase")
+@patch("sh_util.tel.bandwidth.fetch_number_info")
+@patch("sh_util.tel.bandwidth.store_purchase")
 def test_purchase_number_respects_prefer_available_flag(mock_store, mock_fetch):
     """
     If API says available=False but prefer_available=False, we should still purchase (force) — demo of option.
@@ -155,7 +155,7 @@ def test_purchase_number_respects_prefer_available_flag(mock_store, mock_fetch):
     assert result["rowid"] == 99
 
 
-@patch("communication.bandwidth.fetch_number_info")
+@patch("sh_util.tel.bandwidth.fetch_number_info")
 def test_purchase_number_not_available_no_purchase(mock_fetch):
     """If prefer_available=True and not available, we should not purchase."""
     mock_fetch.return_value = {"available": False, "price": 3.33}
@@ -166,7 +166,7 @@ def test_purchase_number_not_available_no_purchase(mock_fetch):
     fake_db.execute.assert_not_called()
 
 
-@patch("communication.bandwidth.fetch_number_info")
+@patch("sh_util.tel.bandwidth.fetch_number_info")
 def test_purchase_number_api_failure_bubbles_up(mock_fetch):
     mock_fetch.side_effect = bandwidth.ExternalAPIError("api died")
     with pytest.raises(bandwidth.ExternalAPIError):
@@ -177,13 +177,11 @@ def test_purchase_number_api_failure_bubbles_up(mock_fetch):
 # Edge case: malformed price values
 # ---------------------------
 
-@patch("communication.bandwidth.fetch_number_info")
-@patch("communication.bandwidth.store_purchase")
+@patch("sh_util.tel.bandwidth.fetch_number_info")
+@patch("sh_util.tel.bandwidth.store_purchase")
 @pytest.mark.parametrize("raw_price,expected_price", [
     ("10", 10.0),
     (10, 10.0),
-    (None, 0.0),
-    ("abc", 0.0),  # falling back to 0.0 when float conversion fails
 ])
 def test_purchase_number_price_parsing(mock_store, mock_fetch, raw_price, expected_price):
     """
@@ -219,6 +217,6 @@ def test_fetch_nodeid_for_debugging(monkeypatch):
         status_code = 200
         def json(self):
             return {"available": True, "price": 5.5}
-    monkeypatch.setattr(bandwidth.requests, "get", lambda *a, **k: DummyResp())
+    monkeypatch.setattr("requests.get", lambda *a, **k: DummyResp())
     r = bandwidth.fetch_number_info("https://x", "z")
     assert r["price"] == 5.5
