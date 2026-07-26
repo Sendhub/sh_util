@@ -10,7 +10,7 @@ __author__ = "brock"
 import re
 
 
-def splitString(strToSplit, fragmentLength=160, maxFragments=-1):
+def split_string(str_to_split, fragment_length=160, max_fragments=-1):
     """
     Split a string into fragments up to a given length.
 
@@ -45,15 +45,15 @@ def splitString(strToSplit, fragmentLength=160, maxFragments=-1):
     wordBoundaryRe = re.compile(r"(\s)", re.DOTALL | re.IGNORECASE | re.M)  # noqa
 
     # Making as many fragments as necessary when `maxFragments` is -1
-    while i < maxFragments or maxFragments == -1:
-        if maxFragments != -1 and i + 1 == maxFragments:
+    while i < max_fragments or max_fragments == -1:
+        if max_fragments != -1 and i + 1 == max_fragments:
             # Reaching the maximum number of fragments, returning the
             # rest of the string as the last fragment regardless of length
-            fragment = strToSplit[s:]
+            fragment = str_to_split[s:]
             fragments.append(fragment)
         else:
             # Getting the next fragment
-            fragment = strToSplit[s : s + fragmentLength]
+            fragment = str_to_split[s : s + fragment_length]
 
             if fragment == "":
                 break

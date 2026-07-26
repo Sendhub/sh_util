@@ -9,7 +9,7 @@ from ..functional import memoize
 
 
 @memoize
-def allTableNamesAndPrimaryKeys(using="default"):
+def all_table_names_and_primary_keys(using="default"):
     """@return dict of table names and lists of pks."""
     from . import db_query
 
@@ -30,45 +30,45 @@ def allTableNamesAndPrimaryKeys(using="default"):
 
     rows = db_query(sql, using=using)
 
-    tableToPrimaryKeys = {}
+    table_to_primary_keys = {}
 
-    for tableName, columnName in rows:
-        if tableName not in tableToPrimaryKeys:
-            tableToPrimaryKeys[tableName] = []
+    for table_name, column_name in rows:
+        if table_name not in table_to_primary_keys:
+            table_to_primary_keys[table_name] = []
 
-        tableToPrimaryKeys[tableName].append(columnName)
+        table_to_primary_keys[table_name].append(column_name)
 
-    return tableToPrimaryKeys
+    return table_to_primary_keys
 
 
 @memoize
-def getPrimaryKeyColumns(table, using="default"):
+def get_primary_key_columns(table, using="default"):
     """
     @return list of strings containing the names of the columns composing the
     primary key for the table.
     """
-    return allTableNamesAndPrimaryKeys(using=using).get(table, [])
+    return all_table_names_and_primary_keys(using=using).get(table, [])
 
 
-def updatePrimaryKeyId(table, currentId, newId, using):
+def update_primary_key_id(table, current_id, new_id, using):
     """Update a primary-key id to a new value everywhere it is referenced."""
     from . import db_exec
 
-    pkColumns = getPrimaryKeyColumns(table)
-    assert len(pkColumns) == 1, 'updatePrimaryKeyId can only operate on tables with 1 primary key, but table "{}" had {}'.format(table, len(pkColumns))
-    discoveredRelations = discoverDependencies([table])
+    pk_columns = get_primary_key_columns(table)
+    assert len(pk_columns) == 1, 'updatePrimaryKeyId can only operate on tables with 1 primary key, but table "{}" had {}'.format(table, len(pk_columns))
+    discovered_relations = discover_dependencies([table])
     # NB: If the table is not in the returned dict,
     # then there are no dependencies.
-    if table in discoveredRelations:
-        relations = discoveredRelations[table]
+    if table in discovered_relations:
+        relations = discovered_relations[table]
         db_exec("SET CONSTRAINTS ALL DEFERRED", using=using)
-        for _, relTable, relColumn in relations:
-            db_exec('UPDATE "{relTable}" SET "{relColumn}" = {newId} WHERE "{relColumn}" = {currentId}'.format(relTable=relTable, relColumn=relColumn, newId=newId, currentId=currentId), using=using)
-    db_exec('UPDATE "{table}" SET "{pkColumn}" = {newId} WHERE "{pkColumn}" = {currentId}'.format(table=table, pkColumn=pkColumns[0], newId=newId, currentId=currentId), using=using)
+        for _, rel_table, rel_column in relations:
+            db_exec('UPDATE "{rel_table}" SET "{rel_column}" = {new_id} WHERE "{rel_column}" = {current_id}'.format(rel_table=rel_table, rel_column=rel_column, new_id=new_id, current_id=current_id), using=using)
+    db_exec('UPDATE "{table}" SET "{pkColumn}" = {new_id} WHERE "{pkColumn}" = {current_id}'.format(table=table, pkColumn=pk_columns[0], new_id=new_id, current_id=current_id), using=using)
 
 
 @memoize
-def plFunctionReturnType(function, as_dict=False, using="default"):
+def pl_function_return_type(function, as_dict=False, using="default"):
     """Get the return type for a user defined PL/SQL function."""
     from . import db_query
 
@@ -82,7 +82,7 @@ def plFunctionReturnType(function, as_dict=False, using="default"):
 
 
 @memoize
-def isNullable(table, column, using="default"):
+def is_nullable(table, column, using="default"):
     """@return True if a column accepts null values, otherwise False."""
     from . import db_query
 
@@ -99,7 +99,7 @@ def isNullable(table, column, using="default"):
 
 
 @memoize
-def describePublic(using="default"):
+def describe_public(using="default"):
     """
     Describe all tables in the "public" namespace in the correct order
     per-table by column position.
@@ -130,10 +130,10 @@ def describePublic(using="default"):
 
     out = {}
 
-    for table, column, dataType in db_query(sql, using=using):
+    for table, column, data_type in db_query(sql, using=using):
         if table not in out:
             out[table] = []
-        out[table].append((column, dataType))
+        out[table].append((column, data_type))
 
     return out
 
@@ -141,31 +141,11 @@ def describePublic(using="default"):
 @memoize
 def describe(table, using="default"):
     """Describe a table's columns/types."""
-    return describePublic().get(table, [])
-    # from . import db_query
-    # sql = '''
-    #    SELECT
-    #        "a"."attname" AS "column",
-    #        "pg_catalog".format_type("a"."atttypid", "a"."atttypmod")
-    # AS "type"
-    #    FROM "pg_catalog"."pg_attribute" "a"
-    #    WHERE
-    #        NOT "a"."attisdropped" AND
-    #        "a"."attnum" > 0 AND
-    #        "a"."attrelid" = (
-    #            SELECT "c"."oid"
-    #            FROM "pg_catalog"."pg_class" "c"
-    #            LEFT JOIN "pg_catalog"."pg_namespace" "n"
-    #                ON "n"."oid" = "c"."relnamespace"
-    #            WHERE
-    #                "c"."relname" = '{table}' AND
-    #                "pg_catalog".pg_table_is_visible("c"."oid")
-    #      )'''.format(table=table)
-    # return db_query(sql, using=using)
+    return describe_public().get(table, [])
 
 
 @memoize
-def listTables(using="default"):
+def list_tables(using="default"):
     """Get a list of all the table names for a database."""
     from . import db_query
 
@@ -184,7 +164,7 @@ def listTables(using="default"):
 _userIdRe = re.compile(r""".*user_?id.*""", re.I)
 
 
-def findUserIdColumnFromDescription(description):
+def find_user_id_column_from_description(description):
     """
     NB: columns which contain a 'user_id' or 'user_id' but also contain the
         string 'parent' will not count towards user id columns.
@@ -240,7 +220,7 @@ def findUserIdColumnFromDescription(description):
 
 
 @memoize
-def findTablesWithUserIdColumn(using="default"):
+def find_tables_with_user_id_column(using="default"):
     """
     Dynamically find all tables with a user_id or user_id column.
 
@@ -248,17 +228,17 @@ def findTablesWithUserIdColumn(using="default"):
     """
     out = [("auth_user", "id")]
 
-    for table in listTables(using=using):
+    for table in list_tables(using=using):
         description = describe(table, using=using)
-        userIdColumn = findUserIdColumnFromDescription(description)
-        if userIdColumn is not None:
-            out.append((table, userIdColumn))
+        user_id_column = find_user_id_column_from_description(description)
+        if user_id_column is not None:
+            out.append((table, user_id_column))
 
     return out
 
 
 @memoize
-def discoverDependencies(tables, using="default", discovered=None):
+def discover_dependencies(tables, using="default", discovered=None):
     r"""
     Build an inverse dependency mapping of new pairs of (table, column) for the
     requested tables.
@@ -281,33 +261,33 @@ def discoverDependencies(tables, using="default", discovered=None):
                                                         |__ etc..
     NB: That textual image is inaccurate -JT
     """
-    foundAny = False
+    found_any = False
     if discovered is None:
         discovered = {}
 
     for table in tables:
-        related = [ref for ref in referencedByTables(table) if ref[0] not in tables]  # noqa
+        related = [ref for ref in referenced_by_tables(table) if ref[0] not in tables]  # noqa
 
         if len(related) > 0:
             discovered[table] = list(discovered.get(table, []))
 
-            startLength = len(discovered[table])
+            start_length = len(discovered[table])
 
             list(map(discovered[table].append, related))
 
             discovered[table] = set(discovered[table])
 
-            foundAny = foundAny or len(discovered[table]) > startLength
+            found_any = found_any or len(discovered[table]) > start_length
 
     from pprint import pformat
 
     logging.debug(pformat(discovered))
 
-    return discovered if foundAny is False else discoverDependencies(tables, using, discovered)
+    return discovered if found_any is False else discover_dependencies(tables, using, discovered)
 
 
 @memoize
-def allTableRelations(using="default"):
+def all_table_relations(using="default"):
     """
     Get all table references organized by foreign table.
 
@@ -333,40 +313,40 @@ def allTableRelations(using="default"):
     rows = db_query(sql)
 
     references = {}
-    referencedBy = {}
+    referenced_by = {}
 
-    for foreignTableName, foreignColumnName, tableName, columnName in rows:
-        if foreignTableName not in references:
-            references[foreignTableName] = []
+    for foreign_table_name, foreign_column_name, table_name, column_name in rows:
+        if foreign_table_name not in references:
+            references[foreign_table_name] = []
 
-        references[foreignTableName].append((foreignColumnName, tableName, columnName))
+        references[foreign_table_name].append((foreign_column_name, table_name, column_name))
 
-        if tableName not in referencedBy:
-            referencedBy[tableName] = []
+        if table_name not in referenced_by:
+            referenced_by[table_name] = []
 
-        referencedBy[tableName].append((columnName, foreignTableName, foreignColumnName))
+        referenced_by[table_name].append((column_name, foreign_table_name, foreign_column_name))
 
-    return (references, referencedBy)
+    return (references, referenced_by)
 
 
 @memoize
-def referencesTables(table, using="default"):
+def references_tables(table, using="default"):
     """
     Get a list of the tables referenced by a particular table.
 
     @return list of (fkColumn, table, column)
     """
-    return allTableRelations(using=using)[0].get(table, [])
+    return all_table_relations(using=using)[0].get(table, [])
 
 
 @memoize
-def referencedByTables(table, using="default", recurse=False):
+def referenced_by_tables(table, using="default", recurse=False):
     """
     Get all tables which use this table as a foreign-key.
 
     @return list of (column, foreignTable, fkColumn)
     """
-    return allTableRelations(using=using)[1].get(table, [])
+    return all_table_relations(using=using)[1].get(table, [])
 
 
 if __name__ == "__main__":

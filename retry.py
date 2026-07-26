@@ -8,6 +8,7 @@ This module provides a retry decorator with exponential backoff functionality. I
 
 __author__ = "Jay Taylor [@jtaylor]"
 
+import logging
 import math as _math
 import time as _time
 
@@ -88,6 +89,7 @@ def retry(tries, delay=3, backoff=2, desired_outcome=True, fail_value=None):
                 _rv = _fn(*args, **kwargs)
 
             # Returning failure result after exhausting retries.
+            logging.debug("retry exhausted all attempts, configured fail_value=%r", fail_value)
             return False
 
         # Returning the decorated function.

@@ -26,7 +26,7 @@ class WgetError(Exception):
     pass
 
 
-_urlRe = re.compile(r"^https?://(?P<host>[^/:]+(?P<port>[1-9][0-9]*)?)(?P<path>/.*)?$")
+_urlRe = re.compile(r"^https?://(?P<host>[^/:]+)(?::(?P<port>[1-9]\d*))?(?P<path>/.*)?$")
 
 
 def normalize_url(url):
@@ -57,6 +57,20 @@ def wget_opener(referer="http://www.google.com/GOBBLEGOBBLEGOBBLE"):
         ("Referer", referer),
     ]
     return opener
+
+
+def _maybe_gunzip(data):
+    """
+    Attempt to gzip-decompress the given bytes, returning them unchanged if
+    they are not gzip-compressed.
+
+    """
+    try:
+        compressedstream = io.BytesIO(data)
+        gzipper = gzip.GzipFile(fileobj=compressedstream)
+        return gzipper.read()
+    except OSError:
+        return data
 
 
 def wget(url, request_type="GET", body=None, referer=None, num_tries=1, accept_encoding=None, user_agent=USER_AGENT, headers=None, timeout=None, as_dict=False):
@@ -90,7 +104,7 @@ def wget(url, request_type="GET", body=None, referer=None, num_tries=1, accept_e
             res = opener.open(url, timeout=timeout)
 
             if as_dict:
-                received_data = dict(body=res.read(), code=res.code, headers=res.info(), url=res.geturl())
+                received_data = {"body": res.read(), "code": res.code, "headers": res.info(), "url": res.geturl()}
             else:
                 received_data = res.read()
         else:
@@ -106,7 +120,12 @@ def wget(url, request_type="GET", body=None, referer=None, num_tries=1, accept_e
                 raise WgetError(f"Invalid hostname: {url}")
 
             maybe_port = parsed.group("port")
-            port = int(maybe_port) if maybe_port is not None else (443 if url.startswith("https") else 80)
+            if maybe_port is not None:
+                port = int(maybe_port)
+            elif url.startswith("https"):
+                port = 443
+            else:
+                port = 80
 
             if port == 443:
                 conn = http.client.HTTPSConnection(parsed.group("host"), port=port, timeout=timeout)
@@ -116,16 +135,26 @@ def wget(url, request_type="GET", body=None, referer=None, num_tries=1, accept_e
             conn.request(request_type, parsed.group("path"), body, headers)
             resp = conn.getresponse()
             received_data = resp.read()
-        try:
-            compressedstream = io.BytesIO(received_data)
-            gzipper = gzip.GzipFile(fileobj=compressedstream)
-            received_data = gzipper.read()
-        except OSError:
-            pass
+
+        if as_dict:
+            received_data["body"] = _maybe_gunzip(received_data["body"])
+        else:
+            received_data = _maybe_gunzip(received_data)
 
         return received_data
 
     except urllib.error.URLError as _e:
         if num_tries > 1:
-            return wget(url=url, referer=referer, headers=headers, num_tries=num_tries - 1)
+            return wget(
+                url=url,
+                request_type=request_type,
+                body=body,
+                referer=referer,
+                num_tries=num_tries - 1,
+                accept_encoding=accept_encoding,
+                user_agent=user_agent,
+                headers=headers,
+                timeout=timeout,
+                as_dict=as_dict,
+            )
         raise WgetError(f"{url} failed, {_e}") from _e

@@ -44,7 +44,7 @@ _underscorer2 = re.compile("([a-z0-9])([A-Z])")
 _snakeFinder = re.compile(r"_(\w)")
 
 
-def camelToSnake(s):
+def camel_to_snake(s):
     """
     Is it ironic that this function is written in camel case, yet it
     converts to snake case? hmm..
@@ -53,12 +53,12 @@ def camelToSnake(s):
     return _underscorer2.sub(r"\1_\2", subbed).lower()
 
 
-def snakeToCamel(s):
+def snake_to_camel(s):
     """Yet this is not ironic.."""
     return _snakeFinder.sub(lambda m: m.group(0)[1].upper(), s)
 
 
-def dictKeysToSnakeCase(struct):
+def dict_keys_to_snake_case(struct):
     """
     Recursively convert all CamelCase dict keys to be snake_case.
 
@@ -99,20 +99,20 @@ def dictKeysToSnakeCase(struct):
 
         for k, v in list(struct.items()):
             del struct[k]
-            struct[camelToSnake(k)] = dictKeysToSnakeCase(v)
+            struct[camel_to_snake(k)] = dict_keys_to_snake_case(v)
         return struct
 
     elif t is list or hasattr(struct, "__iter__"):
-        return [dictKeysToSnakeCase(item) for item in struct]
+        return [dict_keys_to_snake_case(item) for item in struct]
 
     elif struct is None:
         return None
 
     else:
-        raise Exception(f"_dictKeysToSnakeCase: unsupported type `{t}'")
+        raise TypeError(f"_dictKeysToSnakeCase: unsupported type `{t}'")
 
 
-def dictKeysToCamelCase(struct, seen=None):
+def dict_keys_to_camel_case(struct, seen=None):
     """
     Recursively converting snake_case dict keys to camelCase.
 
@@ -142,8 +142,8 @@ def dictKeysToCamelCase(struct, seen=None):
         try:
             result = {}
             for k, v in struct.items():
-                new_key = snakeToCamel(k) if isinstance(k, str) else k
-                result[new_key] = dictKeysToCamelCase(v, seen)
+                new_key = snake_to_camel(k) if isinstance(k, str) else k
+                result[new_key] = dict_keys_to_camel_case(v, seen)
             return result
         finally:
             seen.remove(obj_id)
@@ -152,7 +152,7 @@ def dictKeysToCamelCase(struct, seen=None):
     if isinstance(struct, list):
         seen.add(obj_id)
         try:
-            return [dictKeysToCamelCase(item, seen) for item in struct]
+            return [dict_keys_to_camel_case(item, seen) for item in struct]
         finally:
             seen.remove(obj_id)
 
@@ -160,7 +160,7 @@ def dictKeysToCamelCase(struct, seen=None):
     if isinstance(struct, tuple):
         seen.add(obj_id)
         try:
-            return tuple(dictKeysToCamelCase(item, seen) for item in struct)
+            return tuple(dict_keys_to_camel_case(item, seen) for item in struct)
         finally:
             seen.remove(obj_id)
 
@@ -168,7 +168,7 @@ def dictKeysToCamelCase(struct, seen=None):
     if isinstance(struct, set):
         seen.add(obj_id)
         try:
-            return [dictKeysToCamelCase(item, seen) for item in struct]
+            return [dict_keys_to_camel_case(item, seen) for item in struct]
         finally:
             seen.remove(obj_id)
 
@@ -176,7 +176,7 @@ def dictKeysToCamelCase(struct, seen=None):
     if hasattr(struct, "to_dict") and callable(struct.to_dict):
         seen.add(obj_id)
         try:
-            return dictKeysToCamelCase(struct.to_dict(), seen)
+            return dict_keys_to_camel_case(struct.to_dict(), seen)
         finally:
             seen.remove(obj_id)
 
@@ -189,8 +189,8 @@ if __name__ == "__main__":
 
     doctest.testmod()
 
-    assert camelToSnake("snakesOnAPlane") == "snakes_on_a_plane"
-    assert camelToSnake("SnakesOnAPlane") == "snakes_on_a_plane"
-    assert camelToSnake("snakes_on_a_plane") == "snakes_on_a_plane"
-    assert camelToSnake("IPhoneHysteria") == "i_phone_hysteria"
-    assert camelToSnake("iPhoneHysteria") == "i_phone_hysteria"
+    assert camel_to_snake("snakesOnAPlane") == "snakes_on_a_plane"
+    assert camel_to_snake("SnakesOnAPlane") == "snakes_on_a_plane"
+    assert camel_to_snake("snakes_on_a_plane") == "snakes_on_a_plane"
+    assert camel_to_snake("IPhoneHysteria") == "i_phone_hysteria"
+    assert camel_to_snake("iPhoneHysteria") == "i_phone_hysteria"

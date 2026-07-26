@@ -22,6 +22,10 @@ except ImportError:
         _user_permissions = []
 
         def __init__(self):
+            """
+            Intentionally a no-op: all attributes are class-level defaults, so
+            there is nothing instance-specific to initialize.
+            """
             pass
 
         def __str__(self):
@@ -173,7 +177,7 @@ class FakeRequest:
             if request is None:
                 setattr(self, attr, {})
             else:
-                setattr(self, attr, {k: v for k, v in list(getattr(request, attr).items())})
+                setattr(self, attr, dict(getattr(request, attr).items()))
 
     def is_secure(self):
         """

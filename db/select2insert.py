@@ -7,7 +7,7 @@ NB: Only tested for compatibility with Postgres.
 __author__ = "Jay Taylor [@jtaylor]"
 
 
-def select2insert(table, description, whereClause=None):
+def select2insert(table, description, where_clause=None):
     """
     Generate a SELECT statement that can be executed to produce an
     INSERT statement for each matching column.
@@ -51,41 +51,41 @@ def select2insert(table, description, whereClause=None):
 
     values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
-    if whereClause is not None and not whereClause.lower().strip().startswith("where "):
-        whereClause = f"WHERE {whereClause}"
+    if where_clause is not None and not where_clause.lower().strip().startswith("where "):
+        where_clause = f"WHERE {where_clause}"
 
-    where = f"{whereClause}" if whereClause is not None else ""
+    where = f"{where_clause}" if where_clause is not None else ""
 
-    intermediateSql = """SELECT 'INSERT INTO "{table}" ({columns}) VALUES
+    intermediate_sql = """SELECT 'INSERT INTO "{table}" ({columns}) VALUES
         (' || {values} || ');' FROM "{table}"{where};""".format(table=table, columns=columns, values=values, where=where)
 
-    return intermediateSql
+    return intermediate_sql
 
 
-def select2multiInsert(using, table, description, whereClause=None):
+def select2multi_insert(using, table, description, where_clause=None):
     """Evaluates intermediate SQL and returns combined
     multi-insert statement."""
     from . import db_query
 
     values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
-    if whereClause is not None and not whereClause.lower().strip().startswith("where "):
-        whereClause = f"WHERE {whereClause}"
+    if where_clause is not None and not where_clause.lower().strip().startswith("where "):
+        where_clause = f"WHERE {where_clause}"
 
-    where = f"{whereClause}" if whereClause is not None else ""
+    where = f"{where_clause}" if where_clause is not None else ""
 
-    intermediateSql = """SELECT '(' || {values} || ')' FROM
+    intermediate_sql = """SELECT '(' || {values} || ')' FROM
         "{table}"{where};""".format(values=values, table=table, where=where)
 
-    actualValues = ",".join([tup[0] for tup in db_query(intermediateSql, using=using)])  # noqa
+    actualValues = ",".join([tup[0] for tup in db_query(intermediate_sql, using=using)])  # noqa
     if len(actualValues) == 0:
         return None
 
     columns = ",".join([f'"{tup[0]}"' for tup in description])
 
-    finalSql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};'.format(table=table, columns=columns, actualValues=actualValues)
+    final_sql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};'.format(table=table, columns=columns, actualValues=actualValues)
 
-    return finalSql
+    return final_sql
 
 
 if __name__ == "__main__":

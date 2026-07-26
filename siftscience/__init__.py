@@ -14,11 +14,13 @@ import simplejson as json
 from ..retry import retry
 from ..sh_http.wget import wget
 
+_SIFT_SPAM_LABEL = "$spam"
+
 SIFTSCIENCE_CHOICES = (
-    ("$spam", "spam"),
-    ("$spam", "nigeria"),
-    ("$spam", "high block rate"),
-    ("$spam", "1k first 24 hours"),
+    (_SIFT_SPAM_LABEL, "spam"),
+    (_SIFT_SPAM_LABEL, "nigeria"),
+    (_SIFT_SPAM_LABEL, "high block rate"),
+    (_SIFT_SPAM_LABEL, "1k first 24 hours"),
     ("$duplicate_account", "duplicate"),
     ("$chargeback", "chargeback"),
     ("$chargeback", "suspicious payment"),
@@ -86,13 +88,12 @@ def label_user(user_id, is_bad, reason):
         return
 
     if is_bad:
+        assert is_bad_reason(reason), f"{reason} is not a valid reason to label as bad"
         label = map_reason_to_sift_science_label(reason)
     else:
         label = "n/a"
 
     logging.info(f"Labelling user {user_id} as bad=={is_bad} label =={label} because of reason=={reason}")
-
-    assert (is_bad is False) or (is_bad is True and is_bad_reason(reason)), f"{reason} is not a valid reason to label as bad"
 
     post_data = {"$is_bad": is_bad, "$api_key": settings.SIFTSCIENCE_API_KEY}
 

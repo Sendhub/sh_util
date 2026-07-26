@@ -34,7 +34,7 @@ def stripe_object_to_dict(stripe_obj):
             return [_serialize(i) for i in _o]
         return _o
 
-    _d = dict()
+    _d = {}
     for k in sorted(stripe_obj._values):
         _v = getattr(stripe_obj, k)
         _v = _serialize(_v)
@@ -67,6 +67,6 @@ def dict_to_stripe_object(data):
 
     # Using the Stripe API service to convert the dictionary to a Stripe object.
     obj = StripeAPICloverService()
-    stripeObj = obj.convert_to_stripe_object(data_dict)
+    stripe_obj = obj.convert_to_stripe_object(data_dict)
 
-    return stripeObj
+    return stripe_obj

@@ -7,6 +7,8 @@ import re
 import traceback
 from decimal import Decimal
 
+_AREA_CODE_UNAVAILABLE_MSG = "We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again."
+
 
 def twilio_phone_number_properties(avail):
     """
@@ -48,7 +50,7 @@ class AreaCodeUnavailableError(Exception):
     """Exception when requested area code is unavailable."""
 
 
-def twilioFindNumberInAreaCode(twilioClient, areaCode, countryCode="US", max_limit=6, only_list=False):
+def twilio_find_number_in_area_code(twilio_client, area_code, country_code="US", max_limit=6, only_list=False):
     """
     Find a number within an area code.
 
@@ -60,19 +62,19 @@ def twilioFindNumberInAreaCode(twilioClient, areaCode, countryCode="US", max_lim
         An list(str) of the phonenumbers
     """
     try:
-        logging.info(f"Before searching for area-code: {areaCode}")
-        result = twilioClient.api.v2010.accounts(twilioClient.username).available_phone_numbers(countryCode).local.list(area_code=areaCode, limit=max_limit)
-        logging.info(f"After searching for area-code: {areaCode}")
+        logging.info(f"Before searching for area-code: {area_code}")
+        result = twilio_client.api.v2010.accounts(twilio_client.username).available_phone_numbers(country_code).local.list(area_code=area_code, limit=max_limit)
+        logging.info(f"After searching for area-code: {area_code}")
         logging.info(f"Result: {result}")
         return [inst.phone_number for inst in result] if only_list else result
 
     except Exception as e:
-        logging.error(f"Exception occurred while trying to list number for area-code: {areaCode} Error was: {e}")
-        logging.error(traceback.print_exc())
+        logging.error(f"Exception occurred while trying to list number for area-code: {area_code} Error was: {e}")
+        logging.error(traceback.format_exc())
         raise AreaCodeUnavailableError("We are currently having problems finding phone numbers from our carrier. Please wait a moment and try again.") from e
 
 
-def twilioFindTollFreeNumberInAreaCode(twilioClient, pattern, countryCode="US", max_limit=6):
+def twilio_find_toll_free_number_in_area_code(twilio_client, pattern, country_code="US", max_limit=6):
     """
     Find a toll-free number.
 
@@ -88,18 +90,17 @@ def twilioFindTollFreeNumberInAreaCode(twilioClient, pattern, countryCode="US", 
 
     try:
         logging.info("Before searching for toll_free")
-        result = twilioClient.api.v2010.accounts(twilioClient.username).available_phone_numbers(countryCode).toll_free.list(contains=pattern, limit=max_limit)
+        result = twilio_client.api.v2010.accounts(twilio_client.username).available_phone_numbers(country_code).toll_free.list(contains=pattern, limit=max_limit)
         logging.info("After searching for toll_free")
         logging.info(f" Result: {result}")
-        # return [inst.phone_number for inst in result]
         return result
     except Exception as e:
         logging.error(f"Exception occurred while trying to list number for toll-free number Error was: {e}")
-        logging.error(traceback.print_exc())
+        logging.error(traceback.format_exc())
         raise AreaCodeUnavailableError("We are currently having problems finding phone numbers from our carrier. Please wait a moment and try again.") from e
 
 
-def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode="US", phoneNumber=None):
+def twilio_buy_phone_number(twilio_client, app_sid, area_code=None, country_code="US", phone_number=None):
     """
     Buy a phone number from twilio.
 
@@ -114,38 +115,38 @@ def twilioBuyPhoneNumber(twilioClient, appSid, areaCode=None, countryCode="US", 
         phonenumber (str)   : The purchased phone number
     """
 
-    if areaCode:
-        number = twilioFindNumberInAreaCode(twilioClient, areaCode, countryCode=countryCode, max_limit=1)
+    if area_code:
+        number = twilio_find_number_in_area_code(twilio_client, area_code, country_code=country_code, max_limit=1)
     else:
         number = None
 
     if number:
         try:
-            logging.info(f"Trying to purchase Twilio number for area-code: {areaCode} number: {number}")
-            newNumber = twilioClient.incoming_phone_numbers.create(phone_number=number, sms_application_sid=appSid, voice_application_sid=appSid)
-            logging.info(f"SID of purchase: {newNumber.sid} Number: {newNumber.phone_number}")
-            return newNumber
+            logging.info(f"Trying to purchase Twilio number for area-code: {area_code} number: {number}")
+            new_number = twilio_client.incoming_phone_numbers.create(phone_number=number, sms_application_sid=app_sid, voice_application_sid=app_sid)
+            logging.info(f"SID of purchase: {new_number.sid} Number: {new_number.phone_number}")
+            return new_number
         except Exception as e:
-            logging.error(f"Exception occurred while trying to purchase number for area-code: {areaCode} Error was: {e}")
-            logging.error(traceback.print_exc())
-            raise AreaCodeUnavailableError("We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again.") from e
+            logging.error(f"Exception occurred while trying to purchase number for area-code: {area_code} Error was: {e}")
+            logging.error(traceback.format_exc())
+            raise AreaCodeUnavailableError(_AREA_CODE_UNAVAILABLE_MSG) from e
 
-    elif phoneNumber is not None:
+    elif phone_number is not None:
         try:
-            logging.info(f"Trying to purchase Twilio number: {phoneNumber}")
-            newNumber = twilioClient.incoming_phone_numbers.create(phone_number=phoneNumber, sms_application_sid=appSid, voice_application_sid=appSid)
-            logging.info(f"SID of purchase: {newNumber.sid} Number: {newNumber.phone_number}")
-            return newNumber
+            logging.info(f"Trying to purchase Twilio number: {phone_number}")
+            new_number = twilio_client.incoming_phone_numbers.create(phone_number=phone_number, sms_application_sid=app_sid, voice_application_sid=app_sid)
+            logging.info(f"SID of purchase: {new_number.sid} Number: {new_number.phone_number}")
+            return new_number
         except Exception as e:
-            logging.error(f"Exception occurred while trying to purchase number: {phoneNumber} Error was: {e}")
-            logging.error(traceback.print_exc())
-            raise AreaCodeUnavailableError("We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again.") from e
+            logging.error(f"Exception occurred while trying to purchase number: {phone_number} Error was: {e}")
+            logging.error(traceback.format_exc())
+            raise AreaCodeUnavailableError(_AREA_CODE_UNAVAILABLE_MSG) from e
 
     else:
         raise AreaCodeUnavailableError("No available numbers left in that area code")
 
 
-def twilioBuyTollFreePhoneNumber(twilioClient, appSid, pattern=None, countryCode="US", phoneNumber=None):
+def twilio_buy_toll_free_phone_number(twilio_client, app_sid, pattern=None, country_code="US", phone_number=None):
     """
     Buy a toll free phone number from twilio.
 
@@ -161,31 +162,31 @@ def twilioBuyTollFreePhoneNumber(twilioClient, appSid, pattern=None, countryCode
     """
 
     if pattern:
-        number = twilioFindTollFreeNumberInAreaCode(twilioClient, pattern, countryCode=countryCode, max_limit=1)
+        number = twilio_find_toll_free_number_in_area_code(twilio_client, pattern, country_code=country_code, max_limit=1)
     else:
         number = None
 
     if number:
         try:
             logging.info(f"Trying to purchase Toll-Free Twilio number for pattern: {pattern} number: {number}")
-            newNumber = twilioClient.incoming_phone_numbers.create(phone_number=number, sms_application_sid=appSid, voice_application_sid=appSid)
-            logging.info(f"SID of purchase: {newNumber.sid} Toll-Free Number: {newNumber.phone_number}")
-            return newNumber.phone_number
+            new_number = twilio_client.incoming_phone_numbers.create(phone_number=number, sms_application_sid=app_sid, voice_application_sid=app_sid)
+            logging.info(f"SID of purchase: {new_number.sid} Toll-Free Number: {new_number.phone_number}")
+            return new_number.phone_number
         except Exception as e:
             logging.error(f"Exception occurred while trying to purchase Toll-Free number for pattern: {pattern} Error was: {e}")
-            logging.error(traceback.print_exc())
-            raise AreaCodeUnavailableError("We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again.") from e
+            logging.error(traceback.format_exc())
+            raise AreaCodeUnavailableError(_AREA_CODE_UNAVAILABLE_MSG) from e
 
-    elif phoneNumber is not None:
+    elif phone_number is not None:
         try:
-            logging.info(f"Trying to purchase Toll-Free Twilio number: {phoneNumber}")
-            newNumber = twilioClient.incoming_phone_numbers.create(phone_number=phoneNumber, sms_application_sid=appSid, voice_application_sid=appSid)
-            logging.info(f"SID of purchase: {newNumber.sid} Toll-Free Number: {newNumber.phone_number}")
-            return newNumber.phone_number
+            logging.info(f"Trying to purchase Toll-Free Twilio number: {phone_number}")
+            new_number = twilio_client.incoming_phone_numbers.create(phone_number=phone_number, sms_application_sid=app_sid, voice_application_sid=app_sid)
+            logging.info(f"SID of purchase: {new_number.sid} Toll-Free Number: {new_number.phone_number}")
+            return new_number.phone_number
         except Exception as e:
-            logging.error(f"Exception occurred while trying to purchase Toll-Free number: {phoneNumber} Error was: {e}")
-            logging.error(traceback.print_exc())
-            raise AreaCodeUnavailableError("We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again.") from e
+            logging.error(f"Exception occurred while trying to purchase Toll-Free number: {phone_number} Error was: {e}")
+            logging.error(traceback.format_exc())
+            raise AreaCodeUnavailableError(_AREA_CODE_UNAVAILABLE_MSG) from e
 
     else:
         raise AreaCodeUnavailableError("No available numbers left in that area code")

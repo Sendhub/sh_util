@@ -21,7 +21,7 @@ class Singleton:
     # The one, true Singleton.
     __single = None
 
-    def __new__(classtype, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):
         """
         Creating or returning the singleton instance.
 
@@ -30,7 +30,7 @@ class Singleton:
         class types to ensure they create their own singleton instances.
 
         Args:
-            classtype: The class type for which the singleton is being created.
+            cls: The class type for which the singleton is being created.
             *args: Positional arguments for the class constructor.
             **kwargs: Keyword arguments for the class constructor.
 
@@ -39,10 +39,10 @@ class Singleton:
         """
 
         # Checking if the singleton instance already exists for the class.
-        if classtype != type(classtype.__single):  # noqa
-            classtype.__single = object.__new__(classtype, *args, **kwargs)
+        if cls != type(cls.__single):  # noqa
+            cls.__single = object.__new__(cls, *args, **kwargs)
 
-        return classtype.__single
+        return cls.__single
 
     def __init__(self):
         """
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     # Logging the results of singleton comparisons.
     logging.info(f"o1 = o2: {o1 == o2}")
-    logging.info(f"o1 = o3: {o1 == o3}")
+    logging.info(f"o1 = o3: {o1 is o3}")
     logging.info(f"o3 = o4: {o3 == o4}")
     logging.info(f"o1 is a singleton? {isinstance(o1, Singleton)}")
     logging.info(f"o3 is a singleton? {isinstance(o3, Singleton)}")

@@ -24,16 +24,16 @@ def squeeze_sms_message(string, *args):
         str: The formatted message, trimmed to the configured SMS length.
     """
 
-    maxLength = 160
+    max_length = 160
 
     try:
         import settings
 
-        maxLength = settings.MAX_SMS_MESSAGE_LENGTH
+        max_length = settings.MAX_SMS_MESSAGE_LENGTH
     except (ImportError, AttributeError):
         pass
 
-    return format_string_to_fit_in_n_chars(*([string, maxLength] + list(args)))
+    return format_string_to_fit_in_n_chars(*([string, max_length] + list(args)))
 
 
 def format_string_to_fit_in_n_chars(string, max_number_of_characters, *args):
@@ -78,7 +78,7 @@ def format_string_to_fit_in_n_chars(string, max_number_of_characters, *args):
         test = string.format(*trimmed_args)
 
     if len(test) > max_number_of_characters:
-        raise Exception(f"Failed to format string {string} to fit inside of {max_number_of_characters} characters")
+        raise RuntimeError(f"Failed to format string {string} to fit inside of {max_number_of_characters} characters")
 
     return test
 

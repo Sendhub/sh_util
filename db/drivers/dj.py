@@ -22,7 +22,7 @@ def connections():
     return connections
 
 
-def switchDefaultDatabase(name):
+def switch_default_database(name):
     """
     Swap in a different default database.
 
@@ -51,7 +51,7 @@ def _dictfetchall(cursor):
     return [dict(list(zip([col[0] for col in desc], row))) for row in cursor.fetchall()]  # noqa
 
 
-def getRealShardConnectionName(using):
+def get_real_shard_connection_name(using):
     """
     Lookup and return the ACTUAL connection name, never use 'default'.
 
@@ -67,7 +67,7 @@ def getRealShardConnectionName(using):
         from ...sharding import ShardedResource
 
         # Lookup the ACTUAL connection name, never use 'default'.
-        using = ShardedResource.getCurrentShard()
+        using = ShardedResource.get_current_shard()
 
     return using
 
@@ -92,7 +92,7 @@ def db_query(sql, args=None, as_dict=False, using="default", force=False, debug=
     from .. import DEBUG
 
     if args is None:
-        args = tuple()
+        args = ()
 
     # Execute the raw query.
     cursor = connections()[using].cursor()
@@ -129,7 +129,7 @@ def db_exec(sql, args=None, using="default", force=False, debug=False):
     from .. import DEBUG
 
     if args is None:
-        args = tuple()
+        args = ()
 
     if DEBUG is True or debug is True:
         logging.info(f"-- [DEBUG] DB_EXEC, using={using} ::\n{sql}")
@@ -152,7 +152,7 @@ _djangoConfigToPsql = (
 )
 
 
-def getPsqlConnectionString(connectionName, secure=True):
+def get_psql_connection_string(connection_name, secure=True):
     """
     Generate a PSQL-format connection string for a given connection.
 
@@ -164,15 +164,13 @@ def getPsqlConnectionString(connectionName, secure=True):
         str: PSQL-format connection string.
     """
 
-    assert connectionName in settings.DATABASES, f"Requested connection missing: {connectionName}"
+    assert connection_name in settings.DATABASES, f"Requested connection missing: {connection_name}"
 
-    dbConfig = settings.DATABASES[connectionName]
+    db_config = settings.DATABASES[connection_name]
 
-    out = "sslmode=require" if secure is True else ""
+    filtered = [key__ for key__ in _djangoConfigToPsql if key__[0] in db_config and db_config[key__[0]] is not None and db_config[key__[0]] != ""]  # noqa
 
-    filtered = [key__ for key__ in _djangoConfigToPsql if key__[0] in dbConfig and dbConfig[key__[0]] is not None and dbConfig[key__[0]] != ""]  # noqa
+    psql_tuples = [f"{key_param[1]}={db_config[key_param[0]]}" for key_param in filtered]  # noqa
 
-    psqlTuples = [f"{key_param[1]}={dbConfig[key_param[0]]}" for key_param in filtered]  # noqa
-
-    out = " ".join(psqlTuples) + (" sslmode=require" if secure is True else "")
+    out = " ".join(psql_tuples) + (" sslmode=require" if secure is True else "")
     return out

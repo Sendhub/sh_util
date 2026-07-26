@@ -44,10 +44,10 @@ class KazooClient:
         ttl: Time-to-live for the authentication token cache.
     """
 
-    kazooCli = settings.KAZOO_CLI
-    redisCli = settings.REDIS
-    authTokenCacheKey = "kazooAuthToken"
-    authToken = None
+    kazoo_cli = settings.KAZOO_CLI
+    redis_cli = settings.REDIS
+    auth_token_cache_key = "kazooAuthToken"
+    auth_token = None
     ttl = int(settings.KAZOO_AUTH_TOKEN_CACHE_EXPIRY_SECONDS)
 
     def __init__(self):
@@ -58,27 +58,27 @@ class KazooClient:
         """
 
         try:
-            self.authToken = self.redisCli.get(self.authTokenCacheKey)
+            self.auth_token = self.redis_cli.get(self.auth_token_cache_key)
 
-            if self.authToken is None:
-                self.authToken = self.kazooCli.authenticate()
+            if self.auth_token is None:
+                self.auth_token = self.kazoo_cli.authenticate()
                 logging.info("Authenticated against Kazoo. Caching result.")
-                logging.info(f"Key: {self.authTokenCacheKey}")
-                logging.info(f"AuthToken: {self.authToken}")
+                logging.info(f"Key: {self.auth_token_cache_key}")
+                logging.info(f"AuthToken: {self.auth_token}")
                 logging.info(f"settings.KAZOO_AUTH_TOKEN_CACHE_EXPIRY_SECONDS: {self.ttl} and type: {type(self.ttl)}")
-                self.redisCli.setex(name=self.authTokenCacheKey, value=self.authToken, time=self.ttl)
+                self.redis_cli.setex(name=self.auth_token_cache_key, value=self.auth_token, time=self.ttl)
             else:
                 logging.info("Using cached Kazoo authentication")
-                self.kazooCli.auth_token = self.authToken
-                self.kazooCli._authenticated = True
+                self.kazoo_cli.auth_token = self.auth_token
+                self.kazoo_cli._authenticated = True
         except Exception as e:
             logging.error(f"Unable to authenticate on Kazoo: {str(e)}")
-            self.authToken = None
+            self.auth_token = None
             import traceback
 
             traceback.print_exc(e)
 
-    def createEnterpriseAccount(self, enterpriseId, name):
+    def create_enterprise_account(self, enterprise_id, name):
         """
         Creates an enterprise account on Kazoo.
 
@@ -91,15 +91,15 @@ class KazooClient:
         """  # Import moved here to avoid missing package dependency
         import kazoo.exceptions as exceptions
 
-        logging.info(f"createEnterpriseAccount invoked with {enterpriseId}, {name}")
+        logging.info(f"createEnterpriseAccount invoked with {enterprise_id}, {name}")
 
-        if enterpriseId is None or name is None:
-            raise exceptions.KazooApiError(f"EnterpriseId {enterpriseId} and Name {name} must be provided")
+        if enterprise_id is None or name is None:
+            raise exceptions.KazooApiError(f"EnterpriseId {enterprise_id} and Name {name} must be provided")
 
         result = {}
 
         @retry(3)
-        def _wrappedAccountCreation(result):
+        def _wrapped_account_creation(result):
             """
             Wraps calls to account creation to allow for retries.
 
@@ -110,22 +110,22 @@ class KazooClient:
                 bool: True if account creation is successful, False otherwise.
             """
 
-            result.update(self.kazooCli.create_account({"name": str(enterpriseId), "enterprise_id": str(enterpriseId), "enterprise_name": name, "realm": f"{enterpriseId}.sip.sendhub.com"}))
+            result.update(self.kazoo_cli.create_account({"name": str(enterprise_id), "enterprise_id": str(enterprise_id), "enterprise_name": name, "realm": f"{enterprise_id}.sip.sendhub.com"}))
 
             return "data" in result and "id" in result["data"]
 
-        if _wrappedAccountCreation(result):
-            logging.info(f"Created account {enterpriseId} successfully. Kazoo id = {result['data']['id']}")
+        if _wrapped_account_creation(result):
+            logging.info(f"Created account {enterprise_id} successfully. Kazoo id = {result['data']['id']}")
 
             # Create the no-match call flow for this account
-            self.kazooCli.create_callflow(result["data"]["id"], deepcopy(NO_MATCH_CALL_FLOW))
+            self.kazoo_cli.create_callflow(result["data"]["id"], deepcopy(NO_MATCH_CALL_FLOW))
         else:
             logging.error(f"Unable to create account on Kazoo: {result}")
-            raise Exception(f"Kazoo account creation error: {result}")
+            raise RuntimeError(f"Kazoo account creation error: {result}")
 
         return result
 
-    def getUser(self, accountId, kazooUserId):
+    def get_user(self, account_id, kazoo_user_id):
         """
         Retrieves a user from Kazoo.
 
@@ -139,14 +139,14 @@ class KazooClient:
         # Import moved here to avoid missing package dependency
         import kazoo.exceptions as exceptions
 
-        if accountId is None or kazooUserId is None:
-            raise exceptions.KazooApiError(f"accountId {accountId} and kazooUserId {kazooUserId} must be provided")
+        if account_id is None or kazoo_user_id is None:
+            raise exceptions.KazooApiError(f"accountId {account_id} and kazooUserId {kazoo_user_id} must be provided")
 
-        result = self.kazooCli.get_user(accountId, kazooUserId)
+        result = self.kazoo_cli.get_user(account_id, kazoo_user_id)
 
         return result
 
-    def _softPhoneTemplate(self, ownerId, username, password):
+    def _soft_phone_template(self, owner_id, username, password):
         return {
             "name": f"{username}",
             "sip": {
@@ -155,20 +155,20 @@ class KazooClient:
                 "password": password,
             },
             "device_type": "softphone",
-            "owner_id": str(ownerId),
+            "owner_id": str(owner_id),
         }
 
-    def _physicalPhoneTemplate(self, ownerId, number, type="cellphone"):
+    def _physical_phone_template(self, owner_id, number, type="cellphone"):
         return {
             "name": number,
             "device_type": type,
             "call_forward": {"enabled": True, "substitute": True, "require_keypress": False, "keep_caller_id": True, "direct_calls_only": False, "ignore_early_media": True, "number": number},
             "media": {"bypass_media": "auto", "ignore_early_media": True},
-            "owner_id": str(ownerId),
+            "owner_id": str(owner_id),
             "forwarding_number": number,
         }
 
-    def listDevices(self, accountId, ownerId):
+    def list_devices(self, account_id, owner_id):
         """
         Lists devices for a specific owner in an account.
 
@@ -182,12 +182,12 @@ class KazooClient:
 
         from kazoo.client import KazooClient
 
-        request = KazooClient("/accounts/{account_id}/devices", get_params={"filter_owner_id": ownerId})
+        request = KazooClient("/accounts/{account_id}/devices", get_params={"filter_owner_id": owner_id})
         request.auth_required = True
 
-        return self.kazooCli._execute_request(request, account_id=accountId)
+        return self.kazoo_cli._execute_request(request, account_id=account_id)
 
-    def createDevice(self, type, accountId, userId, ownerId, number, username="", password=""):
+    def create_device(self, type, account_id, user_id, owner_id, number, username="", password=""):
         """
         Creates a device in Kazoo.
 
@@ -207,21 +207,21 @@ class KazooClient:
         assert type in ("softphone", "cellphone")
         import kazoo.exceptions as exceptions
 
-        from sh_util.tel import validatePhoneNumber
+        from sh_util.tel import validate_phone_number
 
-        logging.info(f"createDevice invoked with type={type}, accountId={accountId}, userId={userId}, ownerId={ownerId}, username={username}, password={password}")
+        logging.info(f"createDevice invoked with type={type}, accountId={account_id}, userId={user_id}, ownerId={owner_id}, username={username}, password={password}")
 
-        if validatePhoneNumber(number) is False:
-            logging.warning(f"Phone number validation failed for accountId={accountId}, userId={userId}, number={number}")
+        if validate_phone_number(number) is False:
+            logging.warning(f"Phone number validation failed for accountId={account_id}, userId={user_id}, number={number}")
             return None
 
         if type == "softphone":
-            deviceParams = self._softPhoneTemplate(ownerId, username, password)
+            device_params = self._soft_phone_template(owner_id, username, password)
         else:
-            deviceParams = self._physicalPhoneTemplate(ownerId, number)
+            device_params = self._physical_phone_template(owner_id, number)
 
         try:
-            return self.kazooCli.create_device(accountId, deviceParams)
+            return self.kazoo_cli.create_device(account_id, device_params)
         except exceptions.KazooApiBadDataError as e:
             if ("sip.username" in e.field_errors and "unique" in e.field_errors["sip.username"]) is False:
                 logging.error(f"Unexpected error creating device: {str(e)}")
@@ -230,7 +230,7 @@ class KazooClient:
 
         return None
 
-    def createPhoneNumber(self, accountId, number):
+    def create_phone_number(self, account_id, number):
         """
         Creates a phone number in Kazoo.
 
@@ -245,7 +245,7 @@ class KazooClient:
         result = {}
 
         @retry(3)
-        def _wrappedNumberCreation(result, shortNumber):
+        def _wrapped_number_creation(result, short_number):
             """
             Wraps calls to phone number creation to allow for retries.
 
@@ -257,10 +257,10 @@ class KazooClient:
                 bool: True if phone number creation is successful, False otherwise.
             """
 
-            logging.info(f"Creating phone number on Kazoo account={accountId}, number={shortNumber}")
+            logging.info(f"Creating phone number on Kazoo account={account_id}, number={short_number}")
 
             try:
-                result.update(self.kazooCli.create_phone_number(accountId, shortNumber))
+                result.update(self.kazoo_cli.create_phone_number(account_id, short_number))
 
                 logging.info(f"Phone number creation result: {'data' in result and 'id' in result['data']}")
 
@@ -271,11 +271,11 @@ class KazooClient:
 
             return False
 
-        shortNumber = number[2:] if number.startswith("+1") else number
-        _wrappedNumberCreation(result, shortNumber)
+        short_number = number[2:] if number.startswith("+1") else number
+        _wrapped_number_creation(result, short_number)
         return result
 
-    def provisionPhoneNumberAndAddToCallFlow(self, accountId, callFlowId, number):
+    def provision_phone_number_and_add_to_call_flow(self, account_id, call_flow_id, number):
         """
         Provisions a phone number and adds it to a call flow in Kazoo.
 
@@ -285,19 +285,19 @@ class KazooClient:
             number (str): The phone number to be provisioned.
         """
 
-        logging.info(f"provisionPhoneNumberAndAddToCallFlow invoked with accountId={accountId}, callFlowId={callFlowId}, number={number}")
+        logging.info(f"provisionPhoneNumberAndAddToCallFlow invoked with accountId={account_id}, callFlowId={call_flow_id}, number={number}")
 
-        callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
+        call_flow = self.kazoo_cli.get_callflow(account_id, call_flow_id)
 
-        assert "data" in callFlow and "numbers" in callFlow["data"], "Detected invalid call flow when provisioning new number"
+        assert "data" in call_flow and "numbers" in call_flow["data"], "Detected invalid call flow when provisioning new number"
 
-        result = self.createPhoneNumber(accountId, number)
+        result = self.create_phone_number(account_id, number)
 
         if "data" in result and "id" in result["data"]:
-            callFlow["data"]["numbers"].append(number)
-            self.kazooCli.update_callflow(accountId, callFlowId, callFlow["data"])
+            call_flow["data"]["numbers"].append(number)
+            self.kazoo_cli.update_callflow(account_id, call_flow_id, call_flow["data"])
 
-    def deProvisionPhoneNumberAndRemoveFromCallFlow(self, accountId, callFlowId, number):
+    def de_provision_phone_number_and_remove_from_call_flow(self, account_id, call_flow_id, number):
         """
         De-provisions a phone number and removes it from a call flow in Kazoo.
 
@@ -307,20 +307,20 @@ class KazooClient:
             number (str): The phone number to be de-provisioned.
         """
 
-        logging.info(f"deProvisionPhoneNumberAndRemoveFromCallFlow invoked with accountId={accountId}, callFlowId={callFlowId}, number={number}")
+        logging.info(f"deProvisionPhoneNumberAndRemoveFromCallFlow invoked with accountId={account_id}, callFlowId={call_flow_id}, number={number}")
 
-        callFlow = self.kazooCli.get_callflow(accountId, callFlowId)
+        call_flow = self.kazoo_cli.get_callflow(account_id, call_flow_id)
 
-        assert "data" in callFlow and "numbers" in callFlow["data"], "Detected invalid call flow when de-provisioning number"
+        assert "data" in call_flow and "numbers" in call_flow["data"], "Detected invalid call flow when de-provisioning number"
 
-        callFlow["data"]["numbers"] = [nbr for nbr in callFlow["data"]["numbers"] if number != nbr]
+        call_flow["data"]["numbers"] = [nbr for nbr in call_flow["data"]["numbers"] if number != nbr]
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlow["data"])
+        self.kazoo_cli.update_callflow(account_id, call_flow_id, call_flow["data"])
 
-        shortNumber = number[2:] if number.startswith("+1") else number
-        self.kazooCli.delete_phone_number(accountId, shortNumber)
+        short_number = number[2:] if number.startswith("+1") else number
+        self.kazoo_cli.delete_phone_number(account_id, short_number)
 
-    def updateVmBox(self, accountId, vmBoxId, updateData):
+    def update_vm_box(self, account_id, vm_box_id, update_data):
         """
         Update a vmbox on Kazoo within an given account
         updateData is a dictionary of optional (specific) overwrites
@@ -329,31 +329,31 @@ class KazooClient:
         # Import moved here to avoid missing package dependency
         import kazoo.exceptions as exceptions
 
-        if accountId is None or vmBoxId is None or updateData is None:
+        if account_id is None or vm_box_id is None or update_data is None:
             raise exceptions.KazooApiError(
                 "accountId {} and vmBoxId {} and updateData {} must be provided".  # noqa
-                format(accountId, vmBoxId, updateData)
+                format(account_id, vm_box_id, update_data)
             )  # noqa
 
-        currentVmBoxRes = self.kazooCli.get_voicemail_box(accountId, vmBoxId)
-        if currentVmBoxRes["status"] != "success":
-            raise exceptions.KazooApiError(f"Failed to get user: accountId {accountId}, vmBoxId {vmBoxId}")  # noqa
+        current_vm_box_res = self.kazoo_cli.get_voicemail_box(account_id, vm_box_id)
+        if current_vm_box_res["status"] != "success":
+            raise exceptions.KazooApiError(f"Failed to get user: accountId {account_id}, vmBoxId {vm_box_id}")  # noqa
 
-        userData = currentVmBoxRes["data"]
-        userData.update(updateData)
-        result = self.kazooCli.update_voicemail_box(accountId, vmBoxId, userData)
+        user_data = current_vm_box_res["data"]
+        user_data.update(update_data)
+        result = self.kazoo_cli.update_voicemail_box(account_id, vm_box_id, user_data)
 
         return result
 
-    def updateMenu(self, accountId, menuId, userId, mediaId):
+    def update_menu(self, account_id, menu_id, user_id, media_id):
         """update menu"""
-        self.kazooCli.update_menu(
-            accountId,
-            menuId,
-            {"name": str(userId), "retries": 3, "timeout": "10000", "max_extension_length": "1", "media": {"exit_media": True, "greeting": mediaId, "invalid_media": True, "transfer_media": True}},
+        self.kazoo_cli.update_menu(
+            account_id,
+            menu_id,
+            {"name": str(user_id), "retries": 3, "timeout": "10000", "max_extension_length": "1", "media": {"exit_media": True, "greeting": media_id, "invalid_media": True, "transfer_media": True}},
         )
 
-    def copyMedia(self, accountId, mediaId, fromUrl):
+    def copy_media(self, account_id, media_id, from_url):
         """copy media"""
         # Import moved here to avoid missing package dependency
         import kazoo.exceptions as exceptions
@@ -365,12 +365,12 @@ class KazooClient:
             c = None
             fh = None
 
-            mediaData = wget(fromUrl, num_tries=3)
+            media_data = wget(from_url, num_tries=3)
 
-            toUrl = f"{self.kazooCli.base_url}/accounts/{accountId}/media/{mediaId}/raw"  # noqa
+            toUrl = f"{self.kazoo_cli.base_url}/accounts/{account_id}/media/{media_id}/raw"  # noqa
 
             fh = tempfile.NamedTemporaryFile(mode="wr+b")
-            fh.write(mediaData)
+            fh.write(media_data)
             fh.flush()
             fh.seek(0)
 
@@ -378,7 +378,7 @@ class KazooClient:
             c.setopt(pycurl.URL, toUrl)
             c.setopt(pycurl.READFUNCTION, fh.read)
             c.setopt(pycurl.POST, 1)
-            c.setopt(pycurl.HTTPHEADER, ["Content-type: audio/mp3", f"X-Auth-Token: {self.kazooCli.auth_token}"])
+            c.setopt(pycurl.HTTPHEADER, ["Content-type: audio/mp3", f"X-Auth-Token: {self.kazoo_cli.auth_token}"])
             c.setopt(pycurl.POSTFIELDSIZE, os.path.getsize(fh.name))
             response = BytesIO()
             c.setopt(c.WRITEFUNCTION, response.write)
@@ -386,10 +386,10 @@ class KazooClient:
             logging.info("Uploading file %s to url %s", str(fh.name), str(toUrl))
 
             c.perform()
-            returnCode = c.getinfo(pycurl.HTTP_CODE)
-            logging.info("File upload %s Http %d Response %s", str(fh.name), int(returnCode), str(response.getvalue()))
-            if returnCode != 200:
-                raise exceptions.KazooApiError("Failed upload media, return code %d" % returnCode)  # noqa
+            return_code = c.getinfo(pycurl.HTTP_CODE)
+            logging.info("File upload %s Http %d Response %s", str(fh.name), int(return_code), str(response.getvalue()))
+            if return_code != 200:
+                raise exceptions.KazooApiError("Failed upload media, return code %d" % return_code)  # noqa
 
         finally:
             if c is not None:
@@ -397,67 +397,67 @@ class KazooClient:
             if fh is not None:
                 fh.close()
 
-    def addMedia(self, accountId, url, name):
+    def add_media(self, account_id, url, name):
         """add media"""
-        logging.info("Adding media %s-%s to account %s on Kazoo", str(name), str(url), str(accountId))
+        logging.info("Adding media %s-%s to account %s on Kazoo", str(name), str(url), str(account_id))
 
         result = None
 
         try:
             filename = basename(urllib.parse.urlparse(url).path)
-            result = self.kazooCli.create_media(accountId, {"streamable": True, "name": name, "description": f"C:\\fakepath\\{filename}"})
+            result = self.kazoo_cli.create_media(account_id, {"streamable": True, "name": name, "description": f"C:\\fakepath\\{filename}"})
 
-            self.copyMedia(accountId, result["data"]["id"], url)
+            self.copy_media(account_id, result["data"]["id"], url)
 
         except Exception as e:
-            logging.warning("Unable to create media %s-%s on account: %s", str(name), str(url), str(accountId))
+            logging.warning("Unable to create media %s-%s on account: %s", str(name), str(url), str(account_id))
             logging.warning(e)
             raise
 
         return result
 
-    def deleteMedia(self, accountId, mediaId):
+    def delete_media(self, account_id, media_id):
         """delete media"""
-        logging.info("Deleting media %s from account %s on Kazoo", str(mediaId), str(accountId))
+        logging.info("Deleting media %s from account %s on Kazoo", str(media_id), str(account_id))
 
         result = None
         try:
-            result = self.kazooCli.delete_media(accountId, mediaId)
+            result = self.kazoo_cli.delete_media(account_id, media_id)
 
         except Exception as e:
-            logging.warning("Unable to delete media %s from account: %s", str(mediaId), str(accountId))
+            logging.warning("Unable to delete media %s from account: %s", str(media_id), str(account_id))
             logging.warning(e)
             raise
 
         return result
 
-    def addTtsMedia(self, accountId, tts, name):
+    def add_tts_media(self, account_id, tts, name):
         """add tts media"""
-        logging.info("Adding tts media %s-%s to account %s on Kazoo", str(name), str(tts), str(accountId))
+        logging.info("Adding tts media %s-%s to account %s on Kazoo", str(name), str(tts), str(account_id))
 
         result = None
 
         try:
-            result = self.kazooCli.create_media(accountId, {"streamable": True, "name": name, "media_source": "tts", "tts": {"text": tts, "voice": "female/en-US"}})
+            result = self.kazoo_cli.create_media(account_id, {"streamable": True, "name": name, "media_source": "tts", "tts": {"text": tts, "voice": "female/en-US"}})
 
         except Exception as e:
-            logging.warning("Unable to create media %s-%s on account: %s", str(name), str(tts), str(accountId))
+            logging.warning("Unable to create media %s-%s on account: %s", str(name), str(tts), str(account_id))
             logging.warning(e)
             raise
 
         return result
 
-    def updateTemporalRules(self, accountId, ruleId, userId, openSecond, closeSecond, daysOfWeek):
+    def update_temporal_rules(self, account_id, rule_id, user_id, open_second, close_second, days_of_week):
         """update temporal rules"""
-        self.kazooCli.update_temporal_rule(
-            accountId,
-            ruleId,
+        self.kazoo_cli.update_temporal_rule(
+            account_id,
+            rule_id,
             {
-                "name": str(userId),  # noqa
-                "time_window_start": openSecond,
-                "time_window_stop": closeSecond,
-                "wdays": daysOfWeek,
-                "name": f"{str(userId)}",  # noqa
+                "name": str(user_id),  # noqa
+                "time_window_start": open_second,
+                "time_window_stop": close_second,
+                "wdays": days_of_week,
+                "name": f"{str(user_id)}",  # noqa
                 "cycle": "weekly",
                 "start_date": 62586115200,
                 "ordinal": "every",
@@ -465,35 +465,35 @@ class KazooClient:
             },
         )
 
-    def updateCallFlow(self, accountId, callFlowId, callFlowData):
+    def update_call_flow(self, account_id, call_flow_id, call_flow_data):
         """update call flow"""
-        logging.info("Updating callflow %s on account %s with data %s", str(callFlowId), str(accountId), str(callFlowData))
+        logging.info("Updating callflow %s on account %s with data %s", str(call_flow_id), str(account_id), str(call_flow_data))
 
-        self.kazooCli.update_callflow(accountId, callFlowId, callFlowData)
+        self.kazoo_cli.update_callflow(account_id, call_flow_id, call_flow_data)
 
-    def addDeviceToGroup(self, accountId, groupId, deviceId, userId):
+    def add_device_to_group(self, account_id, group_id, device_id, user_id):
         """add device to group"""
-        result = self.kazooCli.get_group(accountId, groupId)
+        result = self.kazoo_cli.get_group(account_id, group_id)
 
         if "data" in result and "endpoints" in result["data"]:
             endpoints = result["data"]["endpoints"]
 
-            if deviceId not in endpoints:
-                endpoints.update({deviceId: {"type": "device"}})
+            if device_id not in endpoints:
+                endpoints.update({device_id: {"type": "device"}})
 
-                self.kazooCli.update_group(
-                    accountId,
-                    groupId,
+                self.kazoo_cli.update_group(
+                    account_id,
+                    group_id,
                     {
                         "music_on_hold": {},
-                        "name": str(userId),
+                        "name": str(user_id),
                         "check_if_owner": True,
                         "require_pin": False,
                         "delete_after_notify": True,
                     },
                 )
 
-    def createUser(self, accountId, name, userId, password, enterpriseId, sipUsername, sipPassword, softPhoneNumber=None, cellPhoneNumbers=[], email=None):
+    def create_user(self, account_id, name, user_id, password, enterprise_id, sip_username, sip_password, soft_phone_number=None, cell_phone_numbers=[], email=None):
         """
         Create a user on Kazoo within an given enterprise or within the general
         sendhub enterprise
@@ -513,10 +513,10 @@ class KazooClient:
         """
 
         logging.info(
-            "createUser invoked with %s,%s,%s,%s,%s,%s,%s,%s", str(accountId), str(name), str(userId), str(password), str(enterpriseId), str(sipUsername), str(softPhoneNumber), str(cellPhoneNumbers)
+            "createUser invoked with %s,%s,%s,%s,%s,%s,%s,%s", str(account_id), str(name), str(user_id), str(password), str(enterprise_id), str(sip_username), str(soft_phone_number), str(cell_phone_numbers)
         )
 
-        userDetails = {
+        user_details = {
             "id": None,
             "first_name": None,
             "username": None,
@@ -528,92 +528,92 @@ class KazooClient:
             "temporalRuleId": None,
         }
 
-        shortSoftPhoneNumber = None
+        short_soft_phone_number = None
 
         # Import moved here to avoid missing package dependency
         import kazoo.exceptions as exceptions
 
-        if name is None or userId is None or password is None:
-            raise exceptions.KazooApiError(f"user_id {userId} and Name {name} must be provided")  # noqa
+        if name is None or user_id is None or password is None:
+            raise exceptions.KazooApiError(f"user_id {user_id} and Name {name} must be provided")  # noqa
 
-        createUserResult = None
+        create_user_result = None
         try:
-            userSettings = {
+            user_settings = {
                 "first_name": name,
                 "last_name": "SH",
-                "username": str(userId),
+                "username": str(user_id),
                 "password": password,
-                "enterprise_id": str(enterpriseId),
+                "enterprise_id": str(enterprise_id),
                 "email": f"{email}@no-reply.sendhub.com" if email is None else email,  # noqa
                 "vm_to_email_enabled": False,
             }
 
-            if softPhoneNumber is not None:
-                shortSoftPhoneNumber = softPhoneNumber[2:] if softPhoneNumber.startswith("+1") else softPhoneNumber
-                callerId = {"caller_id": {"internal": {"name": name, "number": shortSoftPhoneNumber}, "external": {"name": name, "number": shortSoftPhoneNumber}}}
-                userSettings.update(callerId)
+            if soft_phone_number is not None:
+                short_soft_phone_number = soft_phone_number[2:] if soft_phone_number.startswith("+1") else soft_phone_number
+                caller_id = {"caller_id": {"internal": {"name": name, "number": short_soft_phone_number}, "external": {"name": name, "number": short_soft_phone_number}}}
+                user_settings.update(caller_id)
 
-            createUserResult = self.kazooCli.create_user(accountId, userSettings)
+            create_user_result = self.kazoo_cli.create_user(account_id, user_settings)
 
-            if createUserResult["status"] == "success":
-                userDetails["id"] = createUserResult["data"]["id"]
-                userDetails["name"] = createUserResult["data"]["first_name"]
-                userDetails["username"] = createUserResult["data"]["username"]
-                userDetails["enterpriseId"] = createUserResult["data"]["enterprise_id"]
+            if create_user_result["status"] == "success":
+                user_details["id"] = create_user_result["data"]["id"]
+                user_details["name"] = create_user_result["data"]["first_name"]
+                user_details["username"] = create_user_result["data"]["username"]
+                user_details["enterpriseId"] = create_user_result["data"]["enterprise_id"]
 
-                callFlow = deepcopy(DEFAULT_KAZOO_CALL_FLOW)
+                call_flow = deepcopy(DEFAULT_KAZOO_CALL_FLOW)
 
-                softPhoneDeviceResult = None
-                if softPhoneNumber is not None:
-                    createNumberResult = self.createPhoneNumber(accountId, shortSoftPhoneNumber)
+                soft_phone_device_result = None
+                if soft_phone_number is not None:
+                    create_number_result = self.create_phone_number(account_id, short_soft_phone_number)
 
-                    if "data" not in createNumberResult or "id" not in createNumberResult["data"]:
-                        raise exceptions.KazooApiError(f"Unable to create phone number: {shortSoftPhoneNumber}")
+                    if "data" not in create_number_result or "id" not in create_number_result["data"]:
+                        raise exceptions.KazooApiError(f"Unable to create phone number: {short_soft_phone_number}")
 
-                    callFlow["numbers"].append(softPhoneNumber)
+                    call_flow["numbers"].append(soft_phone_number)
 
-                    softPhoneDeviceResult = self.createDevice(
-                        type="softphone", accountId=accountId, userId=userId, ownerId=userDetails["id"], number=shortSoftPhoneNumber, username=sipUsername, password=sipPassword
+                    soft_phone_device_result = self.create_device(
+                        type="softphone", account_id=account_id, user_id=user_id, owner_id=user_details["id"], number=short_soft_phone_number, username=sip_username, password=sip_password
                     )
 
-                    userDetails["softphoneId"] = softPhoneDeviceResult["data"]["id"] if softPhoneDeviceResult is not None else None
+                    user_details["softphoneId"] = soft_phone_device_result["data"]["id"] if soft_phone_device_result is not None else None
 
-                callFlow["numbers"].append(str(userId))
-                callFlow["flow"]["data"]["id"] = str(userDetails["id"])
+                call_flow["numbers"].append(str(user_id))
+                call_flow["flow"]["data"]["id"] = str(user_details["id"])
 
-                cellPhoneResults = []
-                for number in cellPhoneNumbers:
+                cell_phone_results = []
+                for number in cell_phone_numbers:
                     if number is not None:
-                        shortNumber = number[2:] if number.startswith("+1") else number
-                        cellPhoneResult = self.createDevice(type="cellphone", accountId=accountId, userId=userId, ownerId=userDetails["id"], number=shortNumber)
-                        if cellPhoneResult is not None:
-                            cellPhoneResults.append(cellPhoneResult)
-                userDetails["cellphoneIds"] = [
-                    {"id": cellPhoneResult["data"]["id"], "number": "+1{}".format(cellPhoneResult["data"]["call_forward"]["number"])} for cellPhoneResult in cellPhoneResults
+                        short_number = number[2:] if number.startswith("+1") else number
+                        cell_phone_result = self.create_device(type="cellphone", account_id=account_id, user_id=user_id, owner_id=user_details["id"], number=short_number)
+                        if cell_phone_result is not None:
+                            cell_phone_results.append(cell_phone_result)
+                user_details["cellphoneIds"] = [
+                    {"id": cell_phone_result["data"]["id"], "number": "+1{}".format(cell_phone_result["data"]["call_forward"]["number"])} for cell_phone_result in cell_phone_results
                 ]  # noqa
 
                 # the following requires that the schema be changed on kazoo.
                 # so if this fails, then check
-                vmBoxObj = self.kazooCli.create_voicemail_box(
-                    accountId, {"mailbox": str(userId), "check_if_owner": True, "require_pin": False, "name": str(userId), "delete_after_notify": True, "owner_id": str(userDetails["id"])}
+                vm_box_obj = self.kazoo_cli.create_voicemail_box(
+                    account_id, {"mailbox": str(user_id), "check_if_owner": True, "require_pin": False, "name": str(user_id), "delete_after_notify": True, "owner_id": str(user_details["id"])}
                 )
-                userDetails["voicemailId"] = vmBoxObj["data"]["id"]
-                callFlow["flow"]["children"]["_"]["data"]["id"] = userDetails["voicemailId"]
+                user_details["voicemailId"] = vm_box_obj["data"]["id"]
+                call_flow["flow"]["children"]["_"]["data"]["id"] = user_details["voicemailId"]
 
-                callFlowResult = self.kazooCli.create_callflow(accountId, callFlow)
-                userDetails["callFlowId"] = callFlowResult["data"]["id"]
+                call_flow_result = self.kazoo_cli.create_callflow(account_id, call_flow)
+                user_details["callFlowId"] = call_flow_result["data"]["id"]
 
-                autoAttendantMenuResult = self.kazooCli.create_menu(accountId, {"name": str(userId), "retries": 3, "timeout": "10000", "max_extension_length": "1"})
-                userDetails["autoAttendantMenuId"] = autoAttendantMenuResult["data"]["id"]
+                auto_attendant_menu_result = self.kazoo_cli.create_menu(account_id, {"name": str(user_id), "retries": 3, "timeout": "10000", "max_extension_length": "1"})
+                user_details["autoAttendantMenuId"] = auto_attendant_menu_result["data"]["id"]
 
-                temporalRuleResult = self.kazooCli.create_temporal_rule(
-                    accountId,
+                temporal_rule_result = self.kazoo_cli.create_temporal_rule(
+                    account_id,
                     {
-                        "name": str(userId),  # noqa
+                        "name": str(user_id),  # noqa
                         "time_window_start": 0,
                         "time_window_stop": 86400,
                         "wdays": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-                        "name": f"{str(userId)}",  # noqa
+                        "name": f"{str(user_id)}",  # noqa
                         "cycle": "weekly",
                         "start_date": 62586115200,
                         "ordinal": "every",
@@ -621,7 +621,7 @@ class KazooClient:
                     },
                 )
 
-                userDetails["temporalRuleId"] = temporalRuleResult["data"]["id"]
+                user_details["temporalRuleId"] = temporal_rule_result["data"]["id"]
 
         except Exception as e:
             logging.error("Unable to create user on Kazoo: %s", str(e))
@@ -631,23 +631,23 @@ class KazooClient:
 
             # if we couldn't create the user then try to delete them so
             # we can try again
-            if createUserResult is not None and createUserResult["status"] == "success":
+            if create_user_result is not None and create_user_result["status"] == "success":
                 logging.error("Deleting partially created user")
-                self.deleteUser(
-                    accountId,
-                    userDetails["id"],
-                    shortSoftPhoneNumber,
-                    userDetails["cellphoneIds"].extend([userDetails["softphoneId"]]),  # noqa
-                    userDetails["voicemailId"],
-                    userDetails["callFlowId"],
-                    userDetails["autoAttendantMenuId"],
-                    userDetails["temporalRuleId"],
+                self.delete_user(
+                    account_id,
+                    user_details["id"],
+                    short_soft_phone_number,
+                    user_details["cellphoneIds"].extend([user_details["softphoneId"]]),  # noqa
+                    user_details["voicemailId"],
+                    user_details["callFlowId"],
+                    user_details["autoAttendantMenuId"],
+                    user_details["temporalRuleId"],
                 )
             raise
 
-        return userDetails
+        return user_details
 
-    def updateUser(self, accountId, kazooUserId, updateData):
+    def update_user(self, account_id, kazoo_user_id, update_data):
         """
         Update a user on Kazoo within an given account
         updateData is a dictionary of optional (specific) overwrites over
@@ -656,80 +656,80 @@ class KazooClient:
         # Import moved here to avoid missing package dependency
         import kazoo.exceptions as exceptions
 
-        if accountId is None or kazooUserId is None or updateData is None:
-            raise exceptions.KazooApiError("accountId {} and kazooUserId {} and updateData {} must be provided".format(accountId, kazooUserId, updateData))  # noqa
+        if account_id is None or kazoo_user_id is None or update_data is None:
+            raise exceptions.KazooApiError("accountId {} and kazooUserId {} and updateData {} must be provided".format(account_id, kazoo_user_id, update_data))  # noqa
 
-        currentUserRes = self.kazooCli.get_user(accountId, kazooUserId)
-        if currentUserRes["status"] != "success":
-            raise exceptions.KazooApiError(f"Failed to get user: accountId {accountId}, kazooUserId {kazooUserId}")  # noqa
+        current_user_res = self.kazoo_cli.get_user(account_id, kazoo_user_id)
+        if current_user_res["status"] != "success":
+            raise exceptions.KazooApiError(f"Failed to get user: accountId {account_id}, kazooUserId {kazoo_user_id}")  # noqa
 
-        userData = currentUserRes["data"]
-        userData.update(updateData)
-        result = self.kazooCli.update_user(accountId, kazooUserId, userData)
+        user_data = current_user_res["data"]
+        user_data.update(update_data)
+        result = self.kazoo_cli.update_user(account_id, kazoo_user_id, user_data)
 
         return result
 
-    def deleteAccount(self, accountId):
+    def delete_account(self, account_id):
         """delete account"""
-        logging.info("Deleting account %s on Kazoo", str(accountId))
+        logging.info("Deleting account %s on Kazoo", str(account_id))
 
         try:
-            self.kazooCli.delete_account(accountId)
+            self.kazoo_cli.delete_account(account_id)
         except Exception as e:
-            logging.error("Unable to delete account: %s", str(accountId))
+            logging.error("Unable to delete account: %s", str(account_id))
             logging.error(e)
 
-    def deleteUser(self, accountId, userId, phoneNumber=None, deviceIds=[], voicemailId=None, callFlowId=None, menuId=None, temporalRuleId=None):
+    def delete_user(self, account_id, user_id, phone_number=None, device_ids=[], voicemail_id=None, call_flow_id=None, menu_id=None, temporal_rule_id=None):
         """delete user"""
-        logging.info("Deleting user on Kazoo with account %s and user %s", str(accountId), str(userId))
+        logging.info("Deleting user on Kazoo with account %s and user %s", str(account_id), str(user_id))
 
-        if menuId is not None:
+        if menu_id is not None:
             try:
-                self.kazooCli.delete_menu(accountId, menuId)
+                self.kazoo_cli.delete_menu(account_id, menu_id)
             except Exception as e:
-                logging.warning("Unable to delete menu: %s", str(menuId))
+                logging.warning("Unable to delete menu: %s", str(menu_id))
                 logging.warning(e)
 
-        if temporalRuleId is not None:
+        if temporal_rule_id is not None:
             try:
-                self.kazooCli.delete_temporal_rule(accountId, temporalRuleId)
+                self.kazoo_cli.delete_temporal_rule(account_id, temporal_rule_id)
             except Exception as e:
-                logging.warning("Unable to delete temporal rule: %s", str(temporalRuleId))
+                logging.warning("Unable to delete temporal rule: %s", str(temporal_rule_id))
                 logging.warning(e)
 
-        if callFlowId is not None:
+        if call_flow_id is not None:
             try:
-                self.kazooCli.delete_callflow(accountId, callFlowId)
+                self.kazoo_cli.delete_callflow(account_id, call_flow_id)
             except Exception as e:
-                logging.warning("Unable to delete callflow: %s", str(callFlowId))
+                logging.warning("Unable to delete callflow: %s", str(call_flow_id))
                 logging.warning(e)
 
-        if voicemailId is not None:
+        if voicemail_id is not None:
             try:
-                self.kazooCli.delete_voicemail_box(accountId, voicemailId)
+                self.kazoo_cli.delete_voicemail_box(account_id, voicemail_id)
             except Exception as e:
-                logging.warning("Unable to delete vm: %s", str(voicemailId))
+                logging.warning("Unable to delete vm: %s", str(voicemail_id))
                 logging.warning(e)
 
-        if deviceIds:
-            for deviceId in deviceIds:
+        if device_ids:
+            for device_id in device_ids:
                 try:
-                    self.kazooCli.delete_device(accountId, deviceId)
+                    self.kazoo_cli.delete_device(account_id, device_id)
                 except Exception as e:
-                    logging.warning("Unable to delete device: %s", str(deviceId))
+                    logging.warning("Unable to delete device: %s", str(device_id))
                     logging.warning(e)
 
-        if phoneNumber is not None:
+        if phone_number is not None:
             try:
-                phoneNumber = phoneNumber[2:] if phoneNumber.startswith("+1") else phoneNumber
-                self.kazooCli.delete_phone_number(accountId, phoneNumber)
+                phone_number = phone_number[2:] if phone_number.startswith("+1") else phone_number
+                self.kazoo_cli.delete_phone_number(account_id, phone_number)
             except Exception as e:
-                logging.warning("Unable to delete phone number: %s", str(phoneNumber))
+                logging.warning("Unable to delete phone number: %s", str(phone_number))
                 logging.warning(e)
 
         try:
-            if userId is not None:
-                self.kazooCli.delete_user(accountId, userId)
+            if user_id is not None:
+                self.kazoo_cli.delete_user(account_id, user_id)
         except Exception as e:
-            logging.warning("Unable to delete user_id: %s", str(userId))
+            logging.warning("Unable to delete user_id: %s", str(user_id))
             logging.warning(e)

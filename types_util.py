@@ -13,7 +13,7 @@ IntTypes = (int,)
 NumberTypes = (int, float, complex)
 
 
-def isNumber(maybe_num):
+def is_number(maybe_num):
     """
     Check if the argument is a number.
 
@@ -40,7 +40,7 @@ def isNumber(maybe_num):
     return ret
 
 
-def isInteger(maybe_num):
+def is_integer(maybe_num):
     """
     Check if the argument is an integer.
 

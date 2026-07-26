@@ -2,39 +2,27 @@ import re
 import unicodedata
 
 from . import case
-from .ec2HostnameToIp import ec2HostnameToIp
+from .ec2HostnameToIp import ec2_hostname_to_ip
 from .format_string_to_fit_in_n_chars import (
     format_string_to_fit_in_n_chars,
     squeeze_sms_message,
 )
-from .split import splitString
+from .split import split_string
 
 
-def ensureAscii(text):
+def ensure_ascii(text):
     if isinstance(text, str):
-        encodedText = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+        encoded_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     else:
-        encodedText = text
+        encoded_text = text
 
-    return encodedText
+    return encoded_text
 
 
 # Used to cleanup SQL queries sometimes (not always guaranteed to be safe
 # WRT messing up your SQL query, discretion required).
 _spacesRe = re.compile(r"\s+", re.M)
 toSingleLine = lambda s: _spacesRe.sub(" ", s).strip()  # noqa
-
-
-# def stringify(obj):
-#     """Convert any numeric elements to strings."""
-#     if type(obj) is dict:
-#         for k, v in list(obj.items()):
-#             obj[stringify(k)] = stringify(v)
-#     elif type(obj) is list:
-#         return map(stringify, obj)
-#     elif isinstance(obj, int):
-#         return str(obj)
-#     return obj
 
 
 def stringify(obj):
@@ -67,11 +55,11 @@ def stringify(obj):
 
 
 __all__ = [
-    "ec2HostnameToIp",
+    "ec2_hostname_to_ip",
     "squeeze_sms_message",
     "format_string_to_fit_in_n_chars",
-    "ensureAscii",
-    "splitString",
+    "ensure_ascii",
+    "split_string",
     "case",
     "stringify",
 ]

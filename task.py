@@ -12,10 +12,10 @@ import re
 # Other celery imports moved to function level to avoid circular import issues
 from celery import Task
 
-_fileLineFunctionExtractor = re.compile(r'^File "(?:\/app\/?)?(?P<file>[^"]+)".*? (?P<line>[0-9]+), in (?P<fn>.*)$')
+_fileLineFunctionExtractor = re.compile(r'^File "(?:\/app\/?)?(?P<file>[^"]+)".*? (?P<line>\d+), in (?P<fn>.*)$')
 
 
-def _generateSubject(stackTraceStr, default="[Django] [ERROR] (Async worker exception)"):
+def _generate_subject(stack_trace_str, default="[Django] [ERROR] (Async worker exception)"):
     """
     Generating a subject line for error emails by incorporating file and function information from the stack trace.
 
@@ -28,14 +28,14 @@ def _generateSubject(stackTraceStr, default="[Django] [ERROR] (Async worker exce
     """
 
     out = default
-    pruned = [line for line in [line.strip() for line in stackTraceStr.split("\n")] if line.startswith("File ")]  # noqa
+    pruned = [line for line in [line.strip() for line in stack_trace_str.split("\n")] if line.startswith("File ")]  # noqa
     if len(pruned) > 0:
         m = _fileLineFunctionExtractor.match(pruned[-1])
         if m is not None:
-            fileName = m.group("file")
-            lineNo = m.group("line")
+            file_name = m.group("file")
+            line_no = m.group("line")
             fn = m.group("fn")
-            out = "{0}: {fileName}.{fn} @ line {lineNo}".format(out, fileName=fileName, lineNo=lineNo, fn=fn)
+            out = "{0}: {file_name}.{fn} @ line {line_no}".format(out, file_name=file_name, line_no=line_no, fn=fn)
 
     return out
 
@@ -64,9 +64,9 @@ einfo: {einfo}
     logging.error(body)
 
     # Import moved here to avoid circular import issues
-    from sh_util.mail import sendEmail
+    from sh_util.mail import send_email
 
-    sendEmail(subject=_generateSubject(str(einfo)), body=body, fromAddress="devops@sendhub.com", toAddress="devops@sendhub.com")
+    send_email(subject=_generate_subject(str(einfo)), body=body, from_address="devops@sendhub.com", to_address="devops@sendhub.com")
 
 
 class ShTask(Task):
@@ -158,7 +158,7 @@ class ShPeriodicTask(Task):
         _on_failure(self, exc, task_id, args, kwargs, einfo)
 
 
-def shTask(*args, **kwargs):
+def sh_task(*args, **kwargs):
     """
     A decorator for creating Celery tasks with the ShTask base class.
 
@@ -175,7 +175,7 @@ def shTask(*args, **kwargs):
     return current_app.task(*args, **dict({"base": ShTask}, **kwargs))
 
 
-def shPeriodicTask(*args, **options):
+def sh_periodic_task(*args, **options):
     """
     A decorator for creating periodic Celery tasks with the ShPeriodicTask base class.
 

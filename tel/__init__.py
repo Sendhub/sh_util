@@ -10,7 +10,7 @@ import re
 
 from ..db import db_query as _db_query
 from .bw_util import BWNumberUnavailableError, BWTollFreeUnavailableError, SHBandwidthClient, phonenumber_as_e164
-from .cleanup import cleanupPhoneNumber, displayNumber, isSpecialTwilioNumber, isTollFreeNumber, validatePhoneNumber, validatePhoneNumberByCountry
+from .cleanup import cleanup_phone_number, display_number, is_special_twilio_number, is_toll_free_number, validate_phone_number, validate_phone_number_by_country
 from .tel_util import BuyPhoneNumberFromCarrier, FindPhoneNumberInAreaCode, ReleaseNumberSafely, SHBoughtNumberObject
 from .twilio_util import AreaCodeUnavailableError
 
@@ -47,15 +47,15 @@ def is_send_hub_number(number):
 
 
 __all__ = [
-    "cleanupPhoneNumber",
+    "cleanup_phone_number",
     "AreaCodeUnavailableError",
     "is_send_hub_number",
-    "validatePhoneNumber",
-    "validatePhoneNumberByCountry",
-    "displayNumber",
+    "validate_phone_number",
+    "validate_phone_number_by_country",
+    "display_number",
     "is_send_hub_number",
-    "isSpecialTwilioNumber",
-    "isTollFreeNumber",
+    "is_special_twilio_number",
+    "is_toll_free_number",
     "SHBandwidthClient",
     "BWNumberUnavailableError",
     "BWTollFreeUnavailableError",

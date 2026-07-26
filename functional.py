@@ -170,7 +170,7 @@ class Memoizewithexpiry:
         """
 
         now = time()
-        expired = [tup[0] for tup in [tup for tup in list(self._cached.items()) if tup[1][0] - now > self.ttl_seconds]]
+        expired = [tup[0] for tup in [tup for tup in self._cached.items() if tup[1][0] - now > self.ttl_seconds]]
         logging.info("Cleaning expired items: %s", expired)
         for key in expired:
             del self._cached[key]
@@ -290,7 +290,7 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
         return wrapped
 
 
-def saferHash(obj):
+def safer_hash(obj):
     """
     Generates a stable hash for nested structures, safe for recursive/self-referential objects.
 

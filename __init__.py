@@ -17,7 +17,7 @@ def lineno():
     return inspect.currentframe().f_back.f_lineno
 
 
-def toId(_x):
+def to_id(_x):
     """
     Extracting an ID from the object if possible.
 
@@ -35,7 +35,7 @@ def toId(_x):
     return _x
 
 
-def findVariableByNameInFrame(name, depth=1):
+def find_variable_by_name_in_frame(name, depth=1):
     """
     Attempting to find a variable with a certain name at a specific stack frame depth.
 
@@ -50,8 +50,8 @@ def findVariableByNameInFrame(name, depth=1):
     import sys
 
     frame = sys._getframe(2)
-    selfSearch = [k for k in list(frame.f_locals.items()) if k == "self"]
-    return selfSearch[0][1] if len(selfSearch) > 0 else None
+    self_search = [k for k in frame.f_locals.items() if k == "self"]
+    return self_search[0][1] if len(self_search) > 0 else None
 
 
 def uniq(seq):
@@ -97,7 +97,7 @@ def get_fully_qualified_class_name(obj) -> str:
     return f"{module}.{name}"
 
 
-def dynImport(path: str):
+def dyn_import(path: str):
     """
     Dynamically importing a module or attribute by its string path.
 
@@ -113,4 +113,4 @@ def dynImport(path: str):
     return getattr(module, attr)
 
 
-__all__ = ["dynImport"]
+__all__ = ["dyn_import"]

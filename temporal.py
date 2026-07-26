@@ -9,7 +9,7 @@ __author__ = "Jay Taylor [@jtaylor]"
 
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def epoch():
@@ -20,7 +20,7 @@ def epoch():
     return int(time.time())
 
 
-def parse_ISO8601_UTC_datestring(date_string):
+def parse_iso8601_utc_datestring(date_string):
     """
     Parsing an ISO8601 UTC date string and returning a datetime object.
 
@@ -38,7 +38,7 @@ def parse_ISO8601_UTC_datestring(date_string):
     """
 
     if len(date_string) != 24:
-        raise Exception("Timestamps must be 24 characters long, e.g.: 2010-04-13T15:29:40+0000")
+        raise ValueError("Timestamps must be 24 characters long, e.g.: 2010-04-13T15:29:40+0000")
 
     # Collecting timezone info and removing it from the timestamp due to a Python bug
     date_string, tz_info = date_string[:-8], date_string[-5:]
@@ -67,10 +67,10 @@ def pretty_utc_timestamp(_ts=None):
         str: The formatted UTC timestamp as a string.
     """
 
-    return (_ts if _ts is not None else datetime.utcnow()).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return (_ts if _ts is not None else datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def weekStartDateString(date=None):
+def week_start_date_string(date=None):
     """
     Calculating the start date of the week for a given date.
 
@@ -84,7 +84,7 @@ def weekStartDateString(date=None):
     """
 
     if date is None:
-        date = datetime.utcnow()
+        date = datetime.now(timezone.utc)
 
     # Subtracting the days since Monday
     date = date - timedelta(date.weekday())

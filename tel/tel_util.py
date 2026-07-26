@@ -7,7 +7,7 @@ import logging
 import settings
 
 from .bw_util import BandwidthAvailablePhoneNumber, BandwidthNumberObject, BWTollFreeUnavailableError, SHBandwidthClient
-from .twilio_util import AreaCodeUnavailableError, twilioBuyPhoneNumber, twilioBuyTollFreePhoneNumber, twilioFindNumberInAreaCode, twilioFindTollFreeNumberInAreaCode
+from .twilio_util import AreaCodeUnavailableError, twilio_buy_phone_number, twilio_buy_toll_free_phone_number, twilio_find_number_in_area_code, twilio_find_toll_free_number_in_area_code
 
 
 class SHBoughtNumberObject:
@@ -148,7 +148,6 @@ class BuyPhoneNumberFromCarrier:
                     nbr_obj = self._sendhub_buy_number(a_gateway, sid, area_code, country_code, phone_number, toll_free, user)
                 except AreaCodeUnavailableError as e:
                     logging.info(f"Unable to buy number alternate gateway, exception: {e}, gateway: {a_gateway}")
-                    pass
                 else:
                     return nbr_obj
         else:
@@ -181,9 +180,9 @@ class BuyPhoneNumberFromCarrier:
         Making a call to appropriate function to buy a regular or toll free phone number.
         """
         if toll_free:
-            number = twilioBuyTollFreePhoneNumber(twilioClient=settings.TWILIO_CLIENT, appSid=settings.TWILIO_APP_SID_STAGING, pattern=area_code, countryCode="US", phoneNumber=phone_number)
+            number = twilio_buy_toll_free_phone_number(twilio_client=settings.TWILIO_CLIENT, app_sid=settings.TWILIO_APP_SID_STAGING, pattern=area_code, country_code="US", phone_number=phone_number)
         else:
-            number = twilioBuyPhoneNumber(twilioClient=settings.TWILIO_CLIENT, appSid=sid, areaCode=area_code, countryCode=country_code, phoneNumber=phone_number)
+            number = twilio_buy_phone_number(twilio_client=settings.TWILIO_CLIENT, app_sid=sid, area_code=area_code, country_code=country_code, phone_number=phone_number)
 
         return number
 
@@ -201,13 +200,13 @@ class FindPhoneNumberInAreaCode:
         if gateway == settings.SMS_GATEWAY_TWILIO:
             if toll_free:
                 try:
-                    avail_numbers = twilioFindTollFreeNumberInAreaCode(settings.TWILIO_CLIENT, pattern=toll_free_area_code, countryCode="US", max_limit=quantity)
+                    avail_numbers = twilio_find_toll_free_number_in_area_code(settings.TWILIO_CLIENT, pattern=toll_free_area_code, country_code="US", max_limit=quantity)
                 except AreaCodeUnavailableError as e:
                     logging.info(f"Exception {e} while searching for toll-free numbers which contain: {toll_free_area_code}")
                     avail_numbers = []
             else:
                 try:
-                    avail_numbers = twilioFindNumberInAreaCode(twilioClient=settings.TWILIO_CLIENT, areaCode=area_code, countryCode=country_code, max_limit=quantity, only_list=False)
+                    avail_numbers = twilio_find_number_in_area_code(twilio_client=settings.TWILIO_CLIENT, area_code=area_code, country_code=country_code, max_limit=quantity, only_list=False)
                 except AreaCodeUnavailableError as e:
                     logging.info(f"Exception {e} while searching for numbers in area code: {area_code}")
                     avail_numbers = []

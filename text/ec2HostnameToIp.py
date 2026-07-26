@@ -20,14 +20,14 @@ import re as _re
 _ec2HostnameRe = _re.compile(
     r"""
         ^(?P<start>.*)
-        ec2-(?P<ip>(?:\d+-?){4,4})\.compute-\d\.amazonaws\.com
+        ec2-(?P<ip>(?:\d+-?){4})\.compute-\d\.amazonaws\.com
         (?P<end>.*)$
     """,
     _re.X,
 )
 
 
-def ec2HostnameToIp(s):
+def ec2_hostname_to_ip(s):
     """
     Translating an input string to replace any EC2 hostname with the bare IP.
 
