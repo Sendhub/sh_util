@@ -34,7 +34,7 @@ and used as-is, while ``sh_util.tel.validate_phone_number`` is patched at its
 owning module. No test hits the network, Redis, or a real Kazoo/curl
 endpoint: ``KazooClient.kazoo_cli`` is always a ``MagicMock``.
 
-Four pre-existing bugs in the vendored source are pinned below (not fixed,
+Three pre-existing bugs in the vendored source are pinned below (not fixed,
 per task constraints):
 
 1. ``__init__`` and ``create_user`` both call ``traceback.print_exc(e)``
@@ -58,29 +58,7 @@ per task constraints):
    (the ``Sendhub/kazoo-python-sdk`` fork) exposes ``kazoo.client.Client``,
    not ``KazooClient`` -- so this import always raises ``ImportError``, and
    ``list_devices`` can never succeed in this environment.
-3. ``copy_media`` does ``import pycurl`` as its very first statement,
-   *before* the surrounding ``try`` block even starts. In this venv, pycurl's
-   installed wheel raises ``ImportError: pycurl: libcurl link-time ssl
-   backends (secure-transport, openssl) do not include compile-time ssl
-   backend (none/other)`` -- a local build/environment mismatch, unrelated to
-   ``kazoo_client.py``'s own logic, that would mask a second, genuine source
-   bug one line into the ``try`` block: ``tempfile.NamedTemporaryFile(mode=
-   "wr+b")`` is an invalid mode string ("w" and "r" can't both be given
-   without "+" resolving which one wins; the intended mode is almost
-   certainly ``"w+b"``), so Python's ``io.open`` rejects it with
-   ``ValueError: must have exactly one of create/read/write/append mode``
-   before any of the pycurl upload logic below it ever runs. The
-   ``fake_pycurl`` fixture below seeds a minimal stand-in module into
-   ``sys.modules['pycurl']`` (only for the tests that request it,
-   monkeypatch-cleaned-up afterwards) purely to get past the environment-only
-   import failure and reach that real, reachable-in-any-environment
-   ``tempfile`` bug -- the same category of test-only compatibility shim as
-   ``test_db_distributed.py``'s sqlparse adapter or ``test_db_data.py``'s
-   ``sys.modules['sh_util.mail']`` seeding. ``add_media`` (which calls
-   ``copy_media``) is tested separately by mocking ``copy_media`` itself as a
-   collaborator, per the mocking-strategy note above, so its own logic
-   doesn't depend on any of this.
-4. ``de_provision_phone_number_and_remove_from_call_flow`` filters the call
+3. ``de_provision_phone_number_and_remove_from_call_flow`` filters the call
    flow's stored numbers with ``[nbr for nbr in ... if number != nbr]``,
    comparing against the raw ``number`` argument -- the "+1" stripping into
    ``short_number`` only happens afterwards, for the ``delete_phone_number``
@@ -89,6 +67,28 @@ per task constraints):
    removed from the call flow (while ``delete_phone_number`` still fires
    regardless). Both the matching-form (works) and mismatched-form
    (silently no-ops) cases are pinned in ``TestDeProvisionPhoneNumber``.
+
+Separately (not one of the pinned bugs above, and now fixed): ``copy_media``
+does ``import pycurl`` as its very first statement, before the surrounding
+``try`` block even starts. In this venv, pycurl's installed wheel raises
+``ImportError: pycurl: libcurl link-time ssl backends (secure-transport,
+openssl) do not include compile-time ssl backend (none/other)`` -- a local
+build/environment mismatch, unrelated to ``kazoo_client.py``'s own logic.
+This used to mask a second, genuine bug one line into the ``try`` block --
+``tempfile.NamedTemporaryFile(mode="wr+b")`` was an invalid mode string, so
+``io.open`` rejected it with ``ValueError: must have exactly one of
+create/read/write/append mode`` before any of the pycurl upload logic below
+it ever ran -- which has since been corrected to ``mode="w+b"``. The
+``fake_pycurl`` fixture below seeds a minimal stand-in module into
+``sys.modules['pycurl']`` (only for the tests that request it,
+monkeypatch-cleaned-up afterwards) purely to get past the environment-only
+import failure, so ``copy_media``'s real upload logic can be exercised
+end-to-end regardless of whether this machine's pycurl wheel works -- the
+same category of test-only compatibility shim as ``test_db_distributed.py``'s
+sqlparse adapter or ``test_db_data.py``'s ``sys.modules['sh_util.mail']``
+seeding. ``add_media`` (which calls ``copy_media``) is tested separately by
+mocking ``copy_media`` itself as a collaborator, per the mocking-strategy
+note above, so its own logic doesn't depend on any of this.
 """
 
 import sys
@@ -167,17 +167,21 @@ def mock_redis_cli(monkeypatch):
 def fake_pycurl(monkeypatch):
     """Seed a minimal stand-in ``pycurl`` module into ``sys.modules`` so
     ``copy_media``'s ``import pycurl`` (broken in this venv for unrelated
-    environment/build reasons -- see module docstring point 3) succeeds and
-    execution reaches the real, genuine ``tempfile`` mode-string bug one line
-    into its ``try`` block. Real pycurl usage (``Curl()``, ``setopt``,
-    ``perform``...) is never actually reached by any test using this fixture
-    -- the tempfile bug always raises first -- so the fake only needs the
-    ``Curl`` name to exist as an attribute, not a working implementation.
-    ``monkeypatch.setitem`` restores ``sys.modules`` exactly as it was
-    (pycurl absent) after the test, so this can't leak into other test
-    files/modules sharing the process."""
+    environment/build reasons -- see module docstring) succeeds and execution
+    reaches its real upload logic. Besides ``Curl``, the method references a
+    handful of ``pycurl.*`` opcode constants directly (``URL``,
+    ``READFUNCTION``, ``POST``, ``HTTPHEADER``, ``POSTFIELDSIZE``,
+    ``HTTP_CODE``); a plain ``ModuleType`` raises ``AttributeError`` on
+    unset attributes (unlike a ``MagicMock``), so each is seeded with a
+    placeholder value -- their actual values don't matter since ``Curl`` and
+    its ``setopt``/``getinfo`` are themselves mocked. ``monkeypatch.setitem``
+    restores ``sys.modules`` exactly as it was (pycurl absent) after the
+    test, so this can't leak into other test files/modules sharing the
+    process."""
     fake_module = types.ModuleType("pycurl")
     fake_module.Curl = mock.MagicMock(name="pycurl.Curl")
+    for _opt_name in ("URL", "READFUNCTION", "POST", "HTTPHEADER", "POSTFIELDSIZE", "HTTP_CODE"):
+        setattr(fake_module, _opt_name, _opt_name)
     monkeypatch.setitem(sys.modules, "pycurl", fake_module)
     return fake_module
 
@@ -543,34 +547,37 @@ class TestUpdateCallFlow:
 
 
 class TestCopyMedia:
-    def test_pycurl_import_fails_in_this_venv_without_the_shim(self, client, mock_kazoo_cli, monkeypatch):
-        """Documents the raw, un-shimmed environment reality (see module
-        docstring point 3): without ``fake_pycurl``, ``import pycurl`` itself
-        fails here, before ``wget``/anything else in the method runs."""
-        wget_mock = mock.Mock(return_value=b"media-bytes")
-        monkeypatch.setattr(kazoo_client, "wget", wget_mock)
-
-        with pytest.raises(ImportError, match="pycurl"):
-            client.copy_media("acct1", "media1", "http://source.test/file.mp3")
-
-        wget_mock.assert_not_called()
-
-    def test_pinned_bug_invalid_tempfile_mode_raises_value_error(self, client, mock_kazoo_cli, monkeypatch, fake_pycurl):
-        """PRE-EXISTING BUG (not fixed, per task constraints) -- see module
-        docstring point 3. With the environment-only pycurl import failure
-        worked around by ``fake_pycurl``, execution reaches the real bug:
-        ``tempfile.NamedTemporaryFile(mode="wr+b")`` is rejected by Python
-        outright, unconditionally, before any pycurl upload logic runs."""
+    def test_success_uploads_media_via_shimmed_pycurl(self, client, mock_kazoo_cli, monkeypatch, fake_pycurl):
+        """``import pycurl`` fails in this venv for unrelated environment/build
+        reasons (see module docstring); ``fake_pycurl`` stands in for it so
+        the method's real upload logic -- writing ``wget``'s bytes to a temp
+        file and posting them via curl -- can be exercised end-to-end."""
         wget_mock = mock.Mock(return_value=b"media-bytes")
         monkeypatch.setattr(kazoo_client, "wget", wget_mock)
         mock_kazoo_cli.base_url = "http://kazoo.test"
         mock_kazoo_cli.auth_token = "tok"
+        curl_instance = fake_pycurl.Curl.return_value
+        curl_instance.getinfo.return_value = 200
 
-        with pytest.raises(ValueError, match="create/read/write/append"):
-            client.copy_media("acct1", "media1", "http://source.test/file.mp3")
+        client.copy_media("acct1", "media1", "http://source.test/file.mp3")
 
         wget_mock.assert_called_once_with("http://source.test/file.mp3", num_tries=3)
-        fake_pycurl.Curl.assert_not_called()
+        curl_instance.perform.assert_called_once_with()
+        curl_instance.close.assert_called_once_with()
+
+    def test_raises_when_upload_returns_non_200(self, client, mock_kazoo_cli, monkeypatch, fake_pycurl):
+        """Covers the ``if return_code != 200: raise`` branch, previously
+        unreachable because of the environment-only import failure and the
+        (now-fixed) invalid ``tempfile`` mode string that both used to raise
+        before this point in the method."""
+        wget_mock = mock.Mock(return_value=b"media-bytes")
+        monkeypatch.setattr(kazoo_client, "wget", wget_mock)
+        mock_kazoo_cli.base_url = "http://kazoo.test"
+        mock_kazoo_cli.auth_token = "tok"
+        fake_pycurl.Curl.return_value.getinfo.return_value = 500
+
+        with pytest.raises(kazoo_exceptions.KazooApiError, match="500"):
+            client.copy_media("acct1", "media1", "http://source.test/file.mp3")
 
 
 # ---------------------------------------------------------------------------

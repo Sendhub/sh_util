@@ -369,7 +369,7 @@ class KazooClient:
 
             toUrl = f"{self.kazoo_cli.base_url}/accounts/{account_id}/media/{media_id}/raw"  # noqa
 
-            fh = tempfile.NamedTemporaryFile(mode="wr+b")
+            fh = tempfile.NamedTemporaryFile(mode="w+b")
             fh.write(media_data)
             fh.flush()
             fh.seek(0)
