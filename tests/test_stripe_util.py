@@ -83,14 +83,14 @@ class TestDictToStripeObject:
         sentinel = object()
         captured = {}
 
-        class FakeStripeAPICloverService:
+        class FakeStripeAPIService:
             def convert_to_stripe_object(self, data_dict):
                 captured["data_dict"] = data_dict
                 return sentinel
 
         fake_stripe_util = types.ModuleType("stripe_util")
         fake_stripe_service = types.ModuleType("stripe_util.stripe_service")
-        fake_stripe_service.StripeAPICloverService = FakeStripeAPICloverService
+        fake_stripe_service.StripeAPIService = FakeStripeAPIService
         monkeypatch.setitem(sys.modules, "stripe_util", fake_stripe_util)
         monkeypatch.setitem(sys.modules, "stripe_util.stripe_service", fake_stripe_service)
 
