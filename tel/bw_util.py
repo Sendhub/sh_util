@@ -56,6 +56,22 @@ class BWLengthOfMediaURLLimitExceededException(Exception):
     """Exception when the length of media URL's exceed 4096 characters"""
 
 
+class BandwidthSiteMisconfiguredError(Exception):
+    """Raised when BW_SITE_ID/BW_SITE_ID_AU is unset or not a valid numeric site id."""
+
+
+class BandwidthSiteMismatchError(Exception):
+    """Raised when a number belongs to a different Bandwidth site than expected."""
+
+
+class BandwidthSiteUnverifiedError(Exception):
+    """Raised when a number's owning Bandwidth site could not be determined."""
+
+
+class BandwidthBulkReleaseError(Exception):
+    """Raised when release_phone_number() is called with more than one number."""
+
+
 class BandwidthAvailablePhoneNumber:
     """
     for bandwidth carrier, numbers returned are number (if qty = 1),
@@ -741,8 +757,68 @@ class SHBandwidthClient:
 
         return response_data
 
+    def _resolve_site_id(self, country_code="US", site_id=None):
+        """
+        Resolve and validate the Bandwidth site (sub-account) id for this environment.
+
+        Staging and production share one Bandwidth account; the site id is the only thing
+        separating their inventories. An unset value must never silently degrade into
+        "whatever the account owns", so this fails loudly instead of returning None.
+
+        Raises:
+            BandwidthSiteMisconfiguredError: If the site id is unset, a placeholder, or non-numeric
+        """
+        if not site_id:
+            site_id = self.bw_site_id_na if country_code in ("US", "CA") else self.bw_site_id_au
+
+        site_id = str(site_id).strip() if site_id is not None else ""
+
+        if not site_id.isdigit():
+            raise BandwidthSiteMisconfiguredError(
+                f"Refusing to continue: site id for country {country_code} is not a valid numeric site id (got {site_id!r}). Set BW_SITE_ID / BW_SITE_ID_AU for this environment."
+            )
+
+        return site_id
+
+    def _assert_number_belongs_to_site(self, number, expected_site_id, country_code="US"):
+        """
+        Confirm a number is provisioned under expected_site_id before a destructive op.
+
+        Fails closed: a lookup that errors, or returns no site, blocks the operation
+        rather than letting it proceed on an unverified number.
+
+        Raises:
+            BandwidthSiteUnverifiedError: If the owning site could not be determined
+            BandwidthSiteMismatchError: If the number belongs to a different site
+        """
+        try:
+            site_info = self.get_siteinfo_for_number(number, country_code=country_code)
+        except Exception as e:
+            raise BandwidthSiteUnverifiedError(f"Refusing to act on {number}: could not determine its Bandwidth site ({e}).") from e
+
+        actual_site_id = str((site_info or {}).get("Id", "")).strip()
+        if not actual_site_id:
+            raise BandwidthSiteUnverifiedError(f"Refusing to act on {number}: Bandwidth returned no site id (response: {site_info}).")
+
+        if actual_site_id != str(expected_site_id):
+            raise BandwidthSiteMismatchError(f"Refusing to act on {number}: it belongs to site {actual_site_id} ({(site_info or {}).get('Name')}), not this environment's site {expected_site_id}.")
+
+        logging.info(f"Confirmed {number} belongs to site {actual_site_id}")
+        return actual_site_id
+
+    def _inservice_path(self, user_id, site_id=None, suffix=""):
+        """
+        Build an in-service inventory path, site-scoped whenever a site id is supplied.
+
+        The site-scoped form is what keeps one environment from seeing another
+        environment's numbers on a shared Bandwidth account.
+        """
+        if site_id:
+            return f"/api/v2/accounts/{user_id}/sites/{site_id}/inserviceNumbers{suffix}"
+        return f"/api/v2/accounts/{user_id}/inserviceNumbers{suffix}"
+
     # Updated To Bandwidth-SDK 20.2.1
-    def release_phone_number(self, number, country_code="US"):
+    def release_phone_number(self, number, country_code="US", site_id=None):
         """
         Returns phone number 'number' back to bandwidth. By disconnecting it from our account
 
@@ -777,6 +853,11 @@ class SHBandwidthClient:
         }
         """
 
+        if isinstance(number, (list, tuple, set, frozenset, dict)):
+            raise BandwidthBulkReleaseError(
+                f"release_phone_number() takes exactly one number, got {type(number).__name__} of {len(number)}. Release numbers one at a time so each is verified against this environment's site."
+            )
+
         response = None
         response_data = None
 
@@ -786,7 +867,11 @@ class SHBandwidthClient:
 
         if country_code not in ("US", "CA", "AU"):
             raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+
+        expected_site_id = self._resolve_site_id(country_code, site_id)
+        self._assert_number_belongs_to_site(number, expected_site_id, country_code)
+
+        if country_code == "US" or country_code == "CA":
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{self.user_id_na}/disconnects"
         elif country_code == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{self.user_id_au}/disconnects"
@@ -830,18 +915,15 @@ class SHBandwidthClient:
         response = None
         response_data = None
 
-        if not site_id:
-            if country_code == "US" or country_code == "CA":
-                site_id = self.bw_site_id_na
-            elif country_code == "AU":
-                site_id = self.bw_site_id_au
-
         if country_code not in ("US", "CA", "AU"):
             raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
-            endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{self.user_id_na}/inserviceNumbers/totals"
+
+        site_id = self._resolve_site_id(country_code, site_id)
+        user_id = self.user_id_na if country_code in ("US", "CA") else self.user_id_au
+        if country_code == "US" or country_code == "CA":
+            endpoint = f"{str(self.bw_account_api_url_na)}{self._inservice_path(user_id, site_id, '/totals')}"
         elif country_code == "AU":
-            endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{self.user_id_au}/inserviceNumbers/totals"
+            endpoint = f"{str(self.bw_account_api_url_au)}{self._inservice_path(user_id, site_id, '/totals')}"
 
         headers = {**self._get_auth_header(), "Content-Type": self.JSON_CONTENT_TYPE}
 
@@ -890,18 +972,15 @@ class SHBandwidthClient:
         page_count = 1
         ALL_SUCCESS_FLAG = False
 
-        if not site_id:
-            if country_code == "US" or country_code == "CA":
-                site_id = self.bw_site_id_na
-            elif country_code == "AU":
-                site_id = self.bw_site_id_au
-
         if country_code not in ("US", "CA", "AU"):
             raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
-            endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{self.user_id_na}/inserviceNumbers"
+
+        site_id = self._resolve_site_id(country_code, site_id)
+        user_id = self.user_id_na if country_code in ("US", "CA") else self.user_id_au
+        if country_code == "US" or country_code == "CA":
+            endpoint = f"{str(self.bw_account_api_url_na)}{self._inservice_path(user_id, site_id)}"
         elif country_code == "AU":
-            endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{self.user_id_au}/inserviceNumbers"
+            endpoint = f"{str(self.bw_account_api_url_au)}{self._inservice_path(user_id, site_id)}"
 
         headers = {**self._get_auth_header(), "Content-Type": self.JSON_CONTENT_TYPE}
 
@@ -1096,15 +1175,11 @@ class SHBandwidthClient:
             result = [result]
             toll_free_numbers = result
 
-        if not site_id:
-            if country_code == "US" or country_code == "CA":
-                site_id = self.bw_site_id_na
-            elif country_code == "AU":
-                site_id = self.bw_site_id_au
-
         if country_code not in ("US", "CA", "AU"):
             raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+
+        site_id = self._resolve_site_id(country_code, site_id)
+        if country_code == "US" or country_code == "CA":
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders"
         elif country_code == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/orders"
@@ -1258,11 +1333,7 @@ class SHBandwidthClient:
         response = None
         response_data = None
 
-        if not site_id:
-            if country_code == "US" or country_code == "CA":
-                site_id = self.bw_site_id_na
-            elif country_code == "AU":
-                site_id = self.bw_site_id_au
+        site_id = self._resolve_site_id(country_code, site_id)
 
         if country_code == "US":
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders"
