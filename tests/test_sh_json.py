@@ -9,6 +9,7 @@ import datetime
 
 import pytest
 import simplejson
+
 from sh_util.sh_json import _normalize, default_encoder, encode
 
 

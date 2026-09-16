@@ -1406,9 +1406,7 @@ class SHBandwidthClient:
                 logging.info(f"Completed fetching order details: {cleaned_numbers}")
 
                 if not validate_phone_number(cleaned_numbers[0]):
-                    raise BWNumberUnavailableError(
-                        f"Bandwidth returned an invalid/unavailable phone number {cleaned_numbers[0]!r} for order {successful_order_id}"
-                    )
+                    raise BWNumberUnavailableError(f"Bandwidth returned an invalid/unavailable phone number {cleaned_numbers[0]!r} for order {successful_order_id}")
 
                 return self._cleanup_and_return_numbers(cleaned_numbers, quantity=1), successful_order_id
 

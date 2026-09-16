@@ -7,6 +7,7 @@ which makes ``0`` and ``"0"``-like falsy values report False.
 """
 
 import pytest
+
 from sh_util.types_util import is_integer, is_number
 
 

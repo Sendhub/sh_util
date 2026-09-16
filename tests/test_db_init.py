@@ -25,6 +25,7 @@ import importlib
 from unittest import mock
 
 import pytest
+
 import sh_util.db as db_pkg
 
 

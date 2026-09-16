@@ -8,6 +8,7 @@ header off a Django-style ``request.META`` mapping.
 from types import SimpleNamespace
 
 import pytest
+
 from sh_util.user_agent import (
     get_client_app_build_number,
     get_client_platform_type,

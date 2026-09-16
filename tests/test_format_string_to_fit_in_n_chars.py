@@ -10,6 +10,7 @@ missing price-style token only applies when a key is absent.
 import sys
 
 import pytest
+
 from sh_util.text.format_string_to_fit_in_n_chars import (
     _trim_longest_tokens_to_reduce_length,
     _trim_percentage_off_tail,

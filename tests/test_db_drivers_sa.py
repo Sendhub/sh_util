@@ -31,8 +31,8 @@ import types
 from unittest import mock
 
 import pytest
-from sh_util.db.drivers import sa as sa_module
 
+from sh_util.db.drivers import sa as sa_module
 
 # ---------------------------------------------------------------------------
 # Shared helpers

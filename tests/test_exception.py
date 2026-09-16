@@ -6,6 +6,7 @@ format and is asserted explicitly.
 """
 
 import simplejson as json
+
 from sh_util.exception import ErrorResponse
 
 

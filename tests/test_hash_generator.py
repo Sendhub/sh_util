@@ -9,6 +9,7 @@ import re
 from unittest import mock
 
 import pytest
+
 from sh_util.crypto import hash_generator as hash_generator_module
 from sh_util.crypto.hash_generator import HashGenerator, generate_hash_set
 

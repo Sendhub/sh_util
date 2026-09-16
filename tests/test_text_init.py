@@ -6,6 +6,7 @@ numbers to strings without touching booleans.
 """
 
 import pytest
+
 from sh_util.text import ensure_ascii, stringify, toSingleLine
 
 

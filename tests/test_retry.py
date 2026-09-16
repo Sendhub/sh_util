@@ -11,6 +11,7 @@ first call succeeds; and the documented ``fail_value`` argument is only logged
 """
 
 import pytest
+
 from sh_util import retry as retry_module
 from sh_util.retry import retry
 

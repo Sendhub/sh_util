@@ -74,10 +74,10 @@ from unittest import mock
 
 import pylibmc
 import pytest
+
 import sh_util.db as db_pkg
 import sh_util.retry as retry_mod
 from sh_util import sharding
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

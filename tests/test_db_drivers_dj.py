@@ -18,8 +18,8 @@ import types
 from unittest import mock
 
 import pytest
-from sh_util.db.drivers import dj as dj_module
 
+from sh_util.db.drivers import dj as dj_module
 
 # ---------------------------------------------------------------------------
 # Shared helpers

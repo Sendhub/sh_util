@@ -63,7 +63,10 @@ def update_primary_key_id(table, current_id, new_id, using):
         relations = discovered_relations[table]
         db_exec("SET CONSTRAINTS ALL DEFERRED", using=using)
         for _, rel_table, rel_column in relations:
-            db_exec('UPDATE "{rel_table}" SET "{rel_column}" = {new_id} WHERE "{rel_column}" = {current_id}'.format(rel_table=rel_table, rel_column=rel_column, new_id=new_id, current_id=current_id), using=using)
+            db_exec(
+                'UPDATE "{rel_table}" SET "{rel_column}" = {new_id} WHERE "{rel_column}" = {current_id}'.format(rel_table=rel_table, rel_column=rel_column, new_id=new_id, current_id=current_id),
+                using=using,
+            )
     db_exec('UPDATE "{table}" SET "{pkColumn}" = {new_id} WHERE "{pkColumn}" = {current_id}'.format(table=table, pkColumn=pk_columns[0], new_id=new_id, current_id=current_id), using=using)
 
 

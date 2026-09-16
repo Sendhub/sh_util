@@ -414,9 +414,7 @@ class TestTwilioBuyTollFreePhoneNumber:
 
         assert result == "+18005551234"
         mock_find.assert_called_once_with(mock_twilio_client, "800", country_code="US", max_limit=1)
-        mock_twilio_client.incoming_phone_numbers.create.assert_called_once_with(
-            phone_number=[found_number], sms_application_sid="AP_app_sid", voice_application_sid="AP_app_sid"
-        )
+        mock_twilio_client.incoming_phone_numbers.create.assert_called_once_with(phone_number=[found_number], sms_application_sid="AP_app_sid", voice_application_sid="AP_app_sid")
 
     @patch("sh_util.tel.twilio_util.twilio_find_toll_free_number_in_area_code")
     def test_buy_with_pattern_exception_raises_area_code_unavailable_error(self, mock_find, mock_twilio_client):

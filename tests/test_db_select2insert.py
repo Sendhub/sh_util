@@ -33,7 +33,6 @@ from unittest import mock
 import sh_util.db as db_pkg
 from sh_util.db import select2insert as select2insert_module
 
-
 _AUTH_USER_DESCRIPTION = [
     ("id", "bigint"),
     ("username", "character varying(85)"),
@@ -53,7 +52,7 @@ _AUTH_USER_EXPECTED_SQL = (
     "        (' || quote_nullable(\"id\") || ',' || quote_nullable(\"username\") || ',' || quote_nullable(\"first_name\") || ',' || "
     "quote_nullable(\"last_name\") || ',' || quote_nullable(\"email\") || ',' || quote_nullable(\"password\") || ',' || "
     "quote_nullable(\"is_staff\") || ',' || quote_nullable(\"is_active\") || ',' || quote_nullable(\"is_superuser\") || ',' || "
-    "quote_nullable(\"last_login\") || ',' || quote_nullable(\"date_joined\") || ');' FROM \"auth_user\";"
+    'quote_nullable("last_login") || \',\' || quote_nullable("date_joined") || \');\' FROM "auth_user";'
 )
 
 
@@ -100,22 +99,22 @@ class TestSelect2Insert:
 
 class TestSelect2MultiInsert:
     def test_builds_final_insert_sql_from_db_query_rows(self):
-        with mock.patch.object(db_pkg, "db_query",return_value=[("(1,'a')",), ("(2,'b')",)]) as db_query:
+        with mock.patch.object(db_pkg, "db_query", return_value=[("(1,'a')",), ("(2,'b')",)]) as db_query:
             result = select2insert_module.select2multi_insert("default", "t", [("id", "int"), ("name", "text")])
 
-        assert result == 'INSERT INTO "t" ("id","name") VALUES (1,'"'"'a'"'"'),(2,'"'"'b'"'"');'
+        assert result == 'INSERT INTO "t" ("id","name") VALUES (1,\'a\'),(2,\'b\');'
         sql_passed, kwargs = db_query.call_args
         assert kwargs == {"using": "default"}
         assert 'FROM\n        "t";' in sql_passed[0]
 
     def test_returns_none_when_no_rows_match(self):
-        with mock.patch.object(db_pkg, "db_query",return_value=[]):
+        with mock.patch.object(db_pkg, "db_query", return_value=[]):
             result = select2insert_module.select2multi_insert("default", "t", [("id", "int")])
 
         assert result is None
 
     def test_where_clause_is_applied_to_the_intermediate_query(self):
-        with mock.patch.object(db_pkg, "db_query",return_value=[("(1)",)]) as db_query:
+        with mock.patch.object(db_pkg, "db_query", return_value=[("(1)",)]) as db_query:
             select2insert_module.select2multi_insert("default", "t", [("id", "int")], where_clause="id = 1")
 
         sql_passed = db_query.call_args[0][0]

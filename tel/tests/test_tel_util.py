@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from .. import tel_util
+from ..bw_util import BWTollFreeUnavailableError
 from ..tel_util import (
     BuyPhoneNumberFromCarrier,
     FindPhoneNumberInAreaCode,
@@ -23,7 +24,6 @@ from ..twilio_util import (
     twilio_buy_phone_number,
     twilio_find_number_in_area_code,
 )
-from ..bw_util import BWTollFreeUnavailableError
 
 
 @pytest.fixture
@@ -97,9 +97,7 @@ class TestTwilioBuyPhoneNumber:
 
         assert result == mock_phone_number
         mock_find_number.assert_called_once_with(mock_twilio_client, "415", country_code="US", max_limit=1)
-        mock_twilio_client.incoming_phone_numbers.create.assert_called_once_with(
-            phone_number=[mock_phone_number], sms_application_sid="AP_app_sid", voice_application_sid="AP_app_sid"
-        )
+        mock_twilio_client.incoming_phone_numbers.create.assert_called_once_with(phone_number=[mock_phone_number], sms_application_sid="AP_app_sid", voice_application_sid="AP_app_sid")
 
     def test_buy_specific_phone_number_success(self, mock_twilio_client, mock_phone_number):
         mock_twilio_client.incoming_phone_numbers.create.return_value = mock_phone_number
@@ -107,9 +105,7 @@ class TestTwilioBuyPhoneNumber:
         result = twilio_buy_phone_number(mock_twilio_client, "AP_app_sid", phone_number="+14155551234")
 
         assert result == mock_phone_number
-        mock_twilio_client.incoming_phone_numbers.create.assert_called_once_with(
-            phone_number="+14155551234", sms_application_sid="AP_app_sid", voice_application_sid="AP_app_sid"
-        )
+        mock_twilio_client.incoming_phone_numbers.create.assert_called_once_with(phone_number="+14155551234", sms_application_sid="AP_app_sid", voice_application_sid="AP_app_sid")
 
     @patch("utils.sh_util.tel.twilio_util.twilio_find_number_in_area_code")
     def test_buy_number_with_area_code_exception_raises_area_code_unavailable_error(self, mock_find_number, mock_twilio_client, mock_phone_number):

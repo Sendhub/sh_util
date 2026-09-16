@@ -500,7 +500,7 @@ class TestSHBandwidthClientFindNumberInAreaCode:
     def test_find_number_in_area_code_success(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.text = "<SearchResult><ResultCount>1</ResultCount>" "<TelephoneNumberList><TelephoneNumber>4155551234</TelephoneNumber></TelephoneNumberList>" "</SearchResult>"
+        mock_response.text = "<SearchResult><ResultCount>1</ResultCount><TelephoneNumberList><TelephoneNumber>4155551234</TelephoneNumber></TelephoneNumberList></SearchResult>"
         mock_get.return_value = mock_response
 
         result = bw_client.find_number_in_area_code("415", 1)
@@ -529,7 +529,7 @@ class TestSHBandwidthClientSearchAvailableTollFreeNumber:
     def test_search_toll_free_success(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.text = "<SearchResult><ResultCount>1</ResultCount>" "<TelephoneNumberList><TelephoneNumber>8005551234</TelephoneNumber></TelephoneNumberList>" "</SearchResult>"
+        mock_response.text = "<SearchResult><ResultCount>1</ResultCount><TelephoneNumberList><TelephoneNumber>8005551234</TelephoneNumber></TelephoneNumberList></SearchResult>"
         mock_get.return_value = mock_response
 
         result = bw_client.search_available_toll_free_number(quantity=1)
@@ -556,7 +556,7 @@ class TestSHBandwidthClientGetNumberInfo:
     def test_get_number_info_success(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.text = "<TelephoneNumberResponse><TelephoneNumberDetails>" "<FullNumber>4155551234</FullNumber><Status>Active</Status>" "</TelephoneNumberDetails></TelephoneNumberResponse>"
+        mock_response.text = "<TelephoneNumberResponse><TelephoneNumberDetails><FullNumber>4155551234</FullNumber><Status>Active</Status></TelephoneNumberDetails></TelephoneNumberResponse>"
         mock_get.return_value = mock_response
 
         result = bw_client.get_number_info("+14155551234")
@@ -731,9 +731,7 @@ class TestSHBandwidthClientFetchPlacedPurchasedOrderDetails:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = (
-            "<OrderResponse><OrderStatus>COMPLETE</OrderStatus>"
-            "<CompletedNumbers><TelephoneNumber><FullNumber>+19197567242</FullNumber></TelephoneNumber></CompletedNumbers>"
-            "</OrderResponse>"
+            "<OrderResponse><OrderStatus>COMPLETE</OrderStatus><CompletedNumbers><TelephoneNumber><FullNumber>+19197567242</FullNumber></TelephoneNumber></CompletedNumbers></OrderResponse>"
         )
         mock_get.return_value = mock_response
 
@@ -745,11 +743,7 @@ class TestSHBandwidthClientFetchPlacedPurchasedOrderDetails:
     def test_fetch_order_details_received_returns_message(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.text = (
-            "<OrderResponse><OrderStatus>RECEIVED</OrderStatus>"
-            "<ErrorList><Error><Description>Order is pending.</Description></Error></ErrorList>"
-            "</OrderResponse>"
-        )
+        mock_response.text = "<OrderResponse><OrderStatus>RECEIVED</OrderStatus><ErrorList><Error><Description>Order is pending.</Description></Error></ErrorList></OrderResponse>"
         mock_get.return_value = mock_response
 
         result = bw_client.fetch_placed_purchased_order_details(order_id="order_123")
@@ -1079,7 +1073,7 @@ class TestSHBandwidthClientFindNumberInAreaCodeEdgeCases:
         """
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.text = "<SearchResult><ResultCount>1</ResultCount>" "<TelephoneNumberList><TelephoneNumber>491570156</TelephoneNumber></TelephoneNumberList>" "</SearchResult>"
+        mock_response.text = "<SearchResult><ResultCount>1</ResultCount><TelephoneNumberList><TelephoneNumber>491570156</TelephoneNumber></TelephoneNumberList></SearchResult>"
         mock_get.return_value = mock_response
 
         with pytest.raises(ValueError):
@@ -1125,7 +1119,7 @@ class TestSHBandwidthClientSearchAvailableTollFreeNumberEdgeCases:
         """
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.text = "<SearchResult><ResultCount>1</ResultCount>" "<TelephoneNumberList><TelephoneNumber>491570156</TelephoneNumber></TelephoneNumberList>" "</SearchResult>"
+        mock_response.text = "<SearchResult><ResultCount>1</ResultCount><TelephoneNumberList><TelephoneNumber>491570156</TelephoneNumber></TelephoneNumberList></SearchResult>"
         mock_get.return_value = mock_response
 
         with pytest.raises(ValueError):
@@ -1174,7 +1168,7 @@ class TestSHBandwidthClientGetNumberInfoEdgeCases:
     def test_au_country_code_success(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.text = "<TelephoneNumberResponse><TelephoneNumberDetails>" "<FullNumber>491570156</FullNumber><Status>Active</Status>" "</TelephoneNumberDetails></TelephoneNumberResponse>"
+        mock_response.text = "<TelephoneNumberResponse><TelephoneNumberDetails><FullNumber>491570156</FullNumber><Status>Active</Status></TelephoneNumberDetails></TelephoneNumberResponse>"
         mock_get.return_value = mock_response
 
         result = bw_client.get_number_info("+61491570156", country_code="AU")
@@ -1487,7 +1481,12 @@ class TestSHBandwidthClientBuyPhoneNumberEdgeCases:
                 bw_client.buy_phone_number(area_code="415", user_id="user_1")
 
     def test_invalid_cleaned_number_raises_bw_number_unavailable_error(self, bw_client):
-        with patch("requests.post") as mock_post, patch("time.sleep"), patch.object(bw_client, "fetch_placed_purchased_order_details") as mock_fetch, patch.object(bw_util, "validate_phone_number") as mock_validate:
+        with (
+            patch("requests.post") as mock_post,
+            patch("time.sleep"),
+            patch.object(bw_client, "fetch_placed_purchased_order_details") as mock_fetch,
+            patch.object(bw_util, "validate_phone_number") as mock_validate,
+        ):
             mock_response = MagicMock()
             mock_response.status_code = 201
             mock_response.text = "<OrderResponse><OrderStatus>RECEIVED</OrderStatus><Order><id>order_bad</id></Order></OrderResponse>"
@@ -1520,9 +1519,7 @@ class TestSHBandwidthClientFetchPlacedPurchasedOrderDetailsEdgeCases:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = (
-            "<OrderResponse><OrderStatus>COMPLETE</OrderStatus>"
-            "<CompletedNumbers><TelephoneNumber><FullNumber>+61491570156</FullNumber></TelephoneNumber></CompletedNumbers>"
-            "</OrderResponse>"
+            "<OrderResponse><OrderStatus>COMPLETE</OrderStatus><CompletedNumbers><TelephoneNumber><FullNumber>+61491570156</FullNumber></TelephoneNumber></CompletedNumbers></OrderResponse>"
         )
         mock_get.return_value = mock_response
 

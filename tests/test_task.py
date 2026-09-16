@@ -38,12 +38,7 @@ class TestGenerateSubject:
         assert _generate_subject(trace) == f"{DEFAULT_SUBJECT}: /other/place/baz.py.qux @ line 5"
 
     def test_last_matching_file_line_wins_when_there_are_several(self):
-        trace = (
-            'Traceback (most recent call last):\n'
-            '  File "/app/foo.py", line 10, in bar\n'
-            '  File "/app/baz.py", line 42, in qux\n'
-            'ZeroDivisionError: division by zero'
-        )
+        trace = 'Traceback (most recent call last):\n  File "/app/foo.py", line 10, in bar\n  File "/app/baz.py", line 42, in qux\nZeroDivisionError: division by zero'
         assert _generate_subject(trace) == f"{DEFAULT_SUBJECT}: baz.py.qux @ line 42"
 
     def test_file_line_that_does_not_match_the_expected_shape_is_ignored(self):

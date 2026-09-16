@@ -11,6 +11,7 @@ containers, and guards against reference cycles.
 """
 
 import pytest
+
 from sh_util.text.case import (
     camel_to_snake,
     dict_keys_to_camel_case,

@@ -513,7 +513,15 @@ class KazooClient:
         """
 
         logging.info(
-            "createUser invoked with %s,%s,%s,%s,%s,%s,%s,%s", str(account_id), str(name), str(user_id), str(password), str(enterprise_id), str(sip_username), str(soft_phone_number), str(cell_phone_numbers)
+            "createUser invoked with %s,%s,%s,%s,%s,%s,%s,%s",
+            str(account_id),
+            str(name),
+            str(user_id),
+            str(password),
+            str(enterprise_id),
+            str(sip_username),
+            str(soft_phone_number),
+            str(cell_phone_numbers),
         )
 
         user_details = {

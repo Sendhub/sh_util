@@ -10,6 +10,7 @@ input that would fit in a single fragment is still split at its last space —
 """
 
 import pytest
+
 from sh_util.text.split import split_string
 
 

@@ -9,6 +9,7 @@ tests focus on the two staying in sync — that list is what ``__iter__``,
 import pickle
 
 import pytest
+
 from sh_util.ordereddict import OrderedDict
 
 

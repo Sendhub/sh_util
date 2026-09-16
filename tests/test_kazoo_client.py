@@ -98,6 +98,7 @@ from unittest import mock
 import kazoo.exceptions as kazoo_exceptions
 import pytest
 import settings
+
 import sh_util.retry as retry_module
 
 # kazoo_client reads these as KazooClient class attributes at import time;
@@ -667,9 +668,7 @@ class TestAddDeviceToGroup:
         client.add_device_to_group("acct1", "group1", "dev1", "u1")
 
         assert endpoints == {"dev1": {"type": "device"}}
-        mock_kazoo_cli.update_group.assert_called_once_with(
-            "acct1", "group1", {"music_on_hold": {}, "name": "u1", "check_if_owner": True, "require_pin": False, "delete_after_notify": True}
-        )
+        mock_kazoo_cli.update_group.assert_called_once_with("acct1", "group1", {"music_on_hold": {}, "name": "u1", "check_if_owner": True, "require_pin": False, "delete_after_notify": True})
 
 
 # ---------------------------------------------------------------------------

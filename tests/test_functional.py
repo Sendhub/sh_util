@@ -16,6 +16,7 @@ import time as time_module
 from unittest import mock
 
 import pytest
+
 from sh_util import functional as functional_module
 from sh_util.functional import (
     Distmemoizewithexpiry,

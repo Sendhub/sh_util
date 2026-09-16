@@ -87,10 +87,11 @@ is verified end to end.
 from unittest import mock
 
 import pytest
+import sqlparse
+
 import sh_util.db as db_pkg
 import sh_util.db.reflect as reflect_mod
 import sh_util.sharding as sharding_mod
-import sqlparse
 from sh_util.db import distributed as d
 
 

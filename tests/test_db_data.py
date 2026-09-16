@@ -44,8 +44,8 @@ import sys
 from unittest import mock
 
 import pytest
-from sh_util.db import data as data_module
 
+from sh_util.db import data as data_module
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -241,7 +241,7 @@ class TestAutoDbLinkInsert:
         with (
             mock.patch.object(data_module, "connections", return_value=[]),
             mock.patch.object(data_module, "describe", return_value=[("id", "integer")]),
-            mock.patch.object(data_module, "table_description_to_db_link_t", return_value="t(\"id\" integer)"),
+            mock.patch.object(data_module, "table_description_to_db_link_t", return_value='t("id" integer)'),
             mock.patch.object(data_module, "db_exec", side_effect=[None, None, None]) as db_exec,
         ):
             data_module.auto_db_link_insert("t", "SELECT * FROM t", "pg://raw", using="dest")
@@ -814,7 +814,7 @@ class TestReceiptOverlapResolver:
         db_query.assert_called_once_with('SELECT "user_id" FROM "main_contact" WHERE "id" = %s', (9,), using="shard_1")
         sql_calls = [c.args[0] for c in db_exec.call_args_list]
         assert any("main_thread" in s for s in sql_calls)
-        assert any("main_usermessage" in s and "SET \"user_id\"" in s for s in sql_calls)
+        assert any("main_usermessage" in s and 'SET "user_id"' in s for s in sql_calls)
         assert any(s.startswith('UPDATE "main_receipt"') for s in sql_calls)
         assert sql_calls[0] == "ROLLBACK"
         assert sql_calls[-1] == "COMMIT"
@@ -858,7 +858,7 @@ class TestThreadOverlapResolver:
         sql_calls = [c.args[0] for c in db_exec.call_args_list]
         assert any(s.startswith('UPDATE "main_receipt"') for s in sql_calls)
         assert any(s.startswith('UPDATE "main_usermessage"') for s in sql_calls)
-        assert any(s.startswith('UPDATE "main_thread"') and "SET \"user_id\"" in s for s in sql_calls)
+        assert any(s.startswith('UPDATE "main_thread"') and 'SET "user_id"' in s for s in sql_calls)
 
 
 class TestBlockMismatchResolver:

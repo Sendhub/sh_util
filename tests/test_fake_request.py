@@ -7,6 +7,7 @@ repo's environment, so the fallback below is the live implementation.
 """
 
 import pytest
+
 from sh_util.fake_request import AnonymousUser, FakeRequest
 
 

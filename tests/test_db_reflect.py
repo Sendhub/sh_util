@@ -33,9 +33,9 @@ fixed, per task constraints):
 from unittest import mock
 
 import pytest
+
 import sh_util.db as db_pkg
 import sh_util.db.reflect as reflect_mod
-
 
 _MEMOIZED_FUNCS = [
     "all_table_names_and_primary_keys",
