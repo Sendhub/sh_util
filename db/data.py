@@ -1857,7 +1857,7 @@ def deleteUsers(userIds, using, **kw):
 
         except Exception as e:
             logging.info(
-                '[%s] Dealing with IntegrityError -----\n{1}----- for '
+                '[%s] Dealing with IntegrityError -----\n%s----- for '
                 'table=%s/userIdColumn=%s',
                 str(using), str(e), str(table), str(userIdColumn)
             )
