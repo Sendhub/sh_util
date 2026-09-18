@@ -595,7 +595,10 @@ class SHBandwidthClient:
                 cleaned_numbers = list(map(cleanup_phone_number, numbers))
             else:
                 logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG)
 
+        except AreaCodeUnavailableError:
+            raise
         except Exception as e:
             logging.error(f"Failed to search for phone number(s) in given area code - error: {e}")
             logging.info(f"Response received from bandwidth to get {quantity} number(s) for Area Code {area_code} is {response.__dict__}")

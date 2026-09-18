@@ -1079,21 +1079,22 @@ class TestSHBandwidthClientFindNumberInAreaCodeEdgeCases:
         with pytest.raises(ValueError):
             bw_client.find_number_in_area_code("491", 1, country_code="AU")
 
-    def test_unexpected_status_code_raises_index_error(self, bw_client):
+    def test_unexpected_status_code_raises_area_code_unavailable_error(self, bw_client):
         """
-        PRE-EXISTING BUG (not fixed): on a non-200 response,
-        find_number_in_area_code() just logs and leaves `cleaned_numbers`
-        empty; the trailing `return self._cleanup_and_return_numbers(...)` is
-        outside the try/except, so `numbers[0]` on the empty list raises an
-        uncaught IndexError instead of raising AreaCodeUnavailableError like
-        the genuine-failure branch does.
+        PYTHON313M-258 fix: on a non-200 response, find_number_in_area_code()
+        now raises AreaCodeUnavailableError (same as the genuine-failure
+        branch) instead of silently leaving `cleaned_numbers` empty and
+        letting `_cleanup_and_return_numbers()` blow up with an uncaught,
+        unhelpful IndexError -- so the caller (and ultimately the admin UI)
+        gets a proper "number unavailable" message instead of a 500 with
+        "list index out of range".
         """
         with patch("requests.get") as mock_get:
             mock_response = MagicMock()
             mock_response.status_code = 500
             mock_get.return_value = mock_response
 
-            with pytest.raises(IndexError):
+            with pytest.raises(AreaCodeUnavailableError):
                 bw_client.find_number_in_area_code("415", 1)
 
 
