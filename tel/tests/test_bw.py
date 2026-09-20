@@ -45,8 +45,10 @@ def mock_settings():
         mock_settings.BW_USER_ID_AU = "test_user_id_au"
         mock_settings.BW_ACCOUNT_API_URL = "https://api.test.com"
         mock_settings.BW_ACCOUNT_API_URL_AU = "https://api.test.au"
-        mock_settings.BW_SITE_ID = "test_site_id"
-        mock_settings.BW_SITE_ID_AU = "test_site_id_au"
+        # _resolve_site_id() validates these are purely numeric (36bf3ce), so the
+        # test placeholders must look like real site ids rather than free text.
+        mock_settings.BW_SITE_ID = "100200"
+        mock_settings.BW_SITE_ID_AU = "300400"
         mock_settings.SMS_GATEWAY_BANDWIDTH = "bandwidth"
         # SHBandwidthClient.__init__ uses getattr(settings, "BW_USE_OAUTH2", False);
         # since mock_settings is a MagicMock, unset attributes auto-vivify as truthy
@@ -166,8 +168,8 @@ class TestSHBandwidthClientInit:
     def test_init_sets_site_ids(self, mock_config, mock_settings):
         client = SHBandwidthClient()
 
-        assert client.bw_site_id_na == "test_site_id"
-        assert client.bw_site_id_au == "test_site_id_au"
+        assert client.bw_site_id_na == "100200"
+        assert client.bw_site_id_au == "300400"
 
     @patch("bandwidth.Configuration")
     def test_init_sets_api_urls(self, mock_config, mock_settings):
@@ -569,8 +571,17 @@ class TestSHBandwidthClientReleasePhoneNumber:
     # Real release_phone_number() calls requests.post() (not .delete()) and
     # has no explicit `return` statement in either branch, so it always
     # returns None - it never returns True/False.
+    # release_phone_number() now verifies the number's owning site before
+    # releasing it (36bf3ce), via a GET to get_siteinfo_for_number() - that
+    # must be mocked too, or it hits the network and fails these tests.
+    @patch("requests.get")
     @patch("requests.post")
-    def test_release_phone_number_success(self, mock_post, bw_client):
+    def test_release_phone_number_success(self, mock_post, mock_get, bw_client):
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.text = "<Site><Id>100200</Id><Name>Test Site</Name></Site>"
+        mock_get.return_value = mock_get_response
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "<DisconnectTelephoneNumberOrderResponse></DisconnectTelephoneNumberOrderResponse>"
@@ -581,8 +592,14 @@ class TestSHBandwidthClientReleasePhoneNumber:
         assert result is None
         mock_post.assert_called_once()
 
+    @patch("requests.get")
     @patch("requests.post")
-    def test_release_phone_number_non_200_response(self, mock_post, bw_client):
+    def test_release_phone_number_non_200_response(self, mock_post, mock_get, bw_client):
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.text = "<Site><Id>100200</Id><Name>Test Site</Name></Site>"
+        mock_get.return_value = mock_get_response
+
         mock_response = MagicMock()
         mock_response.status_code = 404
         mock_post.return_value = mock_response
@@ -1203,8 +1220,14 @@ class TestSHBandwidthClientReleasePhoneNumberEdgeCases:
         with pytest.raises(ValueError):
             bw_client.release_phone_number("+14155551234", country_code="MX")
 
+    @patch("requests.get")
     @patch("requests.post")
-    def test_au_country_code_success(self, mock_post, bw_client):
+    def test_au_country_code_success(self, mock_post, mock_get, bw_client):
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.text = "<Site><Id>300400</Id><Name>Test Site AU</Name></Site>"
+        mock_get.return_value = mock_get_response
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "<DisconnectTelephoneNumberOrderResponse></DisconnectTelephoneNumberOrderResponse>"
