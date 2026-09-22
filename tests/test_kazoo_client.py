@@ -340,7 +340,7 @@ class TestCreateDevice:
             client.create_device("desk_phone", "acct1", "u1", "owner1", "5551234567")
 
     def test_invalid_phone_number_returns_none_without_calling_kazoo(self, client, mock_kazoo_cli, monkeypatch):
-        monkeypatch.setattr("sh_util.tel.validate_phone_number", lambda number: False)
+        monkeypatch.setattr("sh_util.tel.cleanup.validate_phone_number", lambda number: False)
 
         result = client.create_device("cellphone", "acct1", "u1", "owner1", "bad-number")
 
@@ -348,7 +348,7 @@ class TestCreateDevice:
         mock_kazoo_cli.create_device.assert_not_called()
 
     def test_softphone_success(self, client, mock_kazoo_cli, monkeypatch):
-        monkeypatch.setattr("sh_util.tel.validate_phone_number", lambda number: True)
+        monkeypatch.setattr("sh_util.tel.cleanup.validate_phone_number", lambda number: True)
         mock_kazoo_cli.create_device.return_value = {"data": {"id": "dev1"}}
 
         result = client.create_device("softphone", "acct1", "u1", "owner1", "5551234567", username="sip1", password="pw1")
@@ -357,7 +357,7 @@ class TestCreateDevice:
         mock_kazoo_cli.create_device.assert_called_once_with("acct1", client._soft_phone_template("owner1", "sip1", "pw1"))
 
     def test_cellphone_success(self, client, mock_kazoo_cli, monkeypatch):
-        monkeypatch.setattr("sh_util.tel.validate_phone_number", lambda number: True)
+        monkeypatch.setattr("sh_util.tel.cleanup.validate_phone_number", lambda number: True)
         mock_kazoo_cli.create_device.return_value = {"data": {"id": "dev2"}}
 
         result = client.create_device("cellphone", "acct1", "u1", "owner1", "5551234567")
@@ -366,7 +366,7 @@ class TestCreateDevice:
         mock_kazoo_cli.create_device.assert_called_once_with("acct1", client._physical_phone_template("owner1", "5551234567"))
 
     def test_duplicate_sip_username_is_swallowed(self, client, mock_kazoo_cli, monkeypatch):
-        monkeypatch.setattr("sh_util.tel.validate_phone_number", lambda number: True)
+        monkeypatch.setattr("sh_util.tel.cleanup.validate_phone_number", lambda number: True)
         err = kazoo_exceptions.KazooApiBadDataError({"sip.username": ["unique"]})
         mock_kazoo_cli.create_device.side_effect = err
 
@@ -375,7 +375,7 @@ class TestCreateDevice:
         assert result is None
 
     def test_unrelated_bad_data_error_is_reraised(self, client, mock_kazoo_cli, monkeypatch):
-        monkeypatch.setattr("sh_util.tel.validate_phone_number", lambda number: True)
+        monkeypatch.setattr("sh_util.tel.cleanup.validate_phone_number", lambda number: True)
         err = kazoo_exceptions.KazooApiBadDataError({"name": ["required"]})
         mock_kazoo_cli.create_device.side_effect = err
 

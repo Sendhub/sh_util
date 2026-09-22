@@ -207,7 +207,7 @@ class KazooClient:
         assert type in ("softphone", "cellphone")
         import kazoo.exceptions as exceptions
 
-        from sh_util.tel import validate_phone_number
+        from sh_util.tel.cleanup import validate_phone_number
 
         logging.info(f"createDevice invoked with type={type}, accountId={account_id}, userId={user_id}, ownerId={owner_id}, username={username}, password={password}")
 
