@@ -197,6 +197,13 @@ class FindPhoneNumberInAreaCode:
         Router that routes calls to appropriate carrier specific driver.
         """
 
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            quantity = 1
+        if quantity < 1:
+            quantity = 1
+
         if gateway == settings.SMS_GATEWAY_TWILIO:
             if toll_free:
                 try:
@@ -229,10 +236,13 @@ class FindPhoneNumberInAreaCode:
                     logging.info(f"Exception {e} while searching for numbers in area code: {area_code}")
                     avail_numbers = []
 
+            # Bandwidth returns None when nothing is available, or a single string when quantity=1.
+            if avail_numbers is None:
+                return []
             if not isinstance(avail_numbers, list):
                 avail_numbers = [avail_numbers]
 
-            return [BandwidthAvailablePhoneNumber(number) for number in avail_numbers]
+            return [BandwidthAvailablePhoneNumber(number) for number in avail_numbers if number]
         else:
             logging.info(f"Invalid Carrier {gateway} to search a number")
             return []

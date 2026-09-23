@@ -7,6 +7,11 @@ import re
 import traceback
 from decimal import Decimal
 
+try:
+    import settings
+except ImportError:  # pragma: no cover - unit-test path without django settings
+    settings = None
+
 _AREA_CODE_UNAVAILABLE_MSG = "We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again."
 
 
@@ -86,13 +91,29 @@ def twilio_find_toll_free_number_in_area_code(twilio_client, pattern, country_co
         An list(str) of the phonenumbers
     """
 
-    pattern = pattern if re.match(r"^8[0,3-7]", pattern) else None
+    raw_pattern = str(pattern).strip() if pattern is not None else ""
+    toll_free_npas = list(getattr(settings, "TOLL_FREE_AREA_CODES", []) or []) if settings else []
+    if raw_pattern and re.fullmatch(r"8\d{2}", raw_pattern):
+        pattern = raw_pattern
+    elif raw_pattern in toll_free_npas:
+        pattern = raw_pattern
+    else:
+        pattern = None
 
     try:
         logging.info("Before searching for toll_free")
         result = twilio_client.api.v2010.accounts(twilio_client.username).available_phone_numbers(country_code).toll_free.list(contains=pattern, limit=max_limit)
         logging.info("After searching for toll_free")
         logging.info(f" Result: {result}")
+        if pattern:
+            filtered = []
+            for entry in result or []:
+                phone_number = getattr(entry, "phone_number", None) or (entry.get("phone_number") if isinstance(entry, dict) else None)
+                digits = re.sub(r"\D", "", str(phone_number or ""))
+                npa = digits[1:4] if len(digits) >= 11 and digits.startswith("1") else digits[:3]
+                if npa == pattern:
+                    filtered.append(entry)
+            return filtered
         return result
     except Exception as e:
         logging.error(f"Exception occurred while trying to list number for toll-free number Error was: {e}")

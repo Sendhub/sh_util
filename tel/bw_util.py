@@ -235,12 +235,15 @@ class SHBandwidthClient:
         number itself if quantity is 1 else returns list of numbers.
         """
         try:
+            quantity = int(quantity)
+            numbers = [number for number in (numbers or []) if number]
+            if not numbers:
+                return None
             if quantity == 1:
                 return self._as_e164(numbers[0], country_code)
-            elif quantity > 1:
-                return [self._as_e164(number, country_code) for number in numbers]
-            else:
-                raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
+            if quantity > 1:
+                return [self._as_e164(number, country_code) for number in numbers[:quantity]]
+            raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
         except ValueError as err:
             logging.error(f"Phone number error {err}")
             raise ValueError
@@ -565,6 +568,11 @@ class SHBandwidthClient:
         response = None
         response_data = None
 
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"Quantity must be an integer - passed: {quantity}") from err
+
         if quantity < 1:
             raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
 
@@ -581,18 +589,25 @@ class SHBandwidthClient:
             logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
 
             if response.status_code == 200:
-                response_data = xmltodict.parse(response.text)
+                response_data = xmltodict.parse(response.text) or {}
                 """
                     Format of response_data
                     {'SearchResult': {'ResultCount': '1', 'TelephoneNumberList': {'TelephoneNumber': '9192052618'}}}
                     {'SearchResult': {'ResultCount': '2', 'TelephoneNumberList': {'TelephoneNumber': ['9192052618', '9192053260']}}}
                 """
-                numbers = response_data.get("SearchResult").get("TelephoneNumberList").get("TelephoneNumber")
+                search_result = response_data.get("SearchResult") or {}
+                telephone_list = search_result.get("TelephoneNumberList") or {}
+                numbers = telephone_list.get("TelephoneNumber")
                 logging.info(f"Calling cleanupPhoneNumber() on the received phone numbers(s) {numbers} from bandwidth")
 
-                if isinstance(numbers, str):
+                if numbers is None:
+                    numbers = []
+                elif isinstance(numbers, str):
                     numbers = [numbers]
-                cleaned_numbers = list(map(cleanup_phone_number, numbers))
+                elif not isinstance(numbers, list):
+                    numbers = [numbers]
+
+                cleaned_numbers = [number for number in map(cleanup_phone_number, numbers) if number]
             else:
                 logging.info(f"Error Response from bandwidth: {response.__dict__}")
                 raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG)
@@ -605,6 +620,10 @@ class SHBandwidthClient:
             logging.error(traceback.format_exc())
             raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG) from e
 
+        if not cleaned_numbers:
+            logging.info("No phone numbers available for area code %s", area_code)
+            return None
+
         return self._cleanup_and_return_numbers(cleaned_numbers, quantity)
 
     # Updated To Bandwidth-SDK 20.2.1
@@ -614,7 +633,8 @@ class SHBandwidthClient:
         Find a number within an area code.
 
         Args:
-            pattern:    A 3 digit pattern between 8**, 80*, 87* (Currently 80* is having issues)
+            pattern:    Exact 3-digit toll-free NPA (e.g. ``888``, ``833``) or a Bandwidth
+                        wildcard such as ``8**``, ``80*``, ``87*``.
             quantity:   Has to be more than or equal to 1
         Returns:
             A list of numbers
@@ -625,10 +645,16 @@ class SHBandwidthClient:
         response = None
         response_data = None
 
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"Quantity must be an integer - passed: {quantity}") from err
+
         if quantity < 1:
             raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
 
-        pattern = pattern if pattern in ("8**", "80*", "87*") else "8**"
+        requested_pattern = pattern
+        pattern = self._normalize_toll_free_wildcard_pattern(pattern)
 
         if country_code not in ("US", "CA", "AU"):
             raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
@@ -643,19 +669,29 @@ class SHBandwidthClient:
             logging.info(f"Response received from bandwidth to get {quantity} Toll Free Number with pattern {pattern} is {response.status_code}")
 
             if response.status_code == 200:
-                response_data = xmltodict.parse(response.text)
+                response_data = xmltodict.parse(response.text) or {}
                 """
                     Format of response_data
                     {'SearchResult': {'ResultCount': '1', 'TelephoneNumberList': {'TelephoneNumber': '9192052618'}}}
                     {'SearchResult': {'ResultCount': '2', 'TelephoneNumberList': {'TelephoneNumber': ['9192052618', '9192053260']}}}
                 """
                 if response_data.get("SearchResult"):
-                    numbers = response_data.get("SearchResult").get("TelephoneNumberList").get("TelephoneNumber")
+                    telephone_list = (response_data.get("SearchResult") or {}).get("TelephoneNumberList") or {}
+                    numbers = telephone_list.get("TelephoneNumber")
                     logging.info(f"Calling cleanupPhoneNumber() on the received toll free phone numbers(s) {numbers} from bandwidth")
 
-                    if isinstance(numbers, str):
+                    if numbers is None:
+                        numbers = []
+                    elif isinstance(numbers, str):
                         numbers = [numbers]
-                        cleaned_numbers = list(map(cleanup_phone_number, numbers))
+                    elif not isinstance(numbers, list):
+                        numbers = [numbers]
+
+                    cleaned_numbers = [number for number in map(cleanup_phone_number, numbers) if number]
+                    cleaned_numbers = [
+                        number for number in cleaned_numbers
+                        if self._toll_free_number_matches_pattern(number, pattern)
+                    ]
                 elif response.status_code == 200 and response_data.get("SearchResult") is None:
                     logging.info(f"No toll free phonenumbers are available for pattern ({pattern})")
                     return None
@@ -668,7 +704,66 @@ class SHBandwidthClient:
             logging.error(traceback.format_exc())
             raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG) from e
 
+        if not cleaned_numbers:
+            logging.info(
+                "No toll free numbers matched requested pattern %r (normalized=%r)",
+                requested_pattern,
+                pattern,
+            )
+            return None
+
         return self._cleanup_and_return_numbers(cleaned_numbers, quantity)
+
+    @staticmethod
+    def _normalize_toll_free_wildcard_pattern(pattern):
+        """Map an admin NPA / wildcard to Bandwidth ``tollFreeWildCardPattern``.
+
+        Exact NPAs like ``888`` must be passed through. The previous allow-list only
+        accepted ``8**`` / ``80*`` / ``87*``, so ``888`` silently became ``8**`` and
+        returned unrelated NPAs such as ``833``.
+        """
+        if pattern is None or str(pattern).strip() == "":
+            return "8**"
+
+        normalized = str(pattern).strip()
+        wildcard_patterns = ("8**", "80*", "83*", "84*", "85*", "86*", "87*", "88*")
+        if normalized in wildcard_patterns:
+            return normalized
+
+        toll_free_npas = list(getattr(settings, "TOLL_FREE_AREA_CODES", []) or [])
+        # 800 is a valid US toll-free NPA even when absent from app settings.
+        if "800" not in toll_free_npas:
+            toll_free_npas.append("800")
+
+        if normalized in toll_free_npas or re.fullmatch(r"8\d{2}", normalized):
+            return normalized
+
+        logging.warning(
+            "Unsupported toll-free search pattern %r; falling back to wildcard 8**",
+            normalized,
+        )
+        return "8**"
+
+    @staticmethod
+    def _toll_free_number_matches_pattern(number, pattern):
+        """Return True when ``number``'s NPA matches an exact or wildcard TF pattern."""
+        if not number or not pattern:
+            return False
+
+        digits = re.sub(r"\D", "", str(number))
+        if len(digits) >= 11 and digits.startswith("1"):
+            npa = digits[1:4]
+        elif len(digits) >= 10:
+            npa = digits[0:3]
+        else:
+            return False
+
+        if "*" not in str(pattern):
+            return npa == str(pattern)
+
+        # Convert Bandwidth-style wildcards (8**, 88*) into a regex anchored on the NPA.
+        regex = "^" + re.escape(str(pattern)).replace(r"\*", r"\d") + "$"
+        return re.match(regex, npa) is not None
 
     # Updated To Bandwidth-SDK 20.2.1
     def get_number_info(self, phone_number, country_code="US"):

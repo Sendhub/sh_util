@@ -166,6 +166,11 @@ def display_number(number, region="US"):
         str: The formatted phone number for display.
     """
 
+    if number is None:
+        return ""
+
+    number = str(number)
+
     try:
         # Using the given region to parse the number
         p = phonenumbers.parse(number, region)
