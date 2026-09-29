@@ -510,20 +510,15 @@ class TestSHBandwidthClientFindNumberInAreaCode:
         assert result == "+14155551234"
 
     @patch("requests.get")
-    def test_find_number_in_area_code_no_results_raises_error(self, mock_get, bw_client):
-        # When the response has no <SearchResult> element, the real code's
-        # dict-chain (.get("SearchResult").get(...)) hits an AttributeError
-        # on None, which the broad except re-raises as AreaCodeUnavailableError.
-        # BWNumberUnavailableError is raised elsewhere (buy_phone_number's
-        # invalid-number path), but not by this method, so it cannot be the
-        # real exception here.
+    def test_find_number_in_area_code_no_results_returns_none(self, mock_get, bw_client):
+        # A 200 response without a <SearchResult> element means Bandwidth has no
+        # numbers for this area code: report "none found" rather than raising.
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "<Empty></Empty>"
         mock_get.return_value = mock_response
 
-        with pytest.raises(AreaCodeUnavailableError):
-            bw_client.find_number_in_area_code("999", 1)
+        assert bw_client.find_number_in_area_code("999", 1) is None
 
 
 class TestSHBandwidthClientSearchAvailableTollFreeNumber:
@@ -589,12 +584,12 @@ class TestSHBandwidthClientReleasePhoneNumber:
 
         result = bw_client.release_phone_number("+14155551234")
 
-        assert result is None
+        assert result == {"DisconnectTelephoneNumberOrderResponse": None}
         mock_post.assert_called_once()
 
     @patch("requests.get")
     @patch("requests.post")
-    def test_release_phone_number_non_200_response(self, mock_post, mock_get, bw_client):
+    def test_release_phone_number_non_200_response_raises(self, mock_post, mock_get, bw_client):
         mock_get_response = MagicMock()
         mock_get_response.status_code = 200
         mock_get_response.text = "<Site><Id>100200</Id><Name>Test Site</Name></Site>"
@@ -604,9 +599,9 @@ class TestSHBandwidthClientReleasePhoneNumber:
         mock_response.status_code = 404
         mock_post.return_value = mock_response
 
-        result = bw_client.release_phone_number("+14155551234")
-
-        assert result is None
+        # A rejected release must surface as an error so callers do not assume the number was freed.
+        with pytest.raises(RuntimeError):
+            bw_client.release_phone_number("+14155551234")
 
 
 class TestSHBandwidthClientGetActiveNumberCount:
@@ -697,7 +692,7 @@ class TestSHBandwidthClientBuyPhoneNumber:
     # (cleaned_number, order_id) tuple. It also unconditionally calls
     # time.sleep(10) after placing the order, which must be patched out.
     def test_buy_phone_number_with_area_code_success(self, bw_client):
-        with patch("requests.post") as mock_post, patch("time.sleep") as mock_sleep, patch.object(bw_client, "fetch_placed_purchased_order_details") as mock_fetch:
+        with patch("requests.post") as mock_post, patch("time.sleep"), patch.object(bw_client, "fetch_placed_purchased_order_details") as mock_fetch:
             mock_response = MagicMock()
             mock_response.status_code = 201
             mock_response.text = "<OrderResponse><OrderStatus>RECEIVED</OrderStatus><Order><id>order_123</id></Order></OrderResponse>"
@@ -707,7 +702,6 @@ class TestSHBandwidthClientBuyPhoneNumber:
             result = bw_client.buy_phone_number(area_code="415", user_id="user_1")
 
             assert result == ("+14155551234", "order_123")
-            mock_sleep.assert_called_once_with(10)
 
     def test_buy_phone_number_with_specific_number_success(self, bw_client):
         with patch("requests.post") as mock_post, patch("time.sleep"), patch.object(bw_client, "fetch_placed_purchased_order_details") as mock_fetch:
@@ -728,7 +722,7 @@ class TestSHBandwidthClientBuyPhoneNumber:
     def test_buy_phone_number_failed_order_returns_false(self, bw_client):
         # Neither phone_number nor area_code is required by the real
         # implementation - a failed order response simply yields False.
-        with patch("requests.post") as mock_post, patch("time.sleep") as mock_sleep:
+        with patch("requests.post") as mock_post, patch("time.sleep"):
             mock_response = MagicMock()
             mock_response.status_code = 500
             mock_post.return_value = mock_response
@@ -736,7 +730,6 @@ class TestSHBandwidthClientBuyPhoneNumber:
             result = bw_client.buy_phone_number()
 
             assert result is False
-            mock_sleep.assert_called_once_with(10)
 
 
 class TestSHBandwidthClientFetchPlacedPurchasedOrderDetails:
@@ -757,7 +750,7 @@ class TestSHBandwidthClientFetchPlacedPurchasedOrderDetails:
         assert result == "+19197567242"
 
     @patch("requests.get")
-    def test_fetch_order_details_received_returns_message(self, mock_get, bw_client):
+    def test_fetch_order_details_received_returns_error_details(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "<OrderResponse><OrderStatus>RECEIVED</OrderStatus><ErrorList><Error><Description>Order is pending.</Description></Error></ErrorList></OrderResponse>"
@@ -765,7 +758,7 @@ class TestSHBandwidthClientFetchPlacedPurchasedOrderDetails:
 
         result = bw_client.fetch_placed_purchased_order_details(order_id="order_123")
 
-        assert result == "Order is pending."
+        assert result == {"code": None, "description": "Order is pending."}
 
     def test_fetch_order_details_no_order_id_raises_error(self, bw_client):
         with pytest.raises(ValueError):
@@ -1078,23 +1071,17 @@ class TestSHBandwidthClientFindNumberInAreaCodeEdgeCases:
             bw_client.find_number_in_area_code("415", quantity=1, country_code="MX")
 
     @patch("requests.get")
-    def test_au_country_code_raises_value_error(self, mock_get, bw_client):
+    def test_au_country_code_returns_e164_number(self, mock_get, bw_client):
         """
-        PRE-EXISTING BUG (not fixed): find_number_in_area_code() never
-        forwards its `country_code` argument to
-        `_cleanup_and_return_numbers(cleaned_numbers, quantity)` (called
-        without a country_code, so it defaults to "US"). An AU number then
-        fails E.164 formatting against the "US" country code and a bare
-        ValueError propagates instead of the formatted number being
-        returned.
+        An AU number is formatted against the requested country, so it is returned as E.164
+        (previously the country was not forwarded and a bare ValueError propagated).
         """
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "<SearchResult><ResultCount>1</ResultCount><TelephoneNumberList><TelephoneNumber>491570156</TelephoneNumber></TelephoneNumberList></SearchResult>"
         mock_get.return_value = mock_response
 
-        with pytest.raises(ValueError):
-            bw_client.find_number_in_area_code("491", 1, country_code="AU")
+        assert bw_client.find_number_in_area_code("491", 1, country_code="AU") == "+61491570156"
 
     def test_unexpected_status_code_raises_area_code_unavailable_error(self, bw_client):
         """
@@ -1125,51 +1112,34 @@ class TestSHBandwidthClientSearchAvailableTollFreeNumberEdgeCases:
             bw_client.search_available_toll_free_number(quantity=1, country_code="MX")
 
     @patch("requests.get")
-    def test_au_country_code_raises_value_error(self, mock_get, bw_client):
+    def test_au_country_code_without_matching_pattern_returns_none(self, mock_get, bw_client):
         """
-        PRE-EXISTING BUG (not fixed): same shape as
-        find_number_in_area_code() - search_available_toll_free_number()
-        never forwards its `country_code` argument to
-        `_cleanup_and_return_numbers(cleaned_numbers, quantity)`, so an AU
-        number is formatted against the default "US" country code and a bare
-        ValueError propagates instead of the formatted number being
-        returned.
+        A number whose NPA does not match the requested toll-free pattern is dropped, so an AU
+        number never satisfies the default US-style ``8**`` pattern and nothing is returned
+        (previously a bare ValueError propagated from the E.164 formatting).
         """
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "<SearchResult><ResultCount>1</ResultCount><TelephoneNumberList><TelephoneNumber>491570156</TelephoneNumber></TelephoneNumberList></SearchResult>"
         mock_get.return_value = mock_response
 
-        with pytest.raises(ValueError):
-            bw_client.search_available_toll_free_number(quantity=1, country_code="AU")
+        assert bw_client.search_available_toll_free_number(quantity=1, country_code="AU") is None
 
-    def test_unexpected_status_code_raises_index_error(self, bw_client):
-        """
-        PRE-EXISTING BUG (not fixed): same shape as
-        find_number_in_area_code() - on a non-200 response the trailing
-        `_cleanup_and_return_numbers()` call (outside the try/except) raises
-        an uncaught IndexError on the empty `cleaned_numbers` list.
-        """
+    def test_unexpected_status_code_returns_none(self, bw_client):
+        """A non-200 response yields no numbers: return None instead of an uncaught IndexError."""
         with patch("requests.get") as mock_get:
             mock_response = MagicMock()
             mock_response.status_code = 500
             mock_get.return_value = mock_response
 
-            with pytest.raises(IndexError):
-                bw_client.search_available_toll_free_number(quantity=1)
+            assert bw_client.search_available_toll_free_number(quantity=1) is None
 
-    def test_request_exception_raises_attribute_error(self, bw_client):
-        """
-        PRE-EXISTING BUG (not fixed): the except handler logs
-        `response.__dict__` while `response` is still None (it's only
-        assigned inside the try block, before the request call raises), so
-        the intended `AreaCodeUnavailableError` is masked by an
-        AttributeError instead.
-        """
+    def test_request_exception_raises_area_code_unavailable(self, bw_client):
+        """A failing request surfaces as AreaCodeUnavailableError, not a masking AttributeError."""
         with patch("requests.get") as mock_get:
             mock_get.side_effect = Exception("network boom")
 
-            with pytest.raises(AttributeError):
+            with pytest.raises(AreaCodeUnavailableError):
                 bw_client.search_available_toll_free_number(quantity=1)
 
 
@@ -1194,14 +1164,13 @@ class TestSHBandwidthClientGetNumberInfoEdgeCases:
         assert result is not None
 
     @patch("requests.get")
-    def test_unexpected_status_code_returns_none(self, mock_get, bw_client):
+    def test_unexpected_status_code_raises_runtime_error(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_get.return_value = mock_response
 
-        result = bw_client.get_number_info("+14155551234")
-
-        assert result is None
+        with pytest.raises(RuntimeError):
+            bw_client.get_number_info("+14155551234", use_cache=False)
 
     @patch("requests.get")
     def test_request_exception_reraises(self, mock_get, bw_client):
@@ -1235,7 +1204,7 @@ class TestSHBandwidthClientReleasePhoneNumberEdgeCases:
 
         result = bw_client.release_phone_number("+61491570156", country_code="AU")
 
-        assert result is None
+        assert result == {"DisconnectTelephoneNumberOrderResponse": None}
         mock_post.assert_called_once()
 
     @patch("requests.post")
@@ -1263,14 +1232,13 @@ class TestSHBandwidthClientGetActiveNumberCountEdgeCases:
         assert result == "7"
 
     @patch("requests.get")
-    def test_unexpected_status_code_returns_zero(self, mock_get, bw_client):
+    def test_unexpected_status_code_raises_runtime_error(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_get.return_value = mock_response
 
-        result = bw_client.get_active_number_count()
-
-        assert result == 0
+        with pytest.raises(RuntimeError):
+            bw_client.get_active_number_count()
 
     @patch("requests.get")
     def test_request_exception_reraises(self, mock_get, bw_client):
@@ -1346,18 +1314,18 @@ class TestSHBandwidthClientListActiveNumbersEdgeCases:
 
         result = bw_client.list_active_numbers()
 
-        assert len(result) == 4
-        assert mock_get.call_count == 2
+        # No usable next link means there is nothing more to fetch: stop instead of re-requesting the same page.
+        assert len(result) == 2
+        assert mock_get.call_count == 1
 
     @patch("requests.get")
-    def test_unexpected_status_code_breaks_and_returns_false(self, mock_get, bw_client):
+    def test_unexpected_status_code_raises_runtime_error(self, mock_get, bw_client):
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_get.return_value = mock_response
 
-        result = bw_client.list_active_numbers()
-
-        assert result is False
+        with pytest.raises(RuntimeError):
+            bw_client.list_active_numbers()
 
     @patch("requests.get")
     def test_request_exception_reraises(self, mock_get, bw_client):
@@ -1388,21 +1356,13 @@ class TestSHBandwidthClientGetSiteInfoForNumberEdgeCases:
         assert result["Id"] == "site_au"
 
     @patch("requests.get")
-    def test_unexpected_status_code_raises_type_error(self, mock_get, bw_client):
-        """
-        PRE-EXISTING BUG (not fixed): unlike get_number_info() (which simply
-        returns the None response_data on a non-200 response),
-        get_siteinfo_for_number() unconditionally does
-        `return response_data["Site"]` outside the try/except. On a non-200
-        response response_data stays None, so this raises an uncaught
-        TypeError ('NoneType' object is not subscriptable) instead of
-        returning None.
-        """
+    def test_unexpected_status_code_raises_runtime_error(self, mock_get, bw_client):
+        """A non-200 response raises a clear RuntimeError instead of an uncaught TypeError."""
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_get.return_value = mock_response
 
-        with pytest.raises(TypeError):
+        with pytest.raises(RuntimeError):
             bw_client.get_siteinfo_for_number("+14155551234")
 
     @patch("requests.get")
@@ -1433,32 +1393,24 @@ class TestSHBandwidthClientBuyTollFreeNumberEdgeCases:
             with pytest.raises(ValueError):
                 bw_client.buy_toll_free_number(quantity=1, user_id=MagicMock(id="user_1"), country_code="MX")
 
-    def test_unexpected_status_code_still_returns_number(self, bw_client):
+    def test_unexpected_status_code_raises_toll_free_unavailable(self, bw_client):
+        """A rejected order must not be reported as a purchased number."""
         with patch.object(bw_client, "search_available_toll_free_number") as mock_search, patch("requests.post") as mock_post:
             mock_search.return_value = "+18005551234"
             mock_response = MagicMock()
             mock_response.status_code = 500
             mock_post.return_value = mock_response
 
-            result = bw_client.buy_toll_free_number(quantity=1, user_id=MagicMock(id="user_1"))
+            with pytest.raises(BWTollFreeUnavailableError):
+                bw_client.buy_toll_free_number(quantity=1, user_id=MagicMock(id="user_1"))
 
-            assert result == "+18005551234"
-
-    def test_request_exception_raises_attribute_error(self, bw_client):
-        """
-        PRE-EXISTING BUG (not fixed): when requests.post() raises,
-        buy_toll_free_number()'s except handler logs
-        `response.__dict__`, but `response` is still None (it was
-        initialized to None and never reassigned because the exception
-        happened during the assignment itself). That raises a masking
-        AttributeError from inside the except block instead of just logging
-        the original exception and continuing.
-        """
+    def test_request_exception_raises_toll_free_unavailable(self, bw_client):
+        """A failing request surfaces as BWTollFreeUnavailableError, not a masking AttributeError."""
         with patch.object(bw_client, "search_available_toll_free_number") as mock_search, patch("requests.post") as mock_post:
             mock_search.return_value = "+18005551234"
             mock_post.side_effect = Exception("network boom")
 
-            with pytest.raises(AttributeError):
+            with pytest.raises(BWTollFreeUnavailableError):
                 bw_client.buy_toll_free_number(quantity=1, user_id=MagicMock(id="user_1"))
 
 
@@ -1475,34 +1427,26 @@ class TestSHBandwidthClientBuyPhoneNumberEdgeCases:
 
             assert result == ("+61491570156", "order_au")
 
-    def test_ca_country_code_raises_attribute_error(self, bw_client):
-        """
-        PRE-EXISTING BUG (not fixed): buy_phone_number() only assigns the
-        local `endpoint` variable inside the "US" and "AU" branches of the
-        country_code if/elif chain - the "CA" branch only sets
-        country_code_a3 and leaves `endpoint` unbound.
-        requests.post(endpoint, ...) then raises UnboundLocalError (a
-        NameError subclass) before a request is ever made, but the except
-        handler immediately logs `response.__dict__` while `response` is
-        still None, so that masking AttributeError is what actually
-        propagates instead of the original UnboundLocalError.
-        """
-        with patch("time.sleep"):
-            with pytest.raises(AttributeError):
-                bw_client.buy_phone_number(area_code="416", user_id="user_1", country_code="CA")
+    def test_ca_country_code_uses_north_america_endpoint(self, bw_client):
+        """Canadian orders go to the North-America endpoint (previously the endpoint was left unbound)."""
+        with patch("requests.post") as mock_post, patch("time.sleep"), patch.object(bw_client, "fetch_placed_purchased_order_details") as mock_fetch:
+            mock_response = MagicMock()
+            mock_response.status_code = 201
+            mock_response.text = "<OrderResponse><OrderStatus>RECEIVED</OrderStatus><Order><id>order_ca</id></Order></OrderResponse>"
+            mock_post.return_value = mock_response
+            mock_fetch.return_value = "+14155551234"
 
-    def test_request_exception_raises_attribute_error(self, bw_client):
-        """
-        PRE-EXISTING BUG (not fixed): same shape as
-        buy_toll_free_number()'s request-exception bug - the except handler
-        logs `response.__dict__` while `response` is still None, raising a
-        masking AttributeError instead of logging the original exception.
-        """
+            result = bw_client.buy_phone_number(area_code="416", user_id="user_1", country_code="CA")
+
+            assert result == ("+14155551234", "order_ca")
+            assert mock_post.call_args.args[0].startswith("https://api.test.com/")
+
+    def test_request_exception_returns_false(self, bw_client):
+        """A failing order request is logged and reported as "not purchased" (False), not a masking AttributeError."""
         with patch("requests.post") as mock_post, patch("time.sleep"):
             mock_post.side_effect = Exception("network boom")
 
-            with pytest.raises(AttributeError):
-                bw_client.buy_phone_number(area_code="415", user_id="user_1")
+            assert bw_client.buy_phone_number(area_code="415", user_id="user_1") is False
 
     def test_invalid_cleaned_number_raises_bw_number_unavailable_error(self, bw_client):
         with (
@@ -1521,7 +1465,7 @@ class TestSHBandwidthClientBuyPhoneNumberEdgeCases:
             with pytest.raises(BWNumberUnavailableError):
                 bw_client.buy_phone_number(area_code="415", user_id="user_1")
 
-    def test_exception_while_processing_order_details_reraises(self, bw_client):
+    def test_exception_while_polling_order_details_returns_false(self, bw_client):
         with patch("requests.post") as mock_post, patch("time.sleep"), patch.object(bw_client, "fetch_placed_purchased_order_details") as mock_fetch:
             mock_response = MagicMock()
             mock_response.status_code = 201
@@ -1529,8 +1473,8 @@ class TestSHBandwidthClientBuyPhoneNumberEdgeCases:
             mock_post.return_value = mock_response
             mock_fetch.side_effect = Exception("fetch boom")
 
-            with pytest.raises(Exception):
-                bw_client.buy_phone_number(area_code="415", user_id="user_1")
+            # Polling swallows a failing status lookup and gives up rather than propagating it.
+            assert bw_client.buy_phone_number(area_code="415", user_id="user_1") is False
 
 
 class TestSHBandwidthClientFetchPlacedPurchasedOrderDetailsEdgeCases:

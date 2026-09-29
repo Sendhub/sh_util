@@ -5,16 +5,15 @@ import os
 import re
 import sys
 import time
-import traceback
-from typing import List
+from urllib.parse import urlparse
 
 import phonenumbers
 import requests
 import xmltodict
 
 # Note: bandwidth import moved to function level to avoid missing package dependency
-# from main.models import ShUser
 from .cleanup import cleanup_phone_number
+from .release_breaker import is_breaker_open, record_failure, record_success
 
 try:
     import settings
@@ -32,8 +31,160 @@ except ImportError:
     from .twilio_util import AreaCodeUnavailableError
 
 
+# ISO regions for which this codebase wires Bandwidth number/inventory APIs (NA vs AU accounts).
+_BW_API_INVENTORY_REGIONS = frozenset({"US", "CA", "AU"})
+
+# Applied to every raw `requests` call in this module - none previously had a timeout,
+# so a non-responding Bandwidth endpoint could hang the calling task/worker indefinitely.
+BW_REQUEST_TIMEOUT = 30
+
+# Local mirror of https://dev.bandwidth.com/docs/messaging/errors/, kept in
+# tel/data/bandwidth_messaging_error_codes.json. Used to translate the numeric errorCode Bandwidth
+# attaches to a failed message (see ListMessageItem.error_code) into a readable
+# description for the logs.
+MESSAGING_ERROR_CODES_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "data",
+    "bandwidth_messaging_error_codes.json",
+)
+_messaging_error_codes_cache = None
+
+
+def _load_messaging_error_codes():
+    """Load and cache the local Bandwidth messaging error code reference."""
+    global _messaging_error_codes_cache
+    if _messaging_error_codes_cache is None:
+        try:
+            with open(MESSAGING_ERROR_CODES_PATH) as f:
+                _messaging_error_codes_cache = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logging.warning(f"Could not load messaging error code reference ({MESSAGING_ERROR_CODES_PATH}): {e}")
+            _messaging_error_codes_cache = {}
+    return _messaging_error_codes_cache
+
+
+def lookup_messaging_error_code(code):
+    """
+    Look up a Bandwidth messaging error code against the local reference mirrored
+    in tel/data/bandwidth_messaging_error_codes.json.
+
+    Args:
+        code: Numeric or string error code (e.g. 4405, '4405')
+
+    Returns:
+        Dict with 'code', 'category', 'description', 'explanation', 'billable',
+        or None if the code is unset or not found in the reference.
+    """
+    if code is None:
+        return None
+    code = str(code).strip()
+    if not code:
+        return None
+
+    for category, entries in _load_messaging_error_codes().items():
+        if category.startswith("_") or not isinstance(entries, dict):
+            continue
+        if code in entries:
+            return {**entries[code], "code": code, "category": category}
+    return None
+
+
+def log_messaging_error_code(code, context=""):
+    """
+    Look up a messaging error code and log the result.
+
+    Args:
+        code: Numeric or string Bandwidth messaging error code
+        context: Optional prefix identifying what the error relates to (e.g. a message id)
+
+    Returns:
+        The matched reference entry, or None if the code was unset or not found.
+    """
+    prefix = f"{context}: " if context else ""
+    info = lookup_messaging_error_code(code)
+    if info:
+        logging.error(f"{prefix}Bandwidth messaging error {info['code']} ({info['description']}) - {info['explanation']} [billable={info['billable']}]")
+    else:
+        logging.error(f"{prefix}Bandwidth messaging error {code} - not found in the local error code reference")
+    return info
+
+
+def _configured_supported_countries():
+    supported = getattr(settings, "SUPPORTED_COUNTRIES", None) or ()
+    return {str(x).strip().upper() for x in supported if x and str(x).strip()}
+
+
+def _bw_inventory_markets():
+    """
+    Effective inventory markets: ``settings.SUPPORTED_COUNTRIES`` intersected with
+    regions that have Bandwidth API wiring in this integration (``_BW_API_INVENTORY_REGIONS``).
+
+    A service that does not configure ``SUPPORTED_COUNTRIES`` (e.g. admin, billing) is not
+    restricted: every Bandwidth-wired region stays enabled, as before.
+    """
+    configured = _configured_supported_countries()
+    if not configured:
+        return _BW_API_INVENTORY_REGIONS
+    return frozenset(configured & _BW_API_INVENTORY_REGIONS)
+
+
+def _normalize_country_code(country_code):
+    if country_code is None:
+        return None
+    s = str(country_code).strip().upper()
+    return s or None
+
+
+def resolve_bandwidth_inventory_country(country_code):
+    """
+    Normalize and validate ``country_code`` for Bandwidth search/buy/release/order APIs.
+
+    Allowed inventory regions are derived as ``SUPPORTED_COUNTRIES ∩ _BW_API_INVENTORY_REGIONS``
+    (configured markets limited to US/CA/AU, the only regions wired to Bandwidth here).
+
+    SMS/MMS *recipients* are validated via ``validate_phone_number``, which honors
+    ``PHONE_VALIDATION_MODE`` (universal vs supported regions).
+    """
+    cc = _normalize_country_code(country_code)
+    if not cc:
+        raise ValueError("country_code is required")
+    configured = _configured_supported_countries()
+    markets = _bw_inventory_markets()
+    if cc not in markets:
+        if configured and cc not in configured:
+            raise ValueError(f"Phone inventory is not enabled for {cc}; SUPPORTED_COUNTRIES is {sorted(configured)}")
+        raise ValueError(f"Phone inventory is not integrated for {cc}; Bandwidth APIs in this codebase support {', '.join(sorted(_BW_API_INVENTORY_REGIONS))} only")
+    return cc
+
+
+def _bw_gateway():
+    """Gateway name the release circuit breaker is keyed on."""
+    return getattr(settings, "SMS_GATEWAY_BANDWIDTH", "bandwidth")
+
+
+def get_bandwidth_auth_header():
+    """
+    Authorization header (Basic or OAuth2 bearer, per ``settings.BW_USE_OAUTH2``) for callers
+    that talk to Bandwidth's Account/Numbers APIs directly with ``requests`` instead of going
+    through ``SHBandwidthClient`` (e.g. ``main.tendlc.bw_client.BWClient``). Mirrors
+    ``SHBandwidthClient._get_auth_header``.
+    """
+    if getattr(settings, "BW_USE_OAUTH2", False):
+        import bandwidth
+
+        configuration = bandwidth.Configuration(client_id=settings.BW_CLIENT_ID, client_secret=settings.BW_CLIENT_SECRET)
+        return {"Authorization": f"Bearer {configuration.get_access_token()}"}
+    credentials = f"{settings.BW_USERNAME}:{settings.BW_PASSWORD}"
+    encoded_credentials = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
+    return {"Authorization": f"Basic {encoded_credentials}"}
+
+
 class BandwidthOrderPendingException(Exception):
     """Exception when Toll Free Number is unavailable."""
+
+
+class BandwidthReleaseCircuitOpenError(Exception):
+    """Raised when the release circuit breaker is open for Bandwidth, skipping the API call."""
 
 
 class BWNumberUnavailableError(Exception):
@@ -117,8 +268,19 @@ class BandwidthNumberObject:
 
 
 class SHBandwidthClient:
+    """
+    Bandwidth Messaging + Numbers client.
+
+    Outbound SMS/MMS recipients are validated with ``validate_phone_number`` (respects
+    ``PHONE_VALIDATION_MODE`` / ``SUPPORTED_COUNTRIES`` via ``cleanup.validate_phone_number``).
+
+    Number search, purchase, release, and in-service checks additionally require
+    ``resolve_bandwidth_inventory_country`` (BW wiring ∩ ``settings.SUPPORTED_COUNTRIES``).
+    """
+
     NUMBER_UNAVAILABLE_MSG = "We are currently having problems buying phone numbers from our carrier. Please wait a moment and try again or choose a different area code."
-    JSON_CONTENT_TYPE = "application/json"
+    CACHE_TTL_SECONDS = 300
+    MAX_SAFE_NUMBERS_IN_MEMORY = 100000
 
     def __init__(self, userid=None, token=None, secret=None, username=None, password=None, debug=False, client_id=None, client_secret=None, use_oauth2=None):
         # Import moved here to avoid missing package dependency
@@ -138,7 +300,7 @@ class SHBandwidthClient:
             password = settings.BW_PASSWORD
 
         # OAuth2 client-credentials auth - disabled by default (settings.BW_USE_OAUTH2),
-        # see _get_auth_header for the switchover.
+        # see resolve_bandwidth_inventory_country/_get_auth_header for the switchover.
         if use_oauth2 is None:
             use_oauth2 = getattr(settings, "BW_USE_OAUTH2", False)
         if not client_id:
@@ -164,6 +326,9 @@ class SHBandwidthClient:
 
         self.bw_site_id_na = settings.BW_SITE_ID
         self.bw_site_id_au = settings.BW_SITE_ID_AU
+
+        # phone_number:country_code -> (response_data, cached_at) for get_number_info
+        self._number_info_cache = {}
 
         if self.use_oauth2:
             self.configuration = bandwidth.Configuration(client_id=self.client_id, client_secret=self.client_secret)
@@ -210,7 +375,7 @@ class SHBandwidthClient:
             return phonenumber_as_e164(number, country_code)
         except ValueError as err:
             logging.error("Invalid phone number %s", str(err))
-            raise ValueError
+            raise ValueError from err
 
     def check_if_valid_e164_format(self, number: str) -> bool:
         """
@@ -236,22 +401,102 @@ class SHBandwidthClient:
         """
         try:
             quantity = int(quantity)
+            if quantity < 1:
+                raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
             numbers = [number for number in (numbers or []) if number]
             if not numbers:
                 return None
             if quantity == 1:
                 return self._as_e164(numbers[0], country_code)
-            if quantity > 1:
-                return [self._as_e164(number, country_code) for number in numbers[:quantity]]
-            raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
+            return [self._as_e164(number, country_code) for number in numbers[:quantity]]
         except ValueError as err:
             logging.error(f"Phone number error {err}")
-            raise ValueError
+            raise ValueError from err
 
     def _parse_number_to_bw_format(self, number, country_code="US"):
         """Stripts the prefix '+1' from the 12 char number like '+12123456789'"""
         parsed = phonenumbers.parse(str(number), country_code)
         return str(parsed.national_number)
+
+    def _get_cached_number_info(self, cache_key):
+        """Return cached get_number_info() data for cache_key if present and not expired."""
+        cached = self._number_info_cache.get(cache_key)
+        if cached is None:
+            return None
+        data, cached_at = cached
+        if time.time() - cached_at < self.CACHE_TTL_SECONDS:
+            return data
+        del self._number_info_cache[cache_key]
+        return None
+
+    def _cache_number_info(self, cache_key, data):
+        self._number_info_cache[cache_key] = (data, time.time())
+
+    def clear_number_info_cache(self):
+        """Clear all cached get_number_info() results. Useful for testing or forced refresh."""
+        self._number_info_cache.clear()
+
+    def _parse_link_header(self, link_header):
+        """
+        Extract the query-string portion (leading '?') from a Bandwidth pagination
+        Link-style value, e.g. '<https://.../inserviceNumbers?page=X&size=3>'.
+        Returns None if link_header isn't a non-empty string containing a URL.
+        """
+        if not isinstance(link_header, str) or not link_header:
+            return None
+        url_match = re.search(r"<([^>]+)>", link_header)
+        url = url_match.group(1) if url_match else link_header
+        parsed = urlparse(url)
+        return f"?{parsed.query}" if parsed.query else None
+
+    def _poll_order_status(self, order_id, country_code="US", timeout=30, poll_interval=2):
+        """
+        Poll fetch_placed_purchased_order_details() until the order completes, fails, or
+        timeout is reached - replaces a hardcoded sleep with intelligent polling.
+
+        Returns:
+            The purchased phone number (str) if COMPLETE.
+            {'code': ..., 'description': ...} if the order fails with a non-5019 error code.
+            None on timeout, or if polling raises.
+        """
+        start_time = time.time()
+        attempts = 0
+
+        while time.time() - start_time < timeout:
+            attempts += 1
+            elapsed = int(time.time() - start_time)
+            logging.info(f"Polling order {order_id} status (attempt {attempts}, elapsed: {elapsed}s)")
+
+            try:
+                result = self.fetch_placed_purchased_order_details(country_code=country_code, order_id=order_id)
+
+                # A completed order returns the purchased number as a string; whether that number is
+                # acceptable is the caller's call (buy_phone_number validates it), so don't keep polling.
+                if isinstance(result, str) and result:
+                    logging.info(f"Order {order_id} completed successfully after {elapsed}s")
+                    return result
+
+                if isinstance(result, dict):
+                    error_code = result.get("code")
+                    error_desc = result.get("description")
+
+                    if error_code == "5019":
+                        logging.info(f"Order {order_id} still pending (code {error_code}): {error_desc}")
+                        time.sleep(poll_interval)
+                        continue
+
+                    if error_code:
+                        logging.warning(f"Order {order_id} failed with code {error_code}: {error_desc}")
+                        return result
+
+                time.sleep(poll_interval)
+
+            except Exception as e:
+                logging.exception(f"Error polling order {order_id} status: {e}")
+                return None
+
+        logging.warning(f"Order {order_id} polling timeout after {timeout}s")
+        return None
 
     def send_hello(self, from_number, to_number):
         try:
@@ -262,16 +507,16 @@ class SHBandwidthClient:
     def check_msg_status(self, msg_id):
         return self.get_message_info(msg_id)
 
-    def check_recipient_list_validity(self, numbers) -> List:
+    def check_recipient_list_validity(self, numbers) -> list:
         """
         This method's purpose is to check if the to_numbers are in valid E.164 format.
         In case they are not then it will attempt it to convert the number to valid E.164 format.
         If the formatting to E.164 fails then at number will not make it to the final to_list.
         """
         result = []
-        if isinstance(numbers, List):
+        if isinstance(numbers, list):
             for num in numbers:
-                if self.check_if_valid_e164_format(num) and validate_phone_number(num):
+                if self.check_if_valid_e164_format(num) and validate_phone_number(num, False):
                     result.append(num)
                 else:
                     try:
@@ -289,8 +534,10 @@ class SHBandwidthClient:
         Sends SMS via Bandwidth-SDK 20.0.0 API call.
 
         Args:
-            from_number:    Either an alphanumeric sender ID or the sender's Bandwidth phone number in E.164 format, which must be hosted within Bandwidth and linked to the account that is generating the message.
-                            Alphanumeric Sender IDs can contain up to 11 characters, upper-case letters A-Z, lower-case letters a-z, numbers 0-9, space, hyphen -, plus +, underscore _ and ampersand &.
+            from_number:    Either an alphanumeric sender ID or the sender's Bandwidth phone number in E.164 format,
+                            which must be hosted within Bandwidth and linked to the account that is generating the message.
+                            Alphanumeric Sender IDs can contain up to 11 characters, upper-case letters A-Z,
+                            lower-case letters a-z, numbers 0-9, space, hyphen -, plus +, underscore _ and ampersand &.
                             Alphanumeric Sender IDs must contain at least one letter.
             to_number:  The phone number(s) the message should be sent to in E164 format.
             msg:        The contents of the text message. Must be 2048 characters or less.
@@ -353,13 +600,11 @@ class SHBandwidthClient:
                     return api_response.id
 
                 except Exception as e:
-                    logging.error(f"Exception when calling MessagesApi -> create_message: {e}")
-                    logging.error(traceback.format_exc())
+                    logging.exception(f"Exception when calling MessagesApi -> create_message: {e}")
 
         except Exception as e:
-            logging.error(f"Exception occurred while sending sms via bandwidth: {e}")
-            logging.error(traceback.format_exc())
-            raise
+            logging.exception(f"Exception occurred while sending sms via bandwidth: {e}")
+            raise type(e) from e
 
     # Updated To Bandwidth-SDK 20.2.1
     def send_mms(self, from_number, to_number, msg, media, tag=None):
@@ -367,8 +612,10 @@ class SHBandwidthClient:
         Sends MMS via Bandwidth-SDK 20.0.0 API call.
 
         Args:
-            from_number:    Either an alphanumeric sender ID or the sender's Bandwidth phone number in E.164 format, which must be hosted within Bandwidth and linked to the account that is generating the message.
-                            Alphanumeric Sender IDs can contain up to 11 characters, upper-case letters A-Z, lower-case letters a-z, numbers 0-9, space, hyphen -, plus +, underscore _ and ampersand &.
+            from_number:    Either an alphanumeric sender ID or the sender's Bandwidth phone number in E.164 format,
+                            which must be hosted within Bandwidth and linked to the account that is generating the message.
+                            Alphanumeric Sender IDs can contain up to 11 characters, upper-case letters A-Z,
+                            lower-case letters a-z, numbers 0-9, space, hyphen -, plus +, underscore _ and ampersand &.
                             Alphanumeric Sender IDs must contain at least one letter.
             to_number:  The phone number(s) the message should be sent to in E164 format.
             msg:        The contents of the text message. Must be 2048 characters or less.
@@ -438,13 +685,11 @@ class SHBandwidthClient:
                     return api_response.id
 
                 except Exception as e:
-                    logging.error(f"Exception when calling MessagesApi -> create_message for MMS: {e}")
-                    logging.error(traceback.format_exc())
+                    logging.exception(f"Exception when calling MessagesApi -> create_message for MMS: {e}")
 
         except Exception as e:
-            logging.error(f"Exception occurred while sending sms via bandwidth: {e}")
-            logging.error(traceback.format_exc())
-            raise
+            logging.exception(f"Exception occurred while sending sms via bandwidth: {e}")
+            raise type(e) from e
 
     # Updated To Bandwidth-SDK 20.2.1
     def get_message_info(self, msgid=None, country_code="US"):
@@ -468,18 +713,23 @@ class SHBandwidthClient:
             page_info=PageInfo(prev_page=None, next_page=None, prev_page_token=None, next_page_token=None, additional_properties={}),
             messages=
             [
-                ListMessageItem(message_id='1754885848276h2fvl5qpvsfasimh', account_id='5004525', source_tn='+18332420240', destination_tn='+14109894472',
-                message_status=<MessageStatusEnum.UNDELIVERED: 'UNDELIVERED'>, message_direction=<ListMessageDirectionEnum.OUTBOUND: 'OUTBOUND'>,
-                message_type=<MessageTypeEnum.SMS: 'sms'>, segment_count=1, error_code=4795, receive_time=datetime.datetime(2025, 8, 11, 4, 17, 28, 583000, tzinfo=TzInfo(UTC)),
-                carrier_name='Other', message_size=None, message_length=13, attachment_count=None, recipient_count=None, campaign_class='Unregistered', campaign_id='AGGREGATOR', additional_properties={})
+                ListMessageItem(message_id='1754885848276h2fvl5qpvsfasimh', account_id='5004525',
+                source_tn='+18332420240', destination_tn='+14109894472',
+                message_status=<MessageStatusEnum.UNDELIVERED: 'UNDELIVERED'>,
+                message_direction=<ListMessageDirectionEnum.OUTBOUND: 'OUTBOUND'>,
+                message_type=<MessageTypeEnum.SMS: 'sms'>, segment_count=1, error_code=4795,
+                receive_time=datetime.datetime(2025, 8, 11, 4, 17, 28, 583000, tzinfo=TzInfo(UTC)),
+                carrier_name='Other', message_size=None, message_length=13, attachment_count=None,
+                recipient_count=None, campaign_class='Unregistered', campaign_id='AGGREGATOR', additional_properties={})
             ],
             additional_properties={}
         )
         """
 
-        if country_code == "US" or country_code == "CA":
+        cc = resolve_bandwidth_inventory_country(country_code)
+        if cc in ("US", "CA"):
             account_id = self.user_id_na
-        elif country_code == "AU":
+        else:
             account_id = self.user_id_au
 
         # Import moved here to avoid missing package dependency
@@ -491,11 +741,18 @@ class SHBandwidthClient:
                 logging.info("Calling the MessagesApi -> list_messages")
                 api_response = api_instance.list_messages(account_id=account_id, message_id=msgid)
                 logging.info(f"The response of MessagesApi -> list_messages: {api_response}")
+
+                messages = getattr(api_response, "messages", None)
+                if isinstance(messages, list):
+                    for message in messages:
+                        error_code = getattr(message, "error_code", None)
+                        if error_code is not None:
+                            log_messaging_error_code(error_code, context=f"Message {getattr(message, 'message_id', msgid)}")
+
                 return api_response
             except Exception as e:
-                logging.error(f"Exception when calling MessagesApi -> list_messages: {e}")
-                logging.error(traceback.format_exc())
-                raise
+                logging.exception(f"Exception when calling MessagesApi -> list_messages: {e}")
+                raise type(e) from e
 
     # Updated To Bandwidth-SDK 20.2.1
     def in_service(self, number, country_code="US"):
@@ -518,20 +775,20 @@ class SHBandwidthClient:
         if not validate_phone_number(number, False):
             raise ValueError(f"Invalid phone number ({number}) passed")
 
+        cc = resolve_bandwidth_inventory_country(country_code)
+
         nat_number = phonenumber_as_e164(number)
-        nat_number = self._parse_number_to_bw_format(str(nat_number), "US")
+        nat_number = self._parse_number_to_bw_format(str(nat_number), cc)
         retval = False
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/inserviceNumbers/{str(nat_number)}"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/inserviceNumbers/{str(nat_number)}"
 
         try:
             logging.info(f"Making request to Bandwidth to check if number {nat_number} is in service or not")
-            response = requests.get(endpoint, headers=self._get_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header(), timeout=BW_REQUEST_TIMEOUT)
             logging.info(f"Response received from bandwidth to get InService for Phone Number {nat_number}  is {response.status_code}")
 
             if response.status_code == 200:
@@ -539,12 +796,11 @@ class SHBandwidthClient:
             elif response.status_code == 404:
                 retval = False
             else:
-                logging.info(f"Error response received from bandwidth to get InService for Phone Number {nat_number}  is {response.__dict__}")
+                logging.info(f"Error response received from bandwidth to get InService for Phone Number {nat_number}  is {getattr(response, '__dict__', None)}")
 
         except Exception as e:
-            logging.error(f"Fetchng InService for Phone Number {number} - error: {e}")
-            logging.info(f"Response received from bandwidth to get InService for Phone Number {nat_number}  is {response.__dict__}")
-            logging.error(traceback.format_exc())
+            logging.exception(f"Fetchng InService for Phone Number {number} - error: {e}")
+            logging.info(f"Response received from bandwidth to get InService for Phone Number {nat_number}  is {getattr(response, '__dict__', None)}")
 
         return retval
 
@@ -576,16 +832,15 @@ class SHBandwidthClient:
         if quantity < 1:
             raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+        cc = resolve_bandwidth_inventory_country(country_code)
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/accounts/{str(self.user_id_na)}/availableNumbers?areaCode={area_code}&quantity={quantity}"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/accounts/{str(self.user_id_au)}/availableNumbers?areaCode={area_code}&quantity={quantity}"
 
         try:
             logging.info(f"Making Request to bandwidth to get {quantity} number for Area Code {area_code}")
-            response = requests.get(endpoint, headers=self._get_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header(), timeout=BW_REQUEST_TIMEOUT)
             logging.info(f"Response Status Code received from bandwidth to get {quantity} number for Area Code {area_code} is {response.status_code}")
 
             if response.status_code == 200:
@@ -598,7 +853,7 @@ class SHBandwidthClient:
                 search_result = response_data.get("SearchResult") or {}
                 telephone_list = search_result.get("TelephoneNumberList") or {}
                 numbers = telephone_list.get("TelephoneNumber")
-                logging.info(f"Calling cleanupPhoneNumber() on the received phone numbers(s) {numbers} from bandwidth")
+                logging.info(f"Calling cleanup_phone_number() on the received phone numbers(s) {numbers} from bandwidth")
 
                 if numbers is None:
                     numbers = []
@@ -607,17 +862,15 @@ class SHBandwidthClient:
                 elif not isinstance(numbers, list):
                     numbers = [numbers]
 
-                cleaned_numbers = [number for number in map(cleanup_phone_number, numbers) if number]
+                cleaned_numbers = [number for number in (cleanup_phone_number(n, cc) for n in numbers) if number]
             else:
-                logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
                 raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG)
 
         except AreaCodeUnavailableError:
             raise
         except Exception as e:
-            logging.error(f"Failed to search for phone number(s) in given area code - error: {e}")
-            logging.info(f"Response received from bandwidth to get {quantity} number(s) for Area Code {area_code} is {response.__dict__}")
-            logging.error(traceback.format_exc())
+            logging.exception(f"Failed to search for phone number(s) in given area code - error: {e}")
             raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG) from e
 
         if not cleaned_numbers:
@@ -656,16 +909,15 @@ class SHBandwidthClient:
         requested_pattern = pattern
         pattern = self._normalize_toll_free_wildcard_pattern(pattern)
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+        cc = resolve_bandwidth_inventory_country(country_code)
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v1/accounts/{str(self.user_id_na)}/availableNumbers?tollFreeWildCardPattern={pattern}&quantity={quantity}"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v1/accounts/{str(self.user_id_au)}/availableNumbers?tollFreeWildCardPattern={pattern}&quantity={quantity}"
 
         try:
             logging.info(f"Making Request to bandwidth to get {quantity} Toll Free Number with pattern {pattern}")
-            response = requests.get(endpoint, headers=self._get_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header(), timeout=BW_REQUEST_TIMEOUT)
             logging.info(f"Response received from bandwidth to get {quantity} Toll Free Number with pattern {pattern} is {response.status_code}")
 
             if response.status_code == 200:
@@ -678,7 +930,7 @@ class SHBandwidthClient:
                 if response_data.get("SearchResult"):
                     telephone_list = (response_data.get("SearchResult") or {}).get("TelephoneNumberList") or {}
                     numbers = telephone_list.get("TelephoneNumber")
-                    logging.info(f"Calling cleanupPhoneNumber() on the received toll free phone numbers(s) {numbers} from bandwidth")
+                    logging.info(f"Calling cleanup_phone_number() on the received toll free phone numbers(s) {numbers} from bandwidth")
 
                     if numbers is None:
                         numbers = []
@@ -687,21 +939,16 @@ class SHBandwidthClient:
                     elif not isinstance(numbers, list):
                         numbers = [numbers]
 
-                    cleaned_numbers = [number for number in map(cleanup_phone_number, numbers) if number]
-                    cleaned_numbers = [
-                        number for number in cleaned_numbers
-                        if self._toll_free_number_matches_pattern(number, pattern)
-                    ]
+                    cleaned_numbers = [number for number in (cleanup_phone_number(n, cc) for n in numbers) if number]
+                    cleaned_numbers = [number for number in cleaned_numbers if self._toll_free_number_matches_pattern(number, pattern)]
                 elif response.status_code == 200 and response_data.get("SearchResult") is None:
                     logging.info(f"No toll free phonenumbers are available for pattern ({pattern})")
                     return None
             else:
-                logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
 
         except Exception as e:
-            logging.error(f"Failed to search for {quantity} toll free phone number(s) with pattern {pattern} - error: {e}")
-            logging.info(f"Response received from bandwidth to get {quantity} number(s) for pattern {pattern} is {response.__dict__}")
-            logging.error(traceback.format_exc())
+            logging.exception(f"Failed to search for {quantity} toll free phone number(s) with pattern {pattern} - error: {e}")
             raise AreaCodeUnavailableError(SHBandwidthClient.NUMBER_UNAVAILABLE_MSG) from e
 
         if not cleaned_numbers:
@@ -766,14 +1013,18 @@ class SHBandwidthClient:
         return re.match(regex, npa) is not None
 
     # Updated To Bandwidth-SDK 20.2.1
-    def get_number_info(self, phone_number, country_code="US"):
+    def get_number_info(self, phone_number, country_code="US", use_cache=True):
         """
         Search the details of a phone number.
 
         Args:
             phone_number:    Send a phone number in +18332420240
+            use_cache:       Reuse a result cached for CACHE_TTL_SECONDS (5 min). Default True.
         Returns:
             Json of the response from bandwidth API
+
+        Raises:
+            RuntimeError: Bandwidth returned a non-200 response
 
         API Documentation URL:  https://dev.bandwidth.com/docs/numbers/guides/manage-inventory/searchingNumbers/
 
@@ -829,29 +1080,36 @@ class SHBandwidthClient:
         if not validate_phone_number(phone_number, False):
             raise ValueError(f"Invalid phone number ({phone_number}) passed")
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+        cache_key = f"{phone_number}:{country_code}"
+        if use_cache:
+            cached_data = self._get_cached_number_info(cache_key)
+            if cached_data is not None:
+                logging.info(f"Cache hit for get_number_info({phone_number})")
+                return cached_data
+
+        cc = resolve_bandwidth_inventory_country(country_code)
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/tns/{self._parse_number_to_bw_format(phone_number)}/tnDetails"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/tns/{self._parse_number_to_bw_format(phone_number)}/tnDetails"
 
         try:
             logging.info(f"Making Request to bandwidth to get {phone_number} detail information ")
-            response = requests.get(endpoint, headers=self._get_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header(), timeout=BW_REQUEST_TIMEOUT)
             logging.info(f"Response Status Code received from bandwidth to get {phone_number} detail information is {response.status_code}")
 
             if response.status_code == 200:
                 response_data = xmltodict.parse(response.text)
                 logging.info(f"Response received from bandwidth to get {phone_number} detail information is : {response_data}")
+                if use_cache:
+                    self._cache_number_info(cache_key, response_data)
             else:
-                logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
+                raise RuntimeError(f"Failed to get number info for {phone_number}: HTTP {response.status_code}")
 
         except Exception as e:
-            logging.error(f"Response Status Code received from bandwidth to get {phone_number} detail information - error: {e}")
-            logging.info(f"Response received from bandwidth to get {phone_number} detail information is {response.__dict__}")
-            logging.error(traceback.format_exc())
-            raise
+            logging.exception(f"Response Status Code received from bandwidth to get {phone_number} detail information - error: {e}")
+            raise type(e) from e
 
         return response_data
 
@@ -951,10 +1209,15 @@ class SHBandwidthClient:
         }
         """
 
-        if isinstance(number, (list, tuple, set, frozenset, dict)):
+        if isinstance(number, list | tuple | set | frozenset | dict):
             raise BandwidthBulkReleaseError(
                 f"release_phone_number() takes exactly one number, got {type(number).__name__} of {len(number)}. Release numbers one at a time so each is verified against this environment's site."
             )
+
+        if is_breaker_open(_bw_gateway()):
+            msg = f"Skipping release of {number} on Bandwidth: circuit breaker open"
+            logging.info(msg)
+            raise BandwidthReleaseCircuitOpenError(msg)
 
         response = None
         response_data = None
@@ -963,39 +1226,40 @@ class SHBandwidthClient:
         if not validate_phone_number(number, False):
             raise ValueError(f"Invalid phone number ({number}) passed, unable to release")
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
+        cc = resolve_bandwidth_inventory_country(country_code)
 
-        expected_site_id = self._resolve_site_id(country_code, site_id)
-        self._assert_number_belongs_to_site(number, expected_site_id, country_code)
+        expected_site_id = self._resolve_site_id(cc, site_id)
+        self._assert_number_belongs_to_site(number, expected_site_id, cc)
 
-        if country_code == "US" or country_code == "CA":
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{self.user_id_na}/disconnects"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{self.user_id_au}/disconnects"
 
-        headers = {**self._get_auth_header(), "Content-Type": self.JSON_CONTENT_TYPE}
         request_payload = {"disconnectOrderType": {"disconnectMode": "NORMAL", "phoneNumbers": [number]}}
-
         json_payload = json.dumps(request_payload)
         logging.info(f"To release number request payload: {json_payload}")
 
         try:
+            headers = {**self._get_auth_header(), "Content-Type": "application/json"}
             logging.info(f"Making Request to bandwidth to release phone number {number}")
-            response = requests.post(endpoint, headers=headers, data=json_payload)
+            response = requests.post(endpoint, headers=headers, data=json_payload, timeout=BW_REQUEST_TIMEOUT)
             logging.info(f"Response Status Code received from bandwidth to release {number} is {response.status_code}")
 
-            if response.status_code == 200:
+            if response.status_code in (200, 201):
                 response_data = xmltodict.parse(response.text)
                 logging.info(f"Response from Bandwidth to release number {number} is : {response_data}")
             else:
-                logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
+                raise RuntimeError(f"Bandwidth release failed for {number}: HTTP {response.status_code} - {response.text}")
 
         except Exception as e:
-            logging.error(f"Response Status Code received from bandwidth to release {number} detail information - error: {e}")
-            logging.info(f"Response received from bandwidth to release {number} detail information is {response.__dict__}")
-            logging.error(traceback.format_exc())
+            record_failure(_bw_gateway())
+            logging.exception(f"Response Status Code received from bandwidth to release {number} detail information - error: {e}")
             raise
+
+        record_success(_bw_gateway())
+        return response_data
 
     # Updated To Bandwidth-SDK 20.2.1
     def get_active_number_count(self, site_id=None, country_code="US"):
@@ -1013,21 +1277,20 @@ class SHBandwidthClient:
         response = None
         response_data = None
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
+        cc = resolve_bandwidth_inventory_country(country_code)
+        site_id = self._resolve_site_id(cc, site_id)
 
-        site_id = self._resolve_site_id(country_code, site_id)
-        user_id = self.user_id_na if country_code in ("US", "CA") else self.user_id_au
-        if country_code == "US" or country_code == "CA":
+        user_id = self.user_id_na if cc in ("US", "CA") else self.user_id_au
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}{self._inservice_path(user_id, site_id, '/totals')}"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}{self._inservice_path(user_id, site_id, '/totals')}"
 
-        headers = {**self._get_auth_header(), "Content-Type": self.JSON_CONTENT_TYPE}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
 
         try:
             logging.info(f"Making Request to bandwidth get phone numbers configured for site_id: {site_id}")
-            response = requests.get(endpoint, headers=headers)
+            response = requests.get(endpoint, headers=headers, timeout=BW_REQUEST_TIMEOUT)
             logging.info(f"Response Status Code received from bandwidth for phone numbers configured for site_id: {site_id} is {response.status_code}")
 
             if response.status_code == 200:
@@ -1035,13 +1298,12 @@ class SHBandwidthClient:
                 count = response_data.get("Quantity").get("Count")
                 logging.info(f"Total count of active numbers for site_id: {site_id} is: {count} numbers")
             else:
-                logging.info(f"To get phone numbers configured for site_id: {site_id} Error Response from bandwidth is: {response.__dict__}")
+                logging.info(f"To get phone numbers configured for site_id: {site_id} Error Response from bandwidth is: {getattr(response, '__dict__', None)}")
+                raise RuntimeError(f"Failed to get active number count for site_id {site_id}: HTTP {response.status_code}")
 
         except Exception as e:
-            logging.error(f"Response Status Code received from bandwidth for phone numbers configured for site_id: {site_id} is - error: {e}")
-            logging.info(f"Response received from bandwidth for site_id: {site_id} is {response.__dict__}")
-            logging.error(traceback.format_exc())
-            raise
+            logging.exception(f"Response Status Code received from bandwidth for phone numbers configured for site_id: {site_id} is - error: {e}")
+            raise type(e) from e
 
         return count
 
@@ -1057,42 +1319,41 @@ class SHBandwidthClient:
             site_id:  The site id of the account
         Returns:
             list of all the numbers present
+
+        Raises:
+            RuntimeError: Bandwidth returned a non-200 response mid-pagination
         """
 
-        telephone_numbers_list = []
-        total_count = 0
-        remaining_count = None
+        TelephoneNumbersList = []
+        TotalCount = 0
+        RemainingCount = None
         per_resp_number_count = 500
         response = None
         response_data = None
         endpoint = ""
         additional_query_params = ""
-        page_count = 1
-        ALL_SUCCESS_FLAG = False
+        pageCount = 1
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
+        cc = resolve_bandwidth_inventory_country(country_code)
+        site_id = self._resolve_site_id(cc, site_id)
 
-        site_id = self._resolve_site_id(country_code, site_id)
-        user_id = self.user_id_na if country_code in ("US", "CA") else self.user_id_au
-        if country_code == "US" or country_code == "CA":
+        user_id = self.user_id_na if cc in ("US", "CA") else self.user_id_au
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}{self._inservice_path(user_id, site_id)}"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}{self._inservice_path(user_id, site_id)}"
 
-        headers = {**self._get_auth_header(), "Content-Type": self.JSON_CONTENT_TYPE}
-
         while True:
-            logging.info(f"list_active_numbers pageCount: {page_count}")
+            logging.info(f"list_active_numbers pageCount: {pageCount}")
             try:
                 try:
+                    headers = {**self._get_auth_header(), "Content-Type": "application/json"}
                     logging.info(f"Making Request to bandwidth get phone numbers configured for site_id: {site_id}")
-                    response = requests.get(endpoint + additional_query_params, headers=headers)
+                    response = requests.get(endpoint + additional_query_params, headers=headers, timeout=BW_REQUEST_TIMEOUT)
                 except Exception as e:
-                    logging.error(f"Issue occurred in additional_query_params: {additional_query_params} - error: {e}")
-                    logging.info(f"Response received from bandwidth to fetch the additional_query_params: {additional_query_params} detail information is {response.__dict__}")
-                    logging.error(traceback.format_exc())
-                    raise
+                    logging.exception(f"Issue occurred in additional_query_params: {additional_query_params} - error: {e}")
+                    logging.info(f"Response received from bandwidth to fetch the additional_query_params: {additional_query_params} detail information is {getattr(response, '__dict__', None)}")
+                    raise type(e) from e
 
                 logging.info(f"Response Status Code received from bandwidth for phone numbers configured for site_id: {site_id} is {response.status_code}")
 
@@ -1100,57 +1361,65 @@ class SHBandwidthClient:
                     response_data = xmltodict.parse(response.text)
                     links = response_data.get("TNs").get("Links")
                     logging.info(f"Links received in current requests: {links}")
-                    total_count = response_data.get("TNs").get("TotalCount")
-                    telephone_numbers_list += response_data.get("TNs").get("TelephoneNumbers").get("TelephoneNumber")
+                    TotalCount = response_data.get("TNs").get("TotalCount")
+                    page_numbers = response_data.get("TNs").get("TelephoneNumbers").get("TelephoneNumber")
+                    if isinstance(page_numbers, str):
+                        page_numbers = [page_numbers]
+                    TelephoneNumbersList += page_numbers or []
 
-                    if int(total_count) > per_resp_number_count and remaining_count is None:
-                        logging.info(f"Setting RemainingCount as {total_count} for first time ")
-                        remaining_count = int(total_count) - per_resp_number_count
-                        next_page = response_data.get("TNs").get("Links").get("next")
-                        logging.info(f"Next Page is: {next_page}")
+                    if int(TotalCount) > per_resp_number_count and RemainingCount is None:
+                        if int(TotalCount) > self.MAX_SAFE_NUMBERS_IN_MEMORY:
+                            logging.warning(f"Loading {TotalCount} numbers into memory exceeds safety threshold ({self.MAX_SAFE_NUMBERS_IN_MEMORY}). Consider pagination or streaming.")
+                        logging.info(f"Setting RemainingCount as {TotalCount} for first time ")
+                        RemainingCount = int(TotalCount) - per_resp_number_count
+                        nextPage = (response_data.get("TNs").get("Links") or {}).get("next")
+                        logging.info(f"Next Page is: {nextPage}")
 
-                        if isinstance(next_page, str):
-                            url = re.search(r"<(.*?)>", str(next_page)).group(1)
-                            additional_query_params = "?" + url.split("?")[1]
+                        additional_query_params = self._parse_link_header(nextPage)
+                        if additional_query_params:
                             logging.info(f"Additional Query Parameters extracted is {additional_query_params}")
                         else:
+                            # No usable next link: there is nothing more to fetch, so stop paging
+                            # rather than re-requesting the same page (or concatenating None).
+                            additional_query_params = ""
+                            RemainingCount = 0
                             logging.info("Reached at the end of all numbers")
 
-                    elif remaining_count is not None and remaining_count > 0:
-                        remaining_count = remaining_count - per_resp_number_count
-                        logging.info(f"New RemainingCount ...... {remaining_count}")
-                        next_page = response_data.get("TNs").get("Links").get("next")
-                        logging.info(f"Next Page is: {next_page}")
+                    elif RemainingCount is not None and RemainingCount > 0:
+                        RemainingCount = RemainingCount - per_resp_number_count
+                        logging.info(f"New RemainingCount ...... {RemainingCount}")
+                        nextPage = (response_data.get("TNs").get("Links") or {}).get("next")
+                        logging.info(f"Next Page is: {nextPage}")
 
-                        if isinstance(next_page, str):
-                            url = re.search(r"<(.*?)>", str(next_page)).group(1)
-                            additional_query_params = "?" + url.split("?")[1]
+                        additional_query_params = self._parse_link_header(nextPage)
+                        if additional_query_params:
                             logging.info(f"Additional Query Parameters extracted is {additional_query_params}")
                         else:
+                            # No usable next link: there is nothing more to fetch, so stop paging
+                            # rather than re-requesting the same page (or concatenating None).
+                            additional_query_params = ""
+                            RemainingCount = 0
                             logging.info("Reached at the end of all numbers")
                     else:
-                        remaining_count = 0
+                        RemainingCount = 0
                 else:
-                    logging.info(f"For additional_query_params: {additional_query_params} Error Response from bandwidth: {response.__dict__}")
-                    logging.info(f"Breaking our from the loop. Total {page_count} requests made")
-                    break
+                    logging.info(f"For additional_query_params: {additional_query_params} Error Response from bandwidth: {getattr(response, '__dict__', None)}")
+                    raise RuntimeError(f"Bandwidth API error while listing active numbers: HTTP {response.status_code}")
 
             except Exception as e:
-                logging.error(f"Issue occurred in listing all active numbers - error: {e}")
-                logging.error(traceback.format_exc())
-                raise
+                logging.exception(f"Issue occurred in listing all active numbers - error: {e}")
+                raise type(e) from e
 
-            page_count += 1
-            if remaining_count <= 0:
-                ALL_SUCCESS_FLAG = True
+            pageCount += 1
+            if RemainingCount is None or RemainingCount <= 0:
                 logging.info("Exiting as nothing extra is remaining")
                 break
 
-        logging.info(f"Getting the TelephoneNumbersList Length: {len(telephone_numbers_list)}")
-        logging.info(f"The total count received {total_count}")
-        logging.info(f"Do The TotalCount and the length of TelephoneNumbersList match?: {'Yes' if len(telephone_numbers_list) == total_count else 'No'}")
+        logging.info(f"Getting the TelephoneNumbersList Length: {len(TelephoneNumbersList)}")
+        logging.info(f"The total count received {TotalCount}")
+        logging.info(f"Do The TotalCount and the length of TelephoneNumbersList match?: {'Yes' if len(TelephoneNumbersList) == TotalCount else 'No'}")
 
-        return telephone_numbers_list if ALL_SUCCESS_FLAG else False
+        return TelephoneNumbersList
 
     # Updated To Bandwidth-SDK 20.2.1
     def get_siteinfo_for_number(self, phone_number, country_code="US"):
@@ -1176,27 +1445,28 @@ class SHBandwidthClient:
         if not validate_phone_number(phone_number, False):
             raise ValueError(f"Invalid phone number ({phone_number}) passed")
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+        cc = resolve_bandwidth_inventory_country(country_code)
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/tns/{self._parse_number_to_bw_format(phone_number)}/sites"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/tns/{self._parse_number_to_bw_format(phone_number)}/sites"
 
         try:
             logging.info(f"Making Request to bandwidth to get {phone_number} detail information ")
-            response = requests.get(endpoint, headers=self._get_auth_header())
+            response = requests.get(endpoint, headers=self._get_auth_header(), timeout=BW_REQUEST_TIMEOUT)
             if response.status_code == 200:
                 logging.info(f"Response Status Code received from bandwidth to get {phone_number} site information is {response.status_code}")
                 response_data = xmltodict.parse(response.text)
             else:
-                logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
 
         except Exception as e:
-            logging.error(f"Response Status Code received from bandwidth to get {phone_number} site information - error: {e}")
-            logging.info(f"Response received from bandwidth to get {phone_number} site information is {response.__dict__}")
-            logging.error(traceback.format_exc())
-            raise
+            logging.exception(f"Response Status Code received from bandwidth to get {phone_number} site information - error: {e}")
+            logging.info(f"Response received from bandwidth to get {phone_number} site information is {getattr(response, '__dict__', None)}")
+            raise type(e) from e
+
+        if response_data is None:
+            raise RuntimeError(f"Failed to get site information for {phone_number}: HTTP {response.status_code if response is not None else 'no response'}")
 
         return response_data["Site"]
 
@@ -1257,12 +1527,20 @@ class SHBandwidthClient:
         response = None
         response_data = None
 
+        logging.info(f"In buy_toll_free_number() with user_id received is {getattr(user_id, 'id', user_id)}")
+
+        customer_order_id = None
+        if user_id is not None:
+            customer_order_id = str(getattr(user_id, "id", user_id))[:40]
+
         if quantity < 1:
             raise ValueError(f"Quantity can not be < 1 - passed: {quantity}")
 
+        cc = resolve_bandwidth_inventory_country(country_code)
+
         toll_free_numbers = []
         pattern = pattern if pattern in ("8**", "80*", "87*") else "8**"
-        result = self.search_available_toll_free_number(pattern=pattern, quantity=1)
+        result = self.search_available_toll_free_number(pattern=pattern, quantity=1, country_code=cc)
         logging.info(f"Result from search_available_toll_free_number() : {result}")
 
         if not result:
@@ -1271,20 +1549,17 @@ class SHBandwidthClient:
 
         if not isinstance(result, list):
             result = [result]
-            toll_free_numbers = result
+        toll_free_numbers = result
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
+        site_id = self._resolve_site_id(cc, site_id)
 
-        site_id = self._resolve_site_id(country_code, site_id)
-        if country_code == "US" or country_code == "CA":
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/orders"
 
-        headers = {**self._get_auth_header(), "Content-Type": self.JSON_CONTENT_TYPE}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
         request_payload = {
-            "customerOrderId": user_id.id,
             "orderType": {
                 "phoneNumbers": result,
                 "type": "existingPhoneNumberOrderType",
@@ -1292,24 +1567,30 @@ class SHBandwidthClient:
             "subAccountId": site_id,
         }
 
+        if customer_order_id is not None:
+            request_payload["customerOrderId"] = customer_order_id
+
         json_payload = json.dumps(request_payload)
         logging.info(f"To buy new toll free number request payload: {json_payload}")
 
         try:
             logging.info(f"Making Request to bandwidth to purchase toll-free phone number {result}")
-            response = requests.post(endpoint, headers=headers, data=json_payload)
+            response = requests.post(endpoint, headers=headers, data=json_payload, timeout=BW_REQUEST_TIMEOUT)
 
             logging.info(f"Response Status Code received from bandwidth to purchase toll-free phone number {result} is {response.status_code}")
             if response.status_code == 201:
                 response_data = xmltodict.parse(response.text)
                 logging.info(f"Response from bandwidth for purchasing toll-free number(s) {toll_free_numbers} : {response_data}")
             else:
-                logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
+                raise BWTollFreeUnavailableError(f"Bandwidth toll-free purchase failed with status {response.status_code} for {toll_free_numbers}")
 
+        except BWTollFreeUnavailableError:
+            raise
         except Exception as e:
             logging.info(f"Response Status Code received from bandwidth to purchase toll-free phone number {result} - error: {e}")
-            logging.info(f"Response received from bandwidth to purchase phone number {result} is {response.__dict__}")
-            logging.info(traceback.format_exc())
+            logging.info(logging.exception("Unhandled exception"))
+            raise BWTollFreeUnavailableError(f"Bandwidth toll-free purchase failed for {toll_free_numbers}: {e}") from e
 
         return self._cleanup_and_return_numbers(toll_free_numbers, quantity)
 
@@ -1324,10 +1605,11 @@ class SHBandwidthClient:
             area_code:      The area code of the phone number requested
             user_id:        The SHUser ID which is passed while purchasing a number
             site_id:        The BW_SITE_ID for our account with bandwidth
-            country_code:   The country code of the number we are trying to purchase
+            country_code:   ISO market for the purchase (must lie in ``SUPPORTED_COUNTRIES`` and in
+                            Bandwidth-wired regions US/CA/AU — see ``resolve_bandwidth_inventory_country``).
         Returns:
-            Phone(s) number bought.
-            None if invalid parameters or Exception if there is one.
+            ``(phone_number, order_id)`` for the number bought, or False if the order did not
+            complete. Exception if there is one.
 
             Note: 1 number per area code can be purchased
 
@@ -1421,35 +1703,38 @@ class SHBandwidthClient:
             }
         """
 
-        logging.info(f"user_id: {user_id}")
+        logging.info(f"In buy_phone_number() with user_id received is {getattr(user_id, 'id', user_id)}")
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
+        customer_order_id = None
+        if user_id is not None:
+            customer_order_id = str(getattr(user_id, "id", user_id))[:40]
+
+        cc = resolve_bandwidth_inventory_country(country_code)
 
         order_quantity = 1
-        country_code_a3 = ""
+        countryCodeA3 = ""
         response = None
         response_data = None
 
-        site_id = self._resolve_site_id(country_code, site_id)
+        site_id = self._resolve_site_id(cc, site_id)
 
-        if country_code == "US":
+        if cc == "US":
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders"
-            country_code_a3 = "USA"
-        elif country_code == "AU":
+            countryCodeA3 = "USA"
+        elif cc == "AU":
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/orders"
-            country_code_a3 = "AUS"
-        elif country_code == "CA":
-            country_code_a3 = "CAN"
+            countryCodeA3 = "AUS"
+        else:
+            endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders"
+            countryCodeA3 = "CAN"
 
-        headers = {**self._get_auth_header(), "Content-Type": self.JSON_CONTENT_TYPE}
+        headers = {**self._get_auth_header(), "Content-Type": "application/json"}
 
         if phone_number is None:
             request_payload = {
-                "customerOrderId": str(user_id)[:40],
                 "orderType": {
                     "areaCode": area_code,
-                    "countryCodeA3": country_code_a3,
+                    "countryCodeA3": countryCodeA3,
                     "quantity": order_quantity,
                     "type": "combinedSearchAndOrderType",
                 },
@@ -1458,7 +1743,6 @@ class SHBandwidthClient:
         else:
             request_payload = {
                 "autoActivate": True,
-                "customerOrderId": str(user_id)[:40],
                 "orderType": {
                     "phoneNumbers": [phone_number],
                     "type": "existingPhoneNumberOrderType",
@@ -1466,46 +1750,51 @@ class SHBandwidthClient:
                 "subAccountId": site_id,
             }
 
+        if customer_order_id is not None:
+            request_payload["customerOrderId"] = customer_order_id
+
         json_payload = json.dumps(request_payload)
         logging.info(f"To buy new number request payload: {json_payload}")
 
         try:
             if phone_number is None:
-                logging.info(f"Making Request to bandwidth to purchase {order_quantity} phone number(s) in country {country_code_a3} with {area_code}")
-                response = requests.post(endpoint, headers=headers, data=json_payload)
-                logging.info(f"Response received from bandwidth to purchase {order_quantity} phone number(s) in country {country_code_a3} with {area_code} is {response.status_code}")
+                logging.info(f"Making Request to bandwidth to purchase {order_quantity} phone number(s) in country {countryCodeA3} with {area_code}")
+                response = requests.post(endpoint, headers=headers, data=json_payload, timeout=BW_REQUEST_TIMEOUT)
+                logging.info(f"Response received from bandwidth to purchase {order_quantity} phone number(s) in country {countryCodeA3} with {area_code} is {response.status_code}")
             else:
-                logging.info(f"Making Request to bandwidth to purchase phone number(s) {phone_number} in country {country_code_a3} with {area_code}")
-                response = requests.post(endpoint, headers=headers, data=json_payload)
-                logging.info(f"Response received from bandwidth to purchase phone number(s) {order_quantity} in country {country_code_a3} with {area_code} is {response.status_code}")
+                logging.info(f"Making Request to bandwidth to purchase phone number(s) {phone_number} in country {countryCodeA3} with {area_code}")
+                response = requests.post(endpoint, headers=headers, data=json_payload, timeout=BW_REQUEST_TIMEOUT)
+                logging.info(f"Response received from bandwidth to purchase phone number(s) {order_quantity} in country {countryCodeA3} with {area_code} is {response.status_code}")
 
             if response.status_code == 201:
                 response_data = xmltodict.parse(response.text)
                 logging.info(f"Response from bandwidth for purchasing phone numbers: {response_data}")
             else:
-                logging.info(f"Error Response from bandwidth: {response.__dict__}")
+                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
 
         except Exception as e:
-            logging.info(f"Response Status Code received from bandwidth to purchase {order_quantity} phone number(s) in country {country_code_a3} with {area_code} - error: {e}")
-            logging.info(f"Response received from bandwidth to purchase {order_quantity} phone number(s) in country {country_code_a3} with {area_code} is {response.__dict__}")
-            logging.info(traceback.format_exc())
-
-        logging.info("Waiting for 10 seconds before fetching order details")
-        time.sleep(10)  # Wait for 10 seconds
+            logging.info(f"Response Status Code received from bandwidth to purchase {order_quantity} phone number(s) in country {countryCodeA3} with {area_code} - error: {e}")
+            logging.info(f"Response received from bandwidth to purchase {order_quantity} phone number(s) in country {countryCodeA3} with {area_code} is {getattr(response, '__dict__', None)}")
+            logging.info(logging.exception("Unhandled exception"))
 
         try:
             if response_data is not None and response_data.get("OrderResponse").get("OrderStatus") == "RECEIVED":
                 successful_order_id = response_data.get("OrderResponse").get("Order").get("id")
-                numbers = self.fetch_placed_purchased_order_details(country_code=country_code, order_id=successful_order_id)
+                logging.info(f"Order {successful_order_id} received, polling for completion (max 30s)")
+                result = self._poll_order_status(order_id=successful_order_id, country_code=cc, timeout=30, poll_interval=2)
 
-                if isinstance(numbers, str):
-                    numbers = [numbers]
+                if result is None or isinstance(result, dict):
+                    logging.warning(f"Order {successful_order_id} did not complete: {result}")
+                    return False
+
+                numbers = [result]
                 cleaned_numbers = list(map(cleanup_phone_number, numbers))
                 logging.info(f"Completed fetching order details: {cleaned_numbers}")
 
-                if not validate_phone_number(cleaned_numbers[0]):
+                if not cleaned_numbers:
+                    return False
+                if not validate_phone_number(cleaned_numbers[0], False):
                     raise BWNumberUnavailableError(f"Bandwidth returned an invalid/unavailable phone number {cleaned_numbers[0]!r} for order {successful_order_id}")
-
                 return self._cleanup_and_return_numbers(cleaned_numbers, quantity=1), successful_order_id
 
             else:
@@ -1513,7 +1802,7 @@ class SHBandwidthClient:
 
         except Exception as e:
             logging.info(f"Issue occurred in getting the phone number from response_data. Error: {e}")
-            raise
+            raise type(e) from e
 
     # Updated To Bandwidth-SDK 20.2.1
     def fetch_placed_purchased_order_details(self, country_code="US", order_id=None):
@@ -1522,7 +1811,7 @@ class SHBandwidthClient:
 
         Args:
             country_code:   The country code of the number we are trying to purchase
-            orderId:        The orderId received from Bandwidth after placing an order for phone number.
+            order_id:       The order id received from Bandwidth after placing an order for phone number.
 
         Returns:
             id: Upon successfully creating the message with bandwith API the id received in the response is returned
@@ -1619,47 +1908,48 @@ class SHBandwidthClient:
         if order_id is None:
             raise ValueError("Order Id cannot be none to fetch the purchase order details")
 
-        if country_code not in ("US", "CA", "AU"):
-            raise ValueError(f"Only numbers in US/CA/AU are supported, requested country: {country_code}")
-        elif country_code == "US" or country_code == "CA":
+        cc = resolve_bandwidth_inventory_country(country_code)
+        if cc in ("US", "CA"):
             endpoint = f"{str(self.bw_account_api_url_na)}/api/v2/accounts/{str(self.user_id_na)}/orders/{order_id}?tndetail=true"
-        elif country_code == "AU":
+        else:
             endpoint = f"{str(self.bw_account_api_url_au)}/api/v2/accounts/{str(self.user_id_au)}/orders/{order_id}?tndetail=true"
 
         try:
-            logging.info(f"Making Request to bandwidth to get order details for orderId: {order_id}")
-            response = requests.get(endpoint, headers=self._get_auth_header())
-            logging.info(f"Response from bandwidth to get order details for orderId: {order_id} is {response.status_code}")
+            logging.info(f"Making Request to bandwidth to get order details for order_id: {order_id}")
+            response = requests.get(endpoint, headers=self._get_auth_header(), timeout=BW_REQUEST_TIMEOUT)
+            logging.info(f"Response from bandwidth to get order details for order_id: {order_id} is {response.status_code}")
 
             if response.status_code == 200:
                 response_data = xmltodict.parse(response.text)
                 logging.info(f"Order Id details fetched are: {response_data}")
             else:
-                logging.info(f"In fetching order details {order_id} from bandwidth got Error Response : {response.__dict__}")
+                logging.info(f"In fetching order details {order_id} from bandwidth got Error Response : {getattr(response, '__dict__', None)}")
 
         except Exception as e:
             logging.info(f"In fetching order details {order_id} from bandwidth : - error: {e}")
-            logging.info(f"In fetching order details {order_id} from bandwidth Response received is {response.__dict__}")
-            logging.info(traceback.format_exc())
-            raise
+            logging.info(f"In fetching order details {order_id} from bandwidth Response received is {getattr(response, '__dict__', None)}")
+            logging.info(logging.exception("Unhandled exception"))
+            raise type(e) from e
 
         try:
             if response_data is not None and response_data.get("OrderResponse", {}).get("OrderStatus", {}) == "COMPLETE":
                 phone_number = response_data.get("OrderResponse", {}).get("CompletedNumbers", {}).get("TelephoneNumber", {}).get("FullNumber", {})
                 return phone_number
             if response_data is not None and response_data.get("OrderResponse", {}).get("OrderStatus", {}) == "RECEIVED":
-                message = response_data.get("OrderResponse", {}).get("ErrorList", {}).get("Error", {}).get("Description", {})
-                return message
+                error = response_data.get("OrderResponse", {}).get("ErrorList", {}).get("Error", {})
+                # Surfacing the code (not just the description) lets _poll_order_status tell
+                # "still pending" (5019) apart from a real failure.
+                return {"code": error.get("Code"), "description": error.get("Description")}
             else:
                 return None
 
         except Exception as e:
             logging.info(f"Issue occurred in getting the phone number from response_data. Error: {e}")
-            raise
+            raise type(e) from e
 
     # Not calling bandwidth API directly
     # Trying to download the images received from a Bandwidth gateway
-    # Using token and secret
+    # Uses token/secret Basic auth, or an OAuth2 bearer token when settings.BW_USE_OAUTH2 is set
     def get_media(self, url, out_filename=None, raw_data=False):
         """
         Fetches media file that was part of a MMS.
@@ -1679,9 +1969,9 @@ class SHBandwidthClient:
 
         try:
             if self.use_oauth2:
-                resp = requests.get(url, headers=self._get_oauth_bearer_header())
+                resp = requests.get(url, headers=self._get_oauth_bearer_header(), timeout=BW_REQUEST_TIMEOUT)
             else:
-                resp = requests.get(url, auth=(self.token, self.secret))
+                resp = requests.get(url, auth=(self.token, self.secret), timeout=BW_REQUEST_TIMEOUT)
         except requests.exceptions.RequestException as e:
             logging.info(f"Error while fetching media: {e}")
             return

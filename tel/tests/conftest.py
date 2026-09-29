@@ -93,3 +93,14 @@ def _import_stdlib_json_safely():
 
 # Execute early
 _import_stdlib_json_safely()
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _release_breaker_without_redis(monkeypatch):
+    """Keep the phone-release circuit breaker off any real Redis during unit tests."""
+    from .. import release_breaker
+
+    monkeypatch.setattr(release_breaker.settings, "REDIS", None, raising=False)
