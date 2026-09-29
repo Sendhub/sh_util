@@ -1,80 +1,91 @@
-# -*- coding: utf-8 -*-
-
 """SqlAlchemy sh_util db driver."""
 
-__author__ = 'Jay Taylor [@jtaylor]'
-# pylint: disable=C0415,C0103
+__author__ = "Jay Taylor [@jtaylor]"
+
 import logging
 import re
+
 import settings
 from sqlalchemy.sql.expression import bindparam, text
 
-# _argRe = re.compile(r'([^%])%s')
-_argRe = re.compile(r'(?<!%)%s|(\?)')
+_argRe = re.compile(r"(?<!%)%s|(\?)")
 
 
+def _normalize_sql_and_args(sql, args=None):
+    """Support callers that pass `(sql, args)` as the first argument."""
+    if isinstance(sql, tuple):
+        if len(sql) != 2:
+            raise ValueError("SQL tuple must be in the form (sql, args)")
+        inline_sql, inline_args = sql
+        if args not in (None, (), []):
+            raise ValueError("SQL args provided twice")
+        return inline_sql, inline_args
+    return sql, args
 
-def sqlAndArgsToText(sql, args=None):
-    """
-    Convert plain old combination of sql/args to SqlAlchemy `text` instance.
 
-    It seems ridiculous to have to do this, but I really want to use the
-    `text` instances to turn off auto-commit.
-    """
+def sql_and_args_to_text(sql, args=None):
+
+    sql, args = _normalize_sql_and_args(sql, args)
+
     if not args:
         return text(sql)
 
     bindparams = []
-    i = [-1]
-    # Using a list since we need to mutate the variable
-    # which isn't allowed with a direct variable reference.
+    i = -1
 
-    def nextBindSub(match):
-        i[0] += 1
-        binding = f'arg{i[0]}'
-        bindparams.append(bindparam(binding, args[i[0]]))
-        return f':{binding}'
+    def next_bind_sub(match):
+        nonlocal i
+        i += 1
+        name = f"arg{i}"
+        bindparams.append(bindparam(name, args[i]))
+        prefix = match.group(1) or ""
+        return f"{prefix}:{name}"
 
-    transformedSql = _argRe.sub(nextBindSub, sql)
-    return text(transformedSql).bindparams(*bindparams)
+    transformed_sql = _argRe.sub(next_bind_sub, sql)
+
+    clause = text(transformed_sql)
+    for bp in bindparams:
+        clause = clause.bindparams(bp)
+    return clause
 
 
 def connections():
     """Infer and return appropriate set of connections."""
     try:
-        from app import app
-    except ImportError:
-        from src.app import app
+        # Prefer the canonical package import to avoid importing src/app.py as
+        # a top-level module named "app" (which can result in a separate module
+        # namespace and an empty ScopedSessions registry).
+        from src.app import app as flask_app
+    except Exception:
+        from app import app as flask_app
 
-    # from flask.globals import current_app
-    print(app.engines, "engines")
-    return app.engines
+    logging.info(f"Engines: {flask_app.engines}")
+    return flask_app.engines
 
 
-def switchDefaultDatabase(name):
+def switch_default_database(name):
     """Swap in a different default database."""
     pass
 
 
-def getRealShardConnectionName(using):
+def get_real_shard_connection_name(using):
     """Lookup and return the ACTUAL connection name, never use 'default'."""
-    if using == 'default':
-        if hasattr(settings, 'DATABASE_DEFAULT_SHARD'):
+    if using == "default":
+        if hasattr(settings, "DATABASE_DEFAULT_SHARD"):
             using = settings.DATABASE_DEFAULT_SHARD
         else:
-            using = list(connections().keys())[0]
+            using = next(iter(connections()), None)
 
     return using
 
 
-def _dictfetchall(resultProxy):
+def _dictfetchall(result_proxy):
     """Returns all rows from a cursor as a dict."""
-    desc = list(resultProxy.keys())
-    return [dict(list(zip([col for col in desc], row))) for row in resultProxy.fetchall()]  # noqa
+    desc = list(result_proxy.keys())
+    return [dict(list(zip([col for col in desc], row))) for row in result_proxy.fetchall()]  # noqa
 
 
-def db_query(sql, args=None, as_dict=False, using='default',
-             force=False, debug=False):
+def db_query(sql, args=None, as_dict=False, using="default", force=False, debug=False):
     """
     Execute raw select queries.  Not tested or guaranteed to work with any
     other type of query.
@@ -82,33 +93,60 @@ def db_query(sql, args=None, as_dict=False, using='default',
     @param force boolean Defaults to False. Whether or not to force the
     named connection to be used.
     """
-    from ..import DEBUG
+    from .. import DEBUG
+
     try:
-        from app import ScopedSessions
-    except ImportError:
-        from src.app import ScopedSessions
+        from src.database import ScopedSessions
+    except Exception:
+        try:
+            from src.app import ScopedSessions
+        except Exception:
+            from app import ScopedSessions
+
+    sql, args = _normalize_sql_and_args(sql, args)
 
     if args is None:
-        args = tuple()
+        args = ()
 
     if force is False:
-        using = getRealShardConnectionName(using)
+        using = get_real_shard_connection_name(using)
+
+    # Safety net: avoid KeyError when the requested connection name isn't configured.
+    # Common in deployments where only one bind is initialized or names differ.
+    if using not in ScopedSessions:
+        fallback = next(iter(ScopedSessions), None)
+        if fallback is None:
+            raise RuntimeError("No database sessions configured (ScopedSessions is empty). Check DATABASE_URL / DATABASE_URLS and DB initialization logs.")
+        logging.warning(
+            "Requested DB session '%s' not configured; falling back to '%s'",
+            using,
+            fallback,
+        )
+        using = fallback
 
     if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_QUERY, using=%s ::\n%s %s',
-                     str(using), str(sql), str(args))
+        logging.debug(f"-- [DEBUG] DB_QUERY, using={using} ::\n{sql} {args}")
 
-    # resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args)
-    # .execution_options(autocommit=False))
-    resultProxy = ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
-    # resultProxy = ScopedSessions[using]().execute(sql, args)
+    ret = sql_and_args_to_text(sql, args)
 
-    res = _dictfetchall(resultProxy) if as_dict is True else resultProxy.fetchall()  # noqa
-    resultProxy.close()
-    return res
+    if isinstance(ret, tuple):
+        clause, params = ret
+    else:
+        clause, params = ret, None
+
+    if params:
+        result_proxy = ScopedSessions[using]().execute(clause, params)
+    else:
+        result_proxy = ScopedSessions[using]().execute(clause)
+
+    try:
+        res = _dictfetchall(result_proxy) if as_dict is True else result_proxy.fetchall()  # noqa
+        return res
+    finally:
+        result_proxy.close()
 
 
-def db_exec(sql, args=None, using='default', force=False, debug=False):
+def db_exec(sql, args=None, using="default", force=False, debug=False):
     """
     Execute a raw query on the requested database connection.
 
@@ -116,60 +154,79 @@ def db_exec(sql, args=None, using='default', force=False, debug=False):
     named connection to be used.
     """
     from sqlalchemy.exc import InvalidRequestError
-    from ..import DEBUG
+
+    from .. import DEBUG
 
     try:
-        from app import ScopedSessions
-    except ImportError:
-        from src.app import ScopedSessions
+        from src.database import ScopedSessions
+    except Exception:
+        try:
+            from src.app import ScopedSessions
+        except Exception:
+            from app import ScopedSessions
+
+    sql, args = _normalize_sql_and_args(sql, args)
 
     if args is None:
-        args = tuple()
+        args = ()
 
     if force is False:
-        using = getRealShardConnectionName(using)
+        using = get_real_shard_connection_name(using)
+
+    if using not in ScopedSessions:
+        fallback = next(iter(ScopedSessions), None)
+        if fallback is None:
+            raise RuntimeError("No database sessions configured (ScopedSessions is empty). Check DATABASE_URL / DATABASE_URLS and DB initialization logs.")
+        logging.warning(
+            "Requested DB session '%s' not configured; falling back to '%s'",
+            using,
+            fallback,
+        )
+        using = fallback
 
     if DEBUG is True or debug is True:
-        logging.info('-- [DEBUG] DB_EXEC, using=%s ::\n%s',
-                     str(using), str(sql))
+        logging.debug("-- [DEBUG] DB_EXEC, using={using} ::\n{sql}")
 
-    txCandidate = sql.strip().rstrip(';').strip().lower()
-    if txCandidate == 'begin':
+    tx_candidate = sql.strip().rstrip(";").strip().lower()
+    if tx_candidate == "begin":
         try:
             ScopedSessions[using]().begin()
         except InvalidRequestError:
             pass
-    elif txCandidate == 'rollback':
+    elif tx_candidate == "rollback":
         ScopedSessions[using]().rollback()
-    elif txCandidate == 'commit':
+    elif tx_candidate == "commit":
         ScopedSessions[using]().commit()
     else:
-        # statement = sqlAndArgsToText(sql, args)
-        # .execution_options(autocommit=False)
-        # ScopedSessions[using]().execute(statement)
-        ScopedSessions[using]().execute(sqlAndArgsToText(sql, args))
-        # ScopedSessions[using]().execute(sql, args)
+        ret = sql_and_args_to_text(sql, args)
+
+        if isinstance(ret, tuple):
+            clause, params = ret
+        else:
+            clause, params = ret, None
+
+        if params:
+            ScopedSessions[using]().execute(clause, params)
+        else:
+            ScopedSessions[using]().execute(clause)
 
 
 _saAttrsToPsql = (
-    ('database', 'dbname', 'sendhub'),
-    ('username', 'user', None),
-    ('password', 'password', None),
-    ('host', 'host', None),
-    ('port', 'port', '5432'),
+    ("database", "dbname", "sendhub"),
+    ("username", "user", None),
+    ("password", "password", None),
+    ("host", "host", None),
+    ("port", "port", "5432"),
 )
 
 
-def getPsqlConnectionString(connectionName, secure=True):
+def get_psql_connection_string(connection_name, secure=True):
     """Generate a PSQL-format connection string for a given connection."""
-    assert connectionName in settings.DATABASE_URLS
+    assert connection_name in settings.DATABASE_URLS
 
-    engine = connections()[connectionName]
+    engine = connections()[connection_name]
 
-    out = 'sslmode=require' if secure is True else ''
+    psql_tuples = ["{0}={1}".format(t[1], getattr(engine.url, t[0]) or t[2]) for t in _saAttrsToPsql]
 
-    psqlTuples = list(map(lambda key, param, default: '{0}={1}'.format(
-        param, getattr(engine.url, key) or default), _saAttrsToPsql))
-
-    out = ' '.join(psqlTuples) + (' sslmode=require' if secure is True else '')
+    out = " ".join(psql_tuples) + (" sslmode=require" if secure is True else "")
     return out

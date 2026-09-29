@@ -1,17 +1,13 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 Utility to enable generation of SELECT SQL which executes to INSERT SQL.
 
 NB: Only tested for compatibility with Postgres.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
-# pylint: disable=C0415,C0103
+__author__ = "Jay Taylor [@jtaylor]"
 
 
-def select2insert(table, description, whereClause=None):
+def select2insert(table, description, where_clause=None):
     """
     Generate a SELECT statement that can be executed to produce an
     INSERT statement for each matching column.
@@ -51,53 +47,48 @@ def select2insert(table, description, whereClause=None):
     || \\',\\' || quote_nullable("date_joined") || \\');\\' FROM "auth_user";'
 
     """
-    columns = ','.join(['"{0}"'.format(tup[0]) for tup in description])
+    columns = ",".join([f'"{tup[0]}"' for tup in description])
 
-    values = " || ',' || ".join(['quote_nullable("{0}")'.format(tup[0]) for tup in description])  # noqa
+    values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
-    if whereClause is not None and \
-            not whereClause.lower().strip().startswith('where '):
-        whereClause = 'WHERE {0}'.format(whereClause)
+    if where_clause is not None and not where_clause.lower().strip().startswith("where "):
+        where_clause = f"WHERE {where_clause}"
 
-    where = '{0}'.format(whereClause) if whereClause is not None else ''
+    where = f"{where_clause}" if where_clause is not None else ""
 
-    intermediateSql = \
-        '''SELECT 'INSERT INTO "{table}" ({columns}) VALUES
-        (' || {values} || ');' FROM "{table}"{where};''' \
-        .format(table=table, columns=columns, values=values, where=where)
+    intermediate_sql = """SELECT 'INSERT INTO "{table}" ({columns}) VALUES
+        (' || {values} || ');' FROM "{table}"{where};""".format(table=table, columns=columns, values=values, where=where)
 
-    return intermediateSql
+    return intermediate_sql
 
 
-def select2multiInsert(using, table, description, whereClause=None):
+def select2multi_insert(using, table, description, where_clause=None):
     """Evaluates intermediate SQL and returns combined
     multi-insert statement."""
     from . import db_query
 
-    values = " || ',' || ".join(['quote_nullable("{0}")'.format(tup[0]) for tup in description])  # noqa
+    values = " || ',' || ".join([f'quote_nullable("{tup[0]}")' for tup in description])  # noqa
 
-    if whereClause is not None and \
-            not whereClause.lower().strip().startswith('where '):
-        whereClause = 'WHERE {0}'.format(whereClause)
+    if where_clause is not None and not where_clause.lower().strip().startswith("where "):
+        where_clause = f"WHERE {where_clause}"
 
-    where = '{0}'.format(whereClause) if whereClause is not None else ''
+    where = f"{where_clause}" if where_clause is not None else ""
 
-    intermediateSql = \
-        '''SELECT '(' || {values} || ')' FROM
-        "{table}"{where};'''.format(values=values, table=table, where=where)
+    intermediate_sql = """SELECT '(' || {values} || ')' FROM
+        "{table}"{where};""".format(values=values, table=table, where=where)
 
-    actualValues = ','.join([tup[0] for tup in db_query(intermediateSql, using=using)])  # noqa
+    actualValues = ",".join([tup[0] for tup in db_query(intermediate_sql, using=using)])  # noqa
     if len(actualValues) == 0:
         return None
 
-    columns = ','.join(['"{0}"'.format(tup[0]) for tup in description])
+    columns = ",".join([f'"{tup[0]}"' for tup in description])
 
-    finalSql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};' \
-        .format(table=table, columns=columns, actualValues=actualValues)
+    final_sql = 'INSERT INTO "{table}" ({columns}) VALUES {actualValues};'.format(table=table, columns=columns, actualValues=actualValues)
 
-    return finalSql
+    return final_sql
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

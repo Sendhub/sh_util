@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 """
 Translate an input string to replace any ec2 hostname with the bare ip.
 
@@ -15,32 +13,37 @@ e.g.: If the input is
 'This should come back unchanged'
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
+__author__ = "Jay Taylor [@jtaylor]"
 
 import re as _re
 
 _ec2HostnameRe = _re.compile(
-    r'''
+    r"""
         ^(?P<start>.*)
-        ec2-(?P<ip>(?:\d+-?){4,4})\.compute-\d\.amazonaws\.com
+        ec2-(?P<ip>(?:\d+-?){4})\.compute-\d\.amazonaws\.com
         (?P<end>.*)$
-    ''',
-    _re.X
+    """,
+    _re.X,
 )
 
 
-def ec2HostnameToIp(s):
+def ec2_hostname_to_ip(s):
     """
-    Translate an input string to replace any ec2 hostname with the bare ip.
+    Translating an input string to replace any EC2 hostname with the bare IP.
 
-    e.g. If the input is
+    Example:
+    If the input is
     "postgres://*:*@ec2-107-22-243-182.compute-1.amazonaws.com:5432/dbname",
-    the output will be "postgres://*:*@107.22.243.182:5432/d67shu8760iutg"
+    the output will be "postgres://*:*@107.22.243.182:5432/dbname"
     """
+
+    # Attempting to match an EC2 hostname in the input string
     m = _ec2HostnameRe.match(s)
     while m is not None:
-        ip = m.group('ip').replace('-', '.')
-        s = '{0}{1}{2}'.format(m.group('start'), ip, m.group('end'))
+        # Replacing the matched EC2 hostname with the bare IP
+        ip = m.group("ip").replace("-", ".")
+        s = f"{m.group('start')}{ip}{m.group('end')}"
+        # Continuing to search for additional EC2 hostnames
         m = _ec2HostnameRe.match(s)
 
     return s

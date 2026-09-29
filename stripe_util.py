@@ -1,22 +1,40 @@
-"""stripe utils """
-__author__ = 'brock'
-# pylint: disable=C0415,E1101,E0611,W0212
+"""
+Stripe utilities module.
+
+This module provides utility functions for working with Stripe objects, including
+conversion between Stripe objects and Python dictionaries.
+"""
+
+__author__ = "brock"
+
 import ast
-import stripe as _stripe
 
 
 def stripe_object_to_dict(stripe_obj):
-    """converts stripe object to python dictionary """
+    """
+    Converts a Stripe object to a Python dictionary.
+
+    This function recursively serializes Stripe objects into Python dictionaries,
+    ensuring that nested Stripe objects and lists are properly handled.
+
+    Args:
+        stripe_obj: The Stripe object to convert.
+
+    Returns:
+        dict: A Python dictionary representation of the Stripe object.
+    """
+    # Import moved here to avoid missing package dependency
     from stripe import StripeObject
 
     def _serialize(_o):
+        # Checking the type of object and serializing accordingly.
         if isinstance(_o, StripeObject):
             return stripe_object_to_dict(_o)
         if isinstance(_o, list):
             return [_serialize(i) for i in _o]
         return _o
 
-    _d = dict()
+    _d = {}
     for k in sorted(stripe_obj._values):
         _v = getattr(stripe_obj, k)
         _v = _serialize(_v)
@@ -25,8 +43,30 @@ def stripe_object_to_dict(stripe_obj):
 
 
 def dict_to_stripe_object(data):
-    """converts python dictionary to stripe object"""
+    """
+    Converts a Python dictionary to a Stripe object.
+
+    This function parses a dictionary string into a dictionary and uses the
+    Stripe API service to convert it into a Stripe object.
+
+    Args:
+        data (str): The dictionary string to convert.
+
+    Returns:
+        StripeObject: The resulting Stripe object.
+    """
+
+    # Import moved here to avoid hard dependency at import time.
+    try:
+        from stripe_util.stripe_service import StripeAPIService
+    except ImportError as exc:
+        raise ImportError("stripe_util.stripe_service is required for dict_to_stripe_object") from exc
+
+    # Parsing the dictionary string into a Python dictionary.
     data_dict = ast.literal_eval(data)
 
-    stripe_obj = _stripe.convert_to_stripe_object(data_dict, _stripe.api_key)
+    # Using the Stripe API service to convert the dictionary to a Stripe object.
+    obj = StripeAPIService()
+    stripe_obj = obj.convert_to_stripe_object(data_dict)
+
     return stripe_obj

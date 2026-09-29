@@ -1,29 +1,41 @@
-# encoding: utf-8
+"""
+Countable List module.
 
-"""Countable List class."""
+This module defines the `CountableList` class, which is used to optimize query performance.
 
-__author__ = 'Jay Taylor [@jtaylor]'
+Author:
+    Jay Taylor [@jtaylor]
+"""
 
 
 class CountableList(list):
     """
     Countable List class.
 
-    This is used primarily to short-circuit the high query-volume which happens
-    by default with TastyPie.
+    This class is designed to optimize high query-volume scenarios, such as those encountered with TastyPie.
     """
 
     def __init__(self, the_list, count_value, meta=None):
         """
-        Pass in the list as well as the desired count value.
+        Initializes a CountableList instance.
 
-        @param meta dict, defaults to {}.  Additional miscellaneous meta-data.
+        Args:
+            the_list (list): The list of items to initialize the CountableList with.
+            count_value (int): The desired count value.
+            meta (dict, optional): Additional metadata. Defaults to an empty dictionary.
         """
+
         super().__init__()
         self.count_value = count_value
         self.extend(the_list)
         self.meta = {} if meta is None else meta
 
     def count(self):
-        """@return the number of records."""
+        """
+        Returns the number of records.
+
+        Returns:
+            int: The count value.
+        """
+
         return self.count_value

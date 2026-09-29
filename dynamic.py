@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 Real-world use case:
 --------------------
@@ -25,9 +22,7 @@ declaration of class `User`, so I don't have to put each of the _str functions
 in manually.
 """
 
-__author__ = 'Jay Taylor [@jtaylor]'
-
-# pylint: disable=W0107,R0903
+__author__ = "Jay Taylor [@jtaylor]"
 
 
 def dynamically_generate_transformed_attributes(transform_fn, suffix, *attributes):  # noqa
@@ -107,8 +102,9 @@ def dynamically_generate_transformed_attributes(transform_fn, suffix, *attribute
     foo: bar/<type 'str'>, oof: rab/<type 'str'>
     """
 
-    class GeneratedClass():
+    class GeneratedClass:
         """Class which will have properties dynamically set on it."""
+
         pass
 
     def generate_transformed_property(attr):
@@ -116,32 +112,27 @@ def dynamically_generate_transformed_attributes(transform_fn, suffix, *attribute
         Generate and return a property function to access the transformation of
         the named attribute.
         """
+
         @property
         def wrapper(self):
             """Generated property function to alias attribute."""
             return transform_fn(getattr(self, attr))
+
         return wrapper
 
     # Generate and attach "suffix" property alias for each specified attribute.
     for attr in attributes:
-        setattr(
-            GeneratedClass,
-            '{0}{1}'.format(attr, suffix) if isinstance(suffix, str) else
-            suffix(attr), generate_transformed_property(attr)
-        )
+        setattr(GeneratedClass, f"{attr}{suffix}" if isinstance(suffix, str) else suffix(attr), generate_transformed_property(attr))
 
     return GeneratedClass
 
 
 def with_str_attrs(*attributes):
     """Convenience method."""
-    return dynamically_generate_transformed_attributes(
-                                                        str,
-                                                        '_str',
-                                                        *attributes
-                                                        )
+    return dynamically_generate_transformed_attributes(str, "_str", *attributes)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

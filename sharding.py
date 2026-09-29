@@ -1,107 +1,167 @@
-# -*- coding: utf-8 -*-
+"""
+Sharding resources module.
 
-"""Sharding resources."""
+This module provides utilities for managing sharded resources, including
+shard connections, shard event handling, and shard-based caching.
+"""
 
-__author__ = 'Jay Taylor [@jtaylor]'
-# pylint: disable=C0415,W0212,W1202,R0903,R1711,E0402,C0301,C0103,E1101
+__author__ = "Jay Taylor [@jtaylor]"
+
 import logging
+
+# pylibmc and settings imports kept at module level but note: pylibmc may cause issues if not installed
+# Consider moving to function level if package availability is a concern
 import pylibmc
 import settings
-from sh_util.db import connections
-from .singleton import Singleton
+
+from .db import connections
 from .memcache import get_memcache_client
 from .retry import retry
-# from .functional import Memoizewithexpiry
+from .singleton import Singleton
 
 
-def coerceIdToShardName(shardOrShardId):
-    """Coerce a physical shard id to be the name of the shards connection."""
-    if str(shardOrShardId).isdigit():
-        return 'shard_{0}'.format(shardOrShardId)
-    return shardOrShardId
+def coerce_id_to_shard_name(shard_or_shard_id):
+    """
+    Coercing a physical shard ID to the name of the shard's connection.
+
+    Args:
+        shardOrShardId (str or int): The shard ID or name.
+
+    Returns:
+        str: The name of the shard connection.
+    """
+
+    if str(shard_or_shard_id).isdigit():
+        return f"shard_{shard_or_shard_id}"
+    return shard_or_shard_id
 
 
 class ShardException(Exception):
-    """Base shard exception."""
+    """
+    Base exception for shard-related errors.
+    """
 
 
 class ShardLookupFailure(ShardException):
-    """Raised when a shard lookup fails."""
+    """
+    Exception raised when a shard lookup fails.
+    """
 
 
-class ShardedConnection(object):
-    """Shard connection resoure for `with` statements."""
-    def __init__(self, connectionNameOrId):
+class ShardedConnection:
+    """
+    Managing shard connections for `with` statements.
+
+    This class allows switching the default database connection to a specific
+    shard for the duration of a `with` block.
+    """
+
+    def __init__(self, connection_name_or_id):
         """
-        @param connection_name str or int Name or id of database connection
-            to use.
-        """
-        self.connectionName = 'shard_{0}'.format(connectionNameOrId) if \
-            isinstance(connectionNameOrId, int) or \
-            isinstance(connectionNameOrId, int) or \
-            connectionNameOrId.isdigit() is True else connectionNameOrId
+        Initializing the shard connection.
 
-        # Keey a reference to the original connection so it can be restored
-        # afterwards.
-        self.originalShard = None
+        Args:
+            connectionNameOrId (str or int): The name or ID of the database
+                connection to use.
+        """
+
+        self.connection_name = f"shard_{connection_name_or_id}" if isinstance(connection_name_or_id, int) or connection_name_or_id.isdigit() else connection_name_or_id
+
+        # Keeping a reference to the original connection to restore it later.
+        self.original_shard = None
 
     def __enter__(self):
         """
-        Start of `with` statement.  Change the default connection to the
-        specified shard for the duration of the `with` block.
+        Starting the `with` statement by switching to the specified shard.
+
+        Returns:
+            str: The name of the shard connection.
         """
-        from .db import switchDefaultDatabase
-        self.originalShard = ShardedResource.getCurrentShard()
-        switchDefaultDatabase(self.connectionName)
-        return self.connectionName
+
+        from .db import switch_default_database
+
+        self.original_shard = ShardedResource.get_current_shard()
+        switch_default_database(self.connection_name)
+        return self.connection_name
 
     def __exit__(self, _type, value, traceback):
         """
-        End of `with` statement.  Restore the original connection as the
-        default.
+        Ending the `with` statement by restoring the original shard connection.
         """
-        from .db import switchDefaultDatabase
-        switchDefaultDatabase(self.originalShard)
+
+        from .db import switch_default_database
+
+        switch_default_database(self.original_shard)
 
 
-def userIdToLogicalShardId(userId):
-    """Takes a user id and returns the logical shard id."""
-    return int(userId) % settings.NUM_LOGICAL_SHARDS
+def user_id_to_logical_shard_id(user_id):
+    """
+    Calculating the logical shard ID for a given user ID.
+
+    Args:
+        userId (int): The user ID.
+
+    Returns:
+        int: The logical shard ID.
+    """
+
+    return int(user_id) % settings.NUM_LOGICAL_SHARDS
 
 
 class ShardEvent(Singleton):
-    """Singleton for shard event notification publishing and subscriptions."""
+    """
+    Singleton for managing shard event notifications.
+
+    This class allows publishing and subscribing to shard events.
+    """
 
     def __init__(self):
-        """Initialize subscribers."""
-        super(ShardEvent, self).__init__()
+        """
+        Initializing the shard event manager with an empty subscriber list.
+        """
+        super().__init__()
         self.subscribers = {}
 
     def publish(self, event, data):
-        """Publish a new event."""
-        # Notify event subscribers.
+        """
+        Publishing a new event to notify subscribers.
+
+        Args:
+            event (str): The name of the event.
+            data: The data associated with the event.
+        """
+
+        # Notifying event-specific subscribers.
         for subscriber in self.subscribers.get(event, []):
             subscriber(data)
 
-        # Notify global subscribers.
-        for subscriber in self.subscribers.get('*', []):
+        # Notifying global subscribers.
+        for subscriber in self.subscribers.get("*", []):
             subscriber(event, data)
 
     def subscribe(self, event, fn):
         """
-        Subscribe a function to an event.  To subscribe to all events, use
-        the event name '*'.
+        Subscribing a function to an event.
 
-        @param event str Event name.
-        @param fn Function to be subscribed.
+        Args:
+            event (str): The name of the event.
+            fn (callable): The function to subscribe.
         """
+
         if event not in self.subscribers:
             self.subscribers[event] = []
 
         self.subscribers[event].append(fn)
 
     def unsubscribe(self, event, fn):
-        """Unsubscribe a function from an event."""
+        """
+        Unsubscribing a function from an event.
+
+        Args:
+            event (str): The name of the event.
+            fn (callable): The function to unsubscribe.
+        """
+
         if event not in self.subscribers:
             return
 
@@ -112,286 +172,312 @@ class ShardEvent(Singleton):
 
 
 # Prune connection keys down to only shard connections.
-_shards = [c for c in connections() if c.startswith('shard_')]
+# Lazy initialization to avoid import errors when parent app is not yet configured
+_shards = None
 
 
-class ShardedResource(object):
-    """Determine which shard a given resource lives on."""
+def _get_shards():
+    """Lazy initialization of shards list."""
+    global _shards
+    if _shards is None:
+        try:
+            _shards = [c for c in connections() if c.startswith("shard_")]
+        except (ImportError, AttributeError):
+            # Parent app not configured yet, return empty list
+            _shards = []
+    return _shards
+
+
+class ShardedResource:
+    """
+    Managing shard resources and determining shard locations.
+    """
 
     @staticmethod
-    def getCurrentShard():
-        """Determine and return the name of the current shard."""
-        for c in ShardedResource.allShardConnectionNames():
-            if settings.DATABASES[c] == settings.DATABASES['default']:
+    def get_current_shard():
+        """
+        Determining and returning the name of the current shard.
+
+        Returns:
+            str: The name of the current shard.
+
+        Raises:
+            Exception: If no active shard is found.
+        """
+
+        for c in ShardedResource.all_shard_connection_names():
+            if settings.DATABASES[c] == settings.DATABASES["default"]:
                 return c
 
-        raise Exception('No active shard was found')
+        raise LookupError("No active shard was found")
 
     @staticmethod
-    def shardNameToId(shard):
+    def shard_name_to_id(shard):
         """
-        Extract the shard id from the shard connection name.
+        Extracting the shard ID from the shard connection name.
 
-        @return int containing the shard id
+        Args:
+            shard (str): The name of the shard connection.
+
+        Returns:
+            int: The shard ID.
         """
-        return int(shard[shard.rindex('_') + 1:])
+
+        return int(shard[shard.rindex("_") + 1 :])
 
     @staticmethod
-    def shardCachePrefix(model, column):
+    def shard_cache_prefix(model, column):
         """
-        Generate a shard cache prefix for a given model and column.
+        Generating a shard cache prefix for a given model and column.
 
-        @param model Model class object.
-        @param column String containing the relvent column/field name.
+        Args:
+            model: The model class object.
+            column (str): The relevant column/field name.
+
+        Returns:
+            str: The shard cache prefix.
         """
-        return 'shard:{0}-{1}:'.format(model.__name__, column)
+
+        return f"shard:{model.__name__}-{column}:"
 
     @staticmethod
-    def shardCacheKey(model, column, value):
+    def shard_cache_key(model, column, value):
         """
-        Generate a shard cache prefix for a given model and column.
+        Generating a shard cache key for a given model, column, and value.
 
-        @param model Model Class object.
-        @param column str String containing the relvent column/field name.
-        @param value Any unique part of key.
+        Args:
+            model: The model class object.
+            column (str): The relevant column/field name.
+            value: The unique part of the key.
 
-        @return str Key.
+        Returns:
+            str: The shard cache key.
         """
-        return 'shard:{0}-{1}:{2}'.format(model.__name__, column, value)
+
+        return f"shard:{model.__name__}-{column}:{value}"
 
     @staticmethod
-    def _cacheSet(key, value):
+    def _cache_set(key, value):
         """Set a value in the cache."""
         try:
             cli = get_memcache_client()
             value = cli.set(key, value)
 
         except pylibmc.Error as e:
-            logging.info('ShardedResource._cacheSet error: %s', str(e))
+            logging.info(f"ShardedResource._cacheSet error: {e}")
 
     @staticmethod
-    def _cacheGet(key):
+    def _cache_get(key):
         """Get a value from the cache."""
         try:
             cli = get_memcache_client()
             return cli.get(key)
 
         except pylibmc.Error as e:
-            logging.info('ShardedResource._cacheSet error: %s', str(e))
+            logging.info(f"ShardedResource._cacheSet error: {e}")
             return None
 
     @staticmethod
-    def warmShardIdCache(model, column):
+    def warm_shard_id_cache(model, column):
         """Warm the cache mapping of a model's column to a shard id."""
-        prefix = ShardedResource.shardCachePrefix(model, column)
+        prefix = ShardedResource.shard_cache_prefix(model, column)
 
         try:
             cli = get_memcache_client()
 
-            for shard in _shards:
-                shardId = str(ShardedResource.shardNameToId(shard))
+            for shard in _get_shards():
+                shard_id = str(ShardedResource.shard_name_to_id(shard))
 
-                values = model.objects.using(shard) \
-                    .only(column).values_list(column, flat=True)
+                values = model.objects.using(shard).only(column).values_list(column, flat=True)
 
-                mapping = dict([(str(v), shardId) for v in values])
+                mapping = {str(v): shard_id for v in values}
 
                 if len(mapping) > 0:
                     cli.set_multi(mapping, key_prefix=prefix)
 
         except pylibmc.Error as e:
-            logging.info('ShardedResource.warmShardCache :: memcache '
-                         'error: %s', str(e))
+            logging.info(f"ShardedResource.warmShardCache :: memcache error: {e}")
 
     @retry(tries=3)
     @staticmethod
-    def setShardId(model, column, value, shardId):
+    def set_shard_id(model, column, value, shard_id):
         """
         Explicitly set the location for a model/column/value in the cache.
         """
         try:
             cli = get_memcache_client()
-            key = ShardedResource.shardCacheKey(model, column, value)
-            cli.set(key, str(shardId))
+            key = ShardedResource.shard_cache_key(model, column, value)
+            cli.set(key, str(shard_id))
 
             return True
 
         except pylibmc.Error as e:
-            logging.error('memcache error: %s', str(e))
+            logging.error(f"memcache error: {e}")
             return False
 
     @staticmethod
-    def findShardId(model, column, value, useCache=True):
+    def find_shard_id(model, column, value, use_cache=True):
         """
-        Determine which shard a record lives on.
+        Determining which shard a record resides on.
 
-        @param model Model class to filter with.
-        @param column String name of column to filter on.
-        @param value Any Value of column to match.
-        @param useCache Boolean defaults to True. Whether or not to use the
-            cache.
+        Args:
+            model: The model class to filter with.
+            column (str): The name of the column to filter on.
+            value: The value of the column to match.
+            useCache (bool, optional): Whether to use the cache. Defaults to True.
 
-        @return int Shard id, or None if record not located.
+        Returns:
+            int: The shard ID where the record is located.
+
+        Raises:
+            ShardLookupFailure: If the record is not found on any shard.
         """
-        key = ShardedResource.shardCacheKey(model, column, value)
 
-        if useCache is True:
-            cached = ShardedResource._cacheGet(key)
+        key = ShardedResource.shard_cache_key(model, column, value)
+
+        if use_cache is True:
+            # Attempting to retrieve the shard ID from the cache.
+            cached = ShardedResource._cache_get(key)
             if cached is not None:
                 return int(cached)
 
-        for shard in _shards:
+        # Iterating through all shards to locate the record.
+        for shard in _get_shards():
             n = model.objects.using(shard).filter(**{column: value}).count()
             if n > 0:
-                shardId = ShardedResource.shardNameToId(shard)
-                if useCache is True:
-                    ShardedResource._cacheSet(key, str(shardId))
-                logging.info('FOUND %s.%s=%s on shardId=%s',
-                             str(model.__name__), str(column), str(value),
-                             str(shardId))
-                return shardId
+                shard_id = ShardedResource.shard_name_to_id(shard)
+                if use_cache is True:
+                    # Caching the shard ID for future lookups.
+                    ShardedResource._cache_set(key, str(shard_id))
+                logging.info(f"FOUND {model.__name__}.{column}={value} on shardId={shard_id}")
+                return shard_id
 
-        # Not found
-        raise ShardLookupFailure(
-            'No shard containing {0}.{1}="{2}" found'.format(
-                model.__name__,
-                column,
-                value
-            )
-        )
+        # Raising an exception if the record is not found on any shard.
+        raise ShardLookupFailure(f'No shard containing {model.__name__}.{column}="{value}" found')
 
     @staticmethod
-    def _realUserIdToPhysicalShardId(userId):
+    def _real_user_id_to_physical_shard_id(user_id):
         """
         Query the db to determine which physical shard a user-id exists on.
         """
         from sh_util.db import db_query
 
-        res = db_query(
-            'SELECT "physical_shard_id" FROM "LogicalShard" WHERE "id" = {0}'
-            .format(userIdToLogicalShardId(userId)),
-            using='shard_1'
-        )
+        res = db_query('SELECT "physical_shard_id" FROM "LogicalShard" WHERE "id" = {}'.format(user_id_to_logical_shard_id(user_id)), using="shard_1")
 
         if len(res) == 0 or len(res[0]) == 0:
-            raise ShardLookupFailure(
-                'Unable to find shard for user_id={0}'.format(userId)
-            )
+            raise ShardLookupFailure(f"Unable to find shard for user_id={user_id}")
 
-        physicalShardId = res[0][0]
+        physical_shard_id = res[0][0]
 
-        return physicalShardId
+        return physical_shard_id
 
     @staticmethod
     # @TODO MEMOIZATION TEMPORARILY DISABLED
     # @Memoizewithexpiry(180)
-    def _cachingUserIdToPhysicalShardId(userId):
+    def _caching_user_id_to_physical_shard_id(user_id):
         """Memoizing function to algorythmically resolve
         user-id to shard-id."""
-        logicalShardId = userIdToLogicalShardId(userId)
+        logical_shard_id = user_id_to_logical_shard_id(user_id)
 
         try:
-            key = 'logicalShard:{0}'.format(logicalShardId)
+            key = f"logicalShard:{logical_shard_id}"
             value = get_memcache_client().get(key)
             if value is not None:
                 return value
 
-            shardId = ShardedResource._realUserIdToPhysicalShardId(userId)
-            get_memcache_client().set(key, shardId, time=180)
+            shard_id = ShardedResource._real_user_id_to_physical_shard_id(user_id)
+            get_memcache_client().set(key, shard_id, time=180)
 
         except pylibmc.Error:
-            if 'shardId' not in vars():
-                shardId = ShardedResource._realUserIdToPhysicalShardId(userId)
+            if "shard_id" not in vars():
+                shard_id = ShardedResource._real_user_id_to_physical_shard_id(user_id)
 
-        return shardId
-
-    @staticmethod
-    def userIdToPhysicalShardId(userId, useCache=True):
-        """
-        Wrapper around userIdToPhysicalShardId to allow cache and memoization
-        to be disabled.
-        """
-        if useCache is not True:
-            return ShardedResource._realUserIdToPhysicalShardId(userId)
-
-        return ShardedResource._cachingUserIdToPhysicalShardId(userId)
+        return shard_id
 
     @staticmethod
-    def allShardConnectionNames():
+    def user_id_to_physical_shard_id(user_id, use_cache=True):
+        """
+        Wrapper around userIdToPhysicalShardId to allow cache and memoization to be disabled.
+        """
+        if use_cache is not True:
+            return ShardedResource._real_user_id_to_physical_shard_id(user_id)
+
+        return ShardedResource._caching_user_id_to_physical_shard_id(user_id)
+
+    @staticmethod
+    def all_shard_connection_names():
         """Get all shard connection names."""
-        return _shards
+        return _get_shards()
 
     @staticmethod
-    def _subscribeToShardEvents():
+    def _subscribe_to_shard_events():
         """Subscribe to "movedUser" shard event."""
 
-        def movedUser(data):
+        def moved_user(data):
             """Trigger memcache updates when a user is moved."""
             from django.contrib.auth.models import User
             from main.models import ExtendedUser, PhoneNumber
 
-            userId = data['user_id']
-            shardId = str(data['shardId'])
+            user_id = data["user_id"]
+            shard_id = str(data["shardId"])
 
-            ShardedResource.setShardId(User, 'user_id', userId, shardId)
+            ShardedResource.set_shard_id(User, "user_id", user_id, shard_id)
 
-            ShardedResource.setShardId(
-                ExtendedUser,
-                'user_id',
-                userId,
-                shardId
-            )
+            ShardedResource.set_shard_id(ExtendedUser, "user_id", user_id, shard_id)
 
-            with ShardedConnection(shardId) as _:
-                number = ExtendedUser.objects.get(user=userId) \
-                    .twilio_phone_number.number
-                ShardedResource.setShardId(
-                    PhoneNumber,
-                    'number',
-                    number,
-                    shardId
-                )
+            with ShardedConnection(shard_id) as _:
+                number = ExtendedUser.objects.get(user=user_id).twilio_phone_number.number
+                ShardedResource.set_shard_id(PhoneNumber, "number", number, shard_id)
 
-        ShardEvent().subscribe('movedUser', movedUser)
+        ShardEvent().subscribe("movedUser", moved_user)
 
 
-ShardedResource()._subscribeToShardEvents()
+ShardedResource()._subscribe_to_shard_events()
+
+userIdToShardName = lambda user_id: f"shard_{ShardedResource.user_id_to_physical_shard_id(user_id)}"  # noqa
 
 
-userIdToShardName = lambda userId: 'shard_{0}'.format(ShardedResource.userIdToPhysicalShardId(userId))  # noqa
+class ShardedAuthenticationMiddleware:
+    """
+    Middleware for shard selection in Django.
 
+    This middleware overrides the stock Django authentication middleware to
+    select the appropriate shard based on the user ID.
+    """
 
-class ShardedAuthenticationMiddleware(object):
-    """Shard selection django middleware."""
     @staticmethod
     def process_request(request):
-        """Override for the stock django authentication middleware."""
-        from django.contrib.auth import get_user, SESSION_KEY
-        # from django.contrib import auth
+        """
+        Processing the incoming request to select the appropriate shard.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            None
+        """
+
+        from django.contrib.auth import SESSION_KEY, get_user
         from django.utils.functional import SimpleLazyObject
 
-        assert hasattr(request, 'session'), 'The Django authentication ' \
-            'middleware requires session middleware to be installed. Edit ' \
-            'your MIDDLEWARE_CLASSES setting to insert ' \
-            '"django.contrib.sessions.middleware.SessionMiddleware".'
+        assert hasattr(request, "session"), (
+            'The Django authentication middleware requires session middleware to be installed. Edit your MIDDLEWARE_CLASSES setting to insert "django.contrib.sessions.middleware.SessionMiddleware".'
+        )
 
-        userId = int(request.session.get(SESSION_KEY, -1))
+        user_id = int(request.session.get(SESSION_KEY, -1))
 
-        if userId != -1:
-            shardId = ShardedResource().userIdToPhysicalShardId(userId)
+        if user_id != -1:
+            shard_id = ShardedResource().user_id_to_physical_shard_id(user_id)
 
-            logging.info('[SHARD-SELECTOR] Selecting shard #%s for '
-                         'user_id=%s', str(shardId), str(userId))
+            logging.info("[SHARD-SELECTOR] Selecting shard #%s for user_id=%s", str(shard_id), str(user_id))
 
-            from .db import switchDefaultDatabase
-            switchDefaultDatabase('shard_{0}'.format(shardId))
+            from .db import switch_default_database
+
+            switch_default_database(f"shard_{shard_id}")
 
         else:
-            logging.info(
-                '[SHARD-SELECTOR] USER DOES NOT LOOK LOGGED IN RIGHT NOW'
-            )
+            logging.info("[SHARD-SELECTOR] USER DOES NOT LOOK LOGGED IN RIGHT NOW")
 
         request.user = SimpleLazyObject(lambda: get_user(request))
-        # print 'request.user = %s' % auth.get_user(request)
 
         return None
