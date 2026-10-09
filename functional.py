@@ -12,6 +12,7 @@ from copy import deepcopy
 from inspect import getfullargspec
 from time import time
 
+from .memcache import MEMCACHE_ERRORS
 from .memcache import get_memcache_client as cli
 
 try:
@@ -254,9 +255,6 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
             Returns:
                 The cached or computed result.
             """
-            # Import moved here to avoid missing package dependency
-            import pylibmc
-
             key = _pickle.dumps((args, kw))
             now = time()
 
@@ -271,7 +269,7 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
                         if now - set_ts > self.ttl_seconds:
                             result = None
 
-                except pylibmc.Error as err:
+                except MEMCACHE_ERRORS as err:
                     logging.error("Distmemoizewithexpiry caught %s", str(err))
 
                 if result is None:
@@ -282,7 +280,7 @@ class Distmemoizewithexpiry(Memoizewithexpiry):
                 try:
                     cli().set(mc_key, self._cached[key], time=self.ttl_seconds)
 
-                except pylibmc.Error as err:
+                except MEMCACHE_ERRORS as err:
                     logging.error("Distmemoizewithexpiry caught %s", str(err))
 
             return deepcopy(self._cached[key][1])

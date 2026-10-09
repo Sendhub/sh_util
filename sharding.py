@@ -9,13 +9,10 @@ __author__ = "Jay Taylor [@jtaylor]"
 
 import logging
 
-# pylibmc and settings imports kept at module level but note: pylibmc may cause issues if not installed
-# Consider moving to function level if package availability is a concern
-import pylibmc
 import settings
 
 from .db import connections
-from .memcache import get_memcache_client
+from .memcache import MEMCACHE_ERRORS, get_memcache_client
 from .retry import retry
 from .singleton import Singleton
 
@@ -263,7 +260,7 @@ class ShardedResource:
             cli = get_memcache_client()
             value = cli.set(key, value)
 
-        except pylibmc.Error as e:
+        except MEMCACHE_ERRORS as e:
             logging.info(f"ShardedResource._cacheSet error: {e}")
 
     @staticmethod
@@ -273,7 +270,7 @@ class ShardedResource:
             cli = get_memcache_client()
             return cli.get(key)
 
-        except pylibmc.Error as e:
+        except MEMCACHE_ERRORS as e:
             logging.info(f"ShardedResource._cacheSet error: {e}")
             return None
 
@@ -295,7 +292,7 @@ class ShardedResource:
                 if len(mapping) > 0:
                     cli.set_multi(mapping, key_prefix=prefix)
 
-        except pylibmc.Error as e:
+        except MEMCACHE_ERRORS as e:
             logging.info(f"ShardedResource.warmShardCache :: memcache error: {e}")
 
     @retry(tries=3)
@@ -311,7 +308,7 @@ class ShardedResource:
 
             return True
 
-        except pylibmc.Error as e:
+        except MEMCACHE_ERRORS as e:
             logging.error(f"memcache error: {e}")
             return False
 
@@ -388,7 +385,7 @@ class ShardedResource:
             shard_id = ShardedResource._real_user_id_to_physical_shard_id(user_id)
             get_memcache_client().set(key, shard_id, time=180)
 
-        except pylibmc.Error:
+        except MEMCACHE_ERRORS:
             if "shard_id" not in vars():
                 shard_id = ShardedResource._real_user_id_to_physical_shard_id(user_id)
 

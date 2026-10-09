@@ -72,7 +72,7 @@ import sys
 import types
 from unittest import mock
 
-import pylibmc
+from sh_util.memcache import MEMCACHE_ERRORS
 import pytest
 
 import sh_util.db as db_pkg
@@ -398,7 +398,7 @@ class TestCacheSetGet:
         cli.set.assert_called_once_with("k", "v")
 
     def test_cache_set_swallows_memcache_error(self, monkeypatch):
-        monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(side_effect=pylibmc.Error("boom")))
+        monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(side_effect=MEMCACHE_ERRORS[0]("boom")))
         sharding.ShardedResource._cache_set("k", "v")  # must not raise
 
     def test_cache_get_success(self, monkeypatch):
@@ -409,7 +409,7 @@ class TestCacheSetGet:
         assert sharding.ShardedResource._cache_get("k") == "v"
 
     def test_cache_get_swallows_memcache_error_and_returns_none(self, monkeypatch):
-        monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(side_effect=pylibmc.Error("boom")))
+        monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(side_effect=MEMCACHE_ERRORS[0]("boom")))
         assert sharding.ShardedResource._cache_get("k") is None
 
 
@@ -443,7 +443,7 @@ class TestWarmShardIdCache:
 
     def test_swallows_memcache_error(self, monkeypatch):
         monkeypatch.setattr(sharding, "_get_shards", lambda: ["shard_1"])
-        monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(side_effect=pylibmc.Error("boom")))
+        monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(side_effect=MEMCACHE_ERRORS[0]("boom")))
 
         model = mock.MagicMock()
         model.__name__ = "Widget"
@@ -472,7 +472,7 @@ class TestSetShardId:
         monkeypatch.setattr(retry_mod._time, "sleep", lambda *_args: None)
 
         cli = mock.MagicMock()
-        cli.set.side_effect = pylibmc.Error("boom")
+        cli.set.side_effect = MEMCACHE_ERRORS[0]("boom")
         monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(return_value=cli))
 
         result = sharding.ShardedResource.set_shard_id(_Widget, "external_id", 42, 3)
@@ -609,7 +609,7 @@ class TestCachingUserIdToPhysicalShardId:
 
     def test_memcache_get_error_falls_back_to_the_real_lookup(self, monkeypatch):
         cli = mock.MagicMock()
-        cli.get.side_effect = pylibmc.Error("boom")
+        cli.get.side_effect = MEMCACHE_ERRORS[0]("boom")
         monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(return_value=cli))
         monkeypatch.setattr(sharding.ShardedResource, "_real_user_id_to_physical_shard_id", mock.Mock(return_value=6))
 
@@ -624,7 +624,7 @@ class TestCachingUserIdToPhysicalShardId:
         # value it already had.
         cli = mock.MagicMock()
         cli.get.return_value = None
-        cli.set.side_effect = pylibmc.Error("boom")
+        cli.set.side_effect = MEMCACHE_ERRORS[0]("boom")
         monkeypatch.setattr(sharding, "get_memcache_client", mock.Mock(return_value=cli))
         real_mock = mock.Mock(return_value=8)
         monkeypatch.setattr(sharding.ShardedResource, "_real_user_id_to_physical_shard_id", real_mock)

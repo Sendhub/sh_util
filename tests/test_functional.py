@@ -2,7 +2,7 @@
 
 Covers the sequence helpers, the three memoization decorators, and
 ``safer_hash``. The distributed memoizer talks to memcache, so its client and
-``pylibmc`` error type are stubbed rather than reached.
+memcache error type are stubbed rather than reached.
 
 Two behaviours are pinned deliberately because callers rely on them:
 memoized results are deep-copied on the way out (so callers cannot corrupt the
@@ -274,9 +274,9 @@ class TestDistmemoizewithexpiry:
         assert expensive(1) == "computed"
 
     def test_memcache_get_failure_falls_back_to_computing(self, monkeypatch):
-        import pylibmc
+        from sh_util.memcache import MEMCACHE_ERRORS
 
-        self._client(monkeypatch, get_error=pylibmc.Error("get down"))
+        self._client(monkeypatch, get_error=MEMCACHE_ERRORS[0]("get down"))
 
         @Distmemoizewithexpiry(60)
         def expensive(a):
@@ -285,9 +285,9 @@ class TestDistmemoizewithexpiry:
         assert expensive(1) == "computed"
 
     def test_memcache_set_failure_is_swallowed(self, monkeypatch):
-        import pylibmc
+        from sh_util.memcache import MEMCACHE_ERRORS
 
-        self._client(monkeypatch, get_return=None, set_error=pylibmc.Error("set down"))
+        self._client(monkeypatch, get_return=None, set_error=MEMCACHE_ERRORS[0]("set down"))
 
         @Distmemoizewithexpiry(60)
         def expensive(a):

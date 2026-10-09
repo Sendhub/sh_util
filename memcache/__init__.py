@@ -133,13 +133,122 @@ __contributors__ = [
     "Dipayan Ray",
 ]
 
+import hashlib as _hashlib
 import logging
 import os as _os
+import pickle as _pickle
+import re as _re
 import threading as _threading
 import time as _time
+import zlib as _zlib
 
-import pylibmc as _pylibmc
 import settings as _settings
+from pymemcache import exceptions as _mc_exceptions
+from pymemcache.client.base import PooledClient as _PooledClient
+
+# Exceptions a cache call can raise (pymemcache protocol errors, plus the socket
+# errors it lets through). Call sites catch this instead of ``pylibmc.Error``.
+MEMCACHE_ERRORS = (_mc_exceptions.MemcacheError, OSError)
+
+# Value flags, kept identical to pylibmc's so entries written by the old client
+# stay readable (pickle=1, int=2, long=4, compressed=8) and nothing is lost on cutover.
+_FLAG_PICKLE = 1 << 0
+_FLAG_INTEGER = 1 << 1
+_FLAG_LONG = 1 << 2
+_FLAG_COMPRESSED = 1 << 3
+
+_POOL_SIZE = 10
+_TIMEOUT_SECONDS = 5
+
+
+_SAFE_KEY = _re.compile(r"^[\x21-\x7e]{1,250}$")
+
+
+def _safe_key(key):
+    """Return ``key`` if memcached's text protocol accepts it, else a stable digest.
+
+    pylibmc's binary protocol took any bytes; the text protocol rejects whitespace,
+    control/non-ASCII characters and keys over 250 chars (e.g. the repr of pickled
+    args that ``functional.py`` embeds in its memoize keys).
+    """
+    if isinstance(key, bytes):
+        key = key.decode("utf-8", errors="surrogateescape")
+    if _SAFE_KEY.match(key):
+        return key
+    return "h:" + _hashlib.sha1(key.encode("utf-8", errors="surrogatepass")).hexdigest()
+
+
+def _serialize(key, value):
+    if isinstance(value, bytes):
+        return value, 0
+    if isinstance(value, str):
+        return value.encode("utf-8"), 0
+    if isinstance(value, bool):
+        return _pickle.dumps(value, protocol=_pickle.HIGHEST_PROTOCOL), _FLAG_PICKLE
+    if isinstance(value, int):
+        return str(value).encode("ascii"), _FLAG_INTEGER
+    return _pickle.dumps(value, protocol=_pickle.HIGHEST_PROTOCOL), _FLAG_PICKLE
+
+
+def _deserialize(key, value, flags):
+    if flags & _FLAG_COMPRESSED:
+        value = _zlib.decompress(value)
+        flags &= ~_FLAG_COMPRESSED
+    if flags == 0:
+        # pylibmc returned str for text; callers here only store str/bytes via set().
+        return value.decode("utf-8", errors="surrogateescape") if isinstance(value, bytes) else value
+    if flags & (_FLAG_INTEGER | _FLAG_LONG):
+        return int(value)
+    if flags & _FLAG_PICKLE:
+        return _pickle.loads(value)  # noqa: S301 - cache is internal, same trust boundary as before
+    return value
+
+
+class _Serde:
+    serialize = staticmethod(_serialize)
+    deserialize = staticmethod(_deserialize)
+
+
+class _Client:
+    """pylibmc-shaped facade over a thread-safe ``pymemcache`` pooled client.
+
+    Keeps the call signatures the services already use (``set(..., time=,
+    min_compress_len=)``, ``set_multi(mapping, key_prefix=)``) so only this module
+    changes. ``min_compress_len`` is accepted and ignored: values are stored
+    uncompressed (reads still decompress entries the old client compressed).
+    """
+
+    def __init__(self, server):
+        host, _, port = str(server).rpartition(":")
+        self._client = _PooledClient(
+            (host, int(port)) if host else (str(server), 11211),
+            serde=_Serde,
+            default_noreply=False,
+            no_delay=True,
+            connect_timeout=_TIMEOUT_SECONDS,
+            timeout=_TIMEOUT_SECONDS,
+            max_pool_size=_POOL_SIZE,
+        )
+
+    def get(self, key, default=None):
+        value = self._client.get(_safe_key(key))
+        return default if value is None else value
+
+    def set(self, key, value, time=0, min_compress_len=0):
+        return self._client.set(_safe_key(key), value, expire=time, noreply=False)
+
+    def set_multi(self, mapping, time=0, key_prefix=""):
+        return self._client.set_many({_safe_key(f"{key_prefix}{k}"): v for k, v in mapping.items()}, expire=time, noreply=False)
+
+    def delete(self, key):
+        return self._client.delete(_safe_key(key), noreply=False)
+
+    def incr(self, key, delta=1):
+        return self._client.incr(_safe_key(key), delta, noreply=False)
+
+    def flush_all(self):
+        return self._client.flush_all(noreply=False)
+
 
 # ------------------------------------------------------------------------------
 # Internal lock to protect client creation ONLY.
@@ -194,18 +303,9 @@ def get_memcache_client(new_connection=False):
         if client is None or new_connection:
             logging.info("[MEMCACHE] pid:%d threadid:%d Creating new memcache client%s", pid, tid, " (forced reset)" if new_connection else "")
 
-            # NOTE:
-            # We intentionally keep the server list minimal here.
-            # pylibmc internally handles reconnection and failover.
-            client = _pylibmc.Client(
-                [_settings.MEMCACHE_SERVERS],
-                binary=True,
-            )
-
-            client.behaviors = {
-                "tcp_nodelay": True,
-                "ketama": True,
-            }
+            # pymemcache's pooled client opens connections lazily and reconnects
+            # on failure, so there is nothing to tune beyond the pool size.
+            client = _Client(_settings.MEMCACHE_SERVERS)
 
             _settings.MEMCACHE_CLIENTS[key] = client
 
@@ -248,6 +348,7 @@ def attempt_memcache_flush():
 
 
 __all__ = [
+    "MEMCACHE_ERRORS",
     "get_memcache_client",
     "attempt_memcache_flush",
     "warm_memcache_client",
