@@ -72,12 +72,12 @@ import sys
 import types
 from unittest import mock
 
-from sh_util.memcache import MEMCACHE_ERRORS
 import pytest
 
 import sh_util.db as db_pkg
 import sh_util.retry as retry_mod
 from sh_util import sharding
+from sh_util.memcache import MEMCACHE_ERRORS
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

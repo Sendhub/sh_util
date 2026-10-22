@@ -9,6 +9,7 @@ Comprehensive pytest examples:
 
 import sqlite3
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -372,11 +373,15 @@ class TestSanitize:
 class TestTwilioFindTollFreeNumberInAreaCode:
     def test_success_returns_result(self, mock_twilio_client):
         toll_free_list = mock_twilio_client.api.v2010.accounts.return_value.available_phone_numbers.return_value.toll_free.list
-        toll_free_list.return_value = ["num1", "num2"]
+        # Results are filtered down to numbers in the requested NPA, so the entries need a phone_number.
+        match_one = SimpleNamespace(phone_number="+18005550101")
+        match_two = {"phone_number": "+18005550102"}
+        other_npa = SimpleNamespace(phone_number="+18885550103")
+        toll_free_list.return_value = [match_one, match_two, other_npa]
 
         result = twilio_util.twilio_find_toll_free_number_in_area_code(mock_twilio_client, "800")
 
-        assert result == ["num1", "num2"]
+        assert result == [match_one, match_two]
         toll_free_list.assert_called_once_with(contains="800", limit=6)
 
     def test_invalid_pattern_uses_none(self, mock_twilio_client):
