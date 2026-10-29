@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from .. import tel_util
-from ..bw_util import BWTollFreeUnavailableError
+from ..bw_util import BWNumberUnavailableError, BWTollFreeUnavailableError
 from ..tel_util import (
     BuyPhoneNumberFromCarrier,
     FindPhoneNumberInAreaCode,
@@ -311,6 +311,15 @@ class TestBuyPhoneNumberFromCarrierBandwidthBuyNumber:
 
         assert result == "bandwidth_number_object"
         mock_obj_cls.assert_called_once_with("+14155551234", "sid_xyz")
+
+    def test_regular_number_purchase_incomplete_order_raises_clear_error(self, mock_tel_settings):
+        """A Bandwidth order that never completes returns False; it must not be unpacked as (number, sid)."""
+        buyer = BuyPhoneNumberFromCarrier()
+        with patch.object(tel_util, "SHBandwidthClient") as mock_client_cls:
+            mock_client_cls.return_value.buy_phone_number.return_value = False
+
+            with pytest.raises(BWNumberUnavailableError, match="did not complete"):
+                buyer._bandwidth_buy_number("415", "US", "+14155551234", False, "user1")
 
 
 class TestBuyPhoneNumberFromCarrierTwilioBuyNumber:

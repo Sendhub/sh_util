@@ -6,7 +6,7 @@ import logging
 
 import settings
 
-from .bw_util import BandwidthAvailablePhoneNumber, BandwidthNumberObject, BWTollFreeUnavailableError, SHBandwidthClient
+from .bw_util import BandwidthAvailablePhoneNumber, BandwidthNumberObject, BWNumberUnavailableError, BWTollFreeUnavailableError, SHBandwidthClient
 from .twilio_util import AreaCodeUnavailableError, twilio_buy_phone_number, twilio_buy_toll_free_phone_number, twilio_find_number_in_area_code, twilio_find_toll_free_number_in_area_code
 
 
@@ -171,7 +171,11 @@ class BuyPhoneNumberFromCarrier:
         if toll_free:
             number = bw_client.buy_toll_free_number(quantity=1, pattern=area_code, site_id=settings.BW_SITE_ID, user_id=user)
         else:
-            number, sid = bw_client.buy_phone_number(phone_number=phone_number, area_code=area_code, user_id=user, country_code=country_code)
+            purchase = bw_client.buy_phone_number(phone_number=phone_number, area_code=area_code, user_id=user, country_code=country_code)
+            if not purchase:
+                # Bandwidth returns False when the order was placed but did not complete in time.
+                raise BWNumberUnavailableError("Bandwidth order did not complete in time. Please try again shortly.")
+            number, sid = purchase
 
         return BandwidthNumberObject(number, sid)
 
