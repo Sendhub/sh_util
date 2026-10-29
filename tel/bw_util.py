@@ -909,14 +909,22 @@ class SHBandwidthClient:
         requested_pattern = pattern
         pattern = self._normalize_toll_free_wildcard_pattern(pattern)
 
+        # tollFreeWildCardPattern only accepts wildcards (8**, 83*); an exact NPA such as 833 is
+        # rejected with error 4010. Search by the two-digit wildcard and keep exact matches locally.
+        search_pattern = pattern
+        fetch_quantity = quantity
+        if re.fullmatch(r"8\d{2}", pattern):
+            search_pattern = f"{pattern[:2]}*"
+            fetch_quantity = max(quantity, 100)
+
         cc = resolve_bandwidth_inventory_country(country_code)
         if cc in ("US", "CA"):
-            endpoint = f"{str(self.bw_account_api_url_na)}/api/v1/accounts/{str(self.user_id_na)}/availableNumbers?tollFreeWildCardPattern={pattern}&quantity={quantity}"
+            endpoint = f"{str(self.bw_account_api_url_na)}/api/v1/accounts/{str(self.user_id_na)}/availableNumbers?tollFreeWildCardPattern={search_pattern}&quantity={fetch_quantity}"
         else:
-            endpoint = f"{str(self.bw_account_api_url_au)}/api/v1/accounts/{str(self.user_id_au)}/availableNumbers?tollFreeWildCardPattern={pattern}&quantity={quantity}"
+            endpoint = f"{str(self.bw_account_api_url_au)}/api/v1/accounts/{str(self.user_id_au)}/availableNumbers?tollFreeWildCardPattern={search_pattern}&quantity={fetch_quantity}"
 
         try:
-            logging.info(f"Making Request to bandwidth to get {quantity} Toll Free Number with pattern {pattern}")
+            logging.info(f"Making Request to bandwidth to get {fetch_quantity} Toll Free Number with pattern {search_pattern} (requested {pattern})")
             response = requests.get(endpoint, headers=self._get_auth_header(), timeout=BW_REQUEST_TIMEOUT)
             logging.info(f"Response received from bandwidth to get {quantity} Toll Free Number with pattern {pattern} is {response.status_code}")
 
@@ -945,7 +953,7 @@ class SHBandwidthClient:
                     logging.info(f"No toll free phonenumbers are available for pattern ({pattern})")
                     return None
             else:
-                logging.info(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
+                logging.warning(f"Error Response from bandwidth: {getattr(response, '__dict__', None)}")
 
         except Exception as e:
             logging.exception(f"Failed to search for {quantity} toll free phone number(s) with pattern {pattern} - error: {e}")
@@ -959,7 +967,7 @@ class SHBandwidthClient:
             )
             return None
 
-        return self._cleanup_and_return_numbers(cleaned_numbers, quantity)
+        return self._cleanup_and_return_numbers(cleaned_numbers[:quantity], quantity)
 
     @staticmethod
     def _normalize_toll_free_wildcard_pattern(pattern):
