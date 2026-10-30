@@ -1,0 +1,60 @@
+line-length = 200
+target-version = "py313"
+src = ["backend"]
+
+[lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "W",   # warnings
+    "I",   # import sorting
+
+    "UP",  # Python 3.x modernization (critical for your migration)
+    "B",   # bugbear (real bug detection)
+    "C4",  # better comprehensions
+    "A",   # builtins shadowing
+
+    "DTZ", # datetime issues (your Phase 1 work)
+]
+
+ignore = [
+    "E501",  # handled by formatter
+]
+
+fixable = ["ALL"]
+
+[lint.per-file-ignores]
+"sitecustomize.py" = ["E402"]
+"wsgi.py" = ["E402"]
+"docs/conf.py" = ["E402"]
+"backend/api/docs/conf.py" = ["E402"]
+
+# Module names that intentionally match a stdlib module name (e.g. api resource
+# `numbers.py`, `profile.py`) -- these live in their own package namespace and
+# are always imported with a fully-qualified path, so there's no real shadowing risk.
+"backend/api/v1/resources/numbers.py" = ["A005"]
+"backend/api/v1/resources/profile.py" = ["A005"]
+"backend/api/v2/resources/profile.py" = ["A005"]
+"backend/django_util/http/__init__.py" = ["A005"]
+"backend/main/import_csv/messytables/types.py" = ["A005"]
+"backend/main/views/site.py" = ["A005"]
+"backend/sh_util/http/__init__.py" = ["A005"]
+"backend/sh_util/json.py" = ["A005"]
+
+# Intentional `__doc__ = "..."` assignment style instead of a bare docstring literal.
+"backend/django_util/http/response.py" = ["A001"]
+
+# Tests: reduce noise, but keep useful signals
+"tests/**" = [
+    "F841",   # unused variables
+    "DTZ",    # allow naive datetime in tests
+]
+"**/tests/**" = [
+    "F841",   # unused variables
+    "DTZ",    # allow naive datetime in tests
+]
+
+[format]
+quote-style = "double"   # or "single"
+indent-style = "space"
+line-ending = "auto"

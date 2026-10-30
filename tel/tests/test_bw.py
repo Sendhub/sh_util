@@ -68,6 +68,13 @@ def bw_client(mock_settings):
         return client
 
 
+def _root_cause(exc):
+    """Follow `raise ... from ...` links to the originally raised exception."""
+    while exc.__cause__ is not None:
+        exc = exc.__cause__
+    return exc
+
+
 class TestPhoneNumberAsE164:
     @patch.object(bw_util, "validate_phone_number")
     def test_valid_us_number(self, mock_validate):
@@ -955,8 +962,9 @@ class TestSHBandwidthClientSendSMSAuAndExceptions:
 
     def test_send_sms_outer_exception_reraises(self, bw_client):
         with patch("bandwidth.ApiClient", side_effect=Exception("api client boom")):
-            with pytest.raises(Exception):
+            with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
                 bw_client.send_sms("+14155551234", "+14155555678", "Hello")
+            assert str(_root_cause(exc_info.value)) == "api client boom"
 
 
 class TestSHBandwidthClientSendMMSAuAndExceptions:
@@ -986,8 +994,9 @@ class TestSHBandwidthClientSendMMSAuAndExceptions:
 
     def test_send_mms_outer_exception_reraises(self, bw_client):
         with patch("bandwidth.ApiClient", side_effect=Exception("api client boom")):
-            with pytest.raises(Exception):
+            with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
                 bw_client.send_mms("+14155551234", "+14155555678", "Hello", ["http://example.com/image.jpg"])
+            assert str(_root_cause(exc_info.value)) == "api client boom"
 
 
 class TestSHBandwidthClientGetMessageInfoAuAndException:
@@ -1011,8 +1020,10 @@ class TestSHBandwidthClientGetMessageInfoAuAndException:
         mock_messages_api_cls.return_value = mock_api
         mock_api.list_messages.side_effect = Exception("list_messages boom")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
             bw_client.get_message_info("msg_123")
+
+        assert str(_root_cause(exc_info.value)) == "list_messages boom"
 
 
 class TestSHBandwidthClientInServiceEdgeCases:
@@ -1176,8 +1187,10 @@ class TestSHBandwidthClientGetNumberInfoEdgeCases:
     def test_request_exception_reraises(self, mock_get, bw_client):
         mock_get.side_effect = Exception("network boom")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
             bw_client.get_number_info("+14155551234")
+
+        assert str(_root_cause(exc_info.value)) == "network boom"
 
 
 class TestSHBandwidthClientReleasePhoneNumberEdgeCases:
@@ -1211,8 +1224,9 @@ class TestSHBandwidthClientReleasePhoneNumberEdgeCases:
     def test_request_exception_reraises(self, mock_post, bw_client):
         mock_post.side_effect = Exception("network boom")
 
-        with pytest.raises(Exception):
-            bw_client.release_phone_number("+14155551234")
+        with patch.object(bw_client, "get_siteinfo_for_number", return_value={"Id": bw_client.bw_site_id_na}):
+            with pytest.raises(Exception, match="network boom"):
+                bw_client.release_phone_number("+14155551234")
 
 
 class TestSHBandwidthClientGetActiveNumberCountEdgeCases:
@@ -1244,8 +1258,10 @@ class TestSHBandwidthClientGetActiveNumberCountEdgeCases:
     def test_request_exception_reraises(self, mock_get, bw_client):
         mock_get.side_effect = Exception("network boom")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
             bw_client.get_active_number_count()
+
+        assert str(_root_cause(exc_info.value)) == "network boom"
 
 
 class TestSHBandwidthClientListActiveNumbersEdgeCases:
@@ -1331,8 +1347,10 @@ class TestSHBandwidthClientListActiveNumbersEdgeCases:
     def test_request_exception_reraises(self, mock_get, bw_client):
         mock_get.side_effect = Exception("network boom")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
             bw_client.list_active_numbers()
+
+        assert str(_root_cause(exc_info.value)) == "network boom"
 
 
 class TestSHBandwidthClientGetSiteInfoForNumberEdgeCases:
@@ -1369,8 +1387,10 @@ class TestSHBandwidthClientGetSiteInfoForNumberEdgeCases:
     def test_request_exception_reraises(self, mock_get, bw_client):
         mock_get.side_effect = Exception("network boom")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
             bw_client.get_siteinfo_for_number("+14155551234")
+
+        assert str(_root_cause(exc_info.value)) == "network boom"
 
 
 class TestSHBandwidthClientBuyTollFreeNumberEdgeCases:
@@ -1509,8 +1529,10 @@ class TestSHBandwidthClientFetchPlacedPurchasedOrderDetailsEdgeCases:
     def test_request_exception_reraises(self, mock_get, bw_client):
         mock_get.side_effect = Exception("network boom")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=r"^$") as exc_info:  # production code re-raises `type(e) from e`, dropping the message
             bw_client.fetch_placed_purchased_order_details(order_id="order_123")
+
+        assert str(_root_cause(exc_info.value)) == "network boom"
 
     @patch("xmltodict.parse")
     @patch("requests.get")
@@ -1604,3 +1626,226 @@ class TestSHBandwidthClientGetMediaEdgeCases:
             result = bw_client.get_media("http://example.com/media.jpg", out_filename=out_file)
 
             assert result is None
+
+
+def _json_response(payload, status_code=200):
+    response = MagicMock()
+    response.status_code = status_code
+    response.json.return_value = payload
+    return response
+
+
+class TestParseXmlResponse:
+    def test_defaults_to_utf8_when_no_charset_declared(self):
+        response = MagicMock()
+        response.encoding = None
+        response.text = "<SearchResult><ResultCount>1</ResultCount></SearchResult>"
+
+        result = bw_util._parse_xml_response(response)
+
+        assert response.encoding == "utf-8"
+        assert result == {"SearchResult": {"ResultCount": "1"}}
+
+    def test_keeps_declared_charset(self):
+        response = MagicMock()
+        response.encoding = "iso-8859-1"
+        response.text = "<A>1</A>"
+
+        bw_util._parse_xml_response(response)
+
+        assert response.encoding == "iso-8859-1"
+
+
+class TestSHBandwidthClientTollFreeSearchEndpoint:
+    @patch("requests.get")
+    def test_search_uses_v2_endpoint(self, mock_get, bw_client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<SearchResult><TelephoneNumberList><TelephoneNumber>8335551234</TelephoneNumber></TelephoneNumberList></SearchResult>"
+        mock_get.return_value = mock_response
+
+        bw_client.search_available_toll_free_number(pattern="83*")
+
+        endpoint = mock_get.call_args.args[0]
+        assert "/api/v2/accounts/" in endpoint
+        assert "tollFreeWildCardPattern=83*" in endpoint
+
+
+class TestSHBandwidthClientGetSiteInserviceNumbers:
+    @patch("requests.get")
+    def test_returns_decoded_json_on_success(self, mock_get, bw_client):
+        payload = {"totalCount": 2, "phoneNumbers": ["+14155551234", "+14155555678"]}
+        mock_get.return_value = _json_response(payload)
+
+        result = bw_client.get_site_inservice_numbers()
+
+        assert result == payload
+
+    @patch("requests.get")
+    def test_builds_site_scoped_v2_endpoint(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_site_inservice_numbers(site_id="555")
+
+        endpoint = mock_get.call_args.args[0]
+        assert endpoint == f"{bw_client.bw_account_api_url_na}/api/v2/accounts/{bw_client.user_id_na}/sites/555/inserviceNumbers"
+
+    @patch("requests.get")
+    def test_defaults_to_configured_site_id(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_site_inservice_numbers()
+
+        assert mock_get.call_args.args[0].endswith("/sites/100200/inserviceNumbers")
+
+    @patch("requests.get")
+    def test_au_uses_au_account_and_site(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_site_inservice_numbers(country_code="AU")
+
+        endpoint = mock_get.call_args.args[0]
+        assert endpoint == f"{bw_client.bw_account_api_url_au}/api/v2/accounts/{bw_client.user_id_au}/sites/300400/inserviceNumbers"
+
+    @patch("requests.get")
+    def test_passes_only_provided_query_params(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_site_inservice_numbers(page=3, size=50, areaCode="415")
+
+        assert mock_get.call_args.kwargs["params"] == {"page": 3, "size": 50, "areaCode": "415"}
+
+    @patch("requests.get")
+    def test_sends_no_query_params_when_none_given(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_site_inservice_numbers()
+
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    @patch("requests.get")
+    def test_asks_for_json(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_site_inservice_numbers()
+
+        assert mock_get.call_args.kwargs["headers"]["Accept"] == "application/json"
+
+    @patch("requests.get")
+    def test_returns_none_on_non_200(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({}, status_code=500)
+
+        assert bw_client.get_site_inservice_numbers() is None
+
+    @patch("requests.get")
+    def test_request_exception_reraises(self, mock_get, bw_client):
+        mock_get.side_effect = ConnectionError("network boom")
+
+        with pytest.raises(ConnectionError, match="network boom"):
+            bw_client.get_site_inservice_numbers()
+
+    def test_invalid_site_id_raises_before_any_request(self, bw_client):
+        with patch("requests.get") as mock_get:
+            with pytest.raises(bw_util.BandwidthSiteMisconfiguredError):
+                bw_client.get_site_inservice_numbers(site_id="not-numeric")
+
+        mock_get.assert_not_called()
+
+    def test_invalid_country_code_raises_value_error(self, bw_client):
+        with pytest.raises(ValueError):
+            bw_client.get_site_inservice_numbers(country_code="MX")
+
+
+class TestSHBandwidthClientGetSiteTnsCount:
+    @patch("requests.get")
+    def test_returns_total_count(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({"totalCount": 54})
+
+        assert bw_client.get_site_tns_count() == 54
+
+    @patch("requests.get")
+    def test_builds_site_scoped_v2_endpoint(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({"totalCount": 1})
+
+        bw_client.get_site_tns_count(site_id="555")
+
+        endpoint = mock_get.call_args.args[0]
+        assert endpoint == f"{bw_client.bw_account_api_url_na}/api/v2/accounts/{bw_client.user_id_na}/sites/555/totaltns"
+
+    @patch("requests.get")
+    def test_au_uses_au_account_and_site(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({"totalCount": 1})
+
+        bw_client.get_site_tns_count(country_code="AU")
+
+        endpoint = mock_get.call_args.args[0]
+        assert endpoint == f"{bw_client.bw_account_api_url_au}/api/v2/accounts/{bw_client.user_id_au}/sites/300400/totaltns"
+
+    @patch("requests.get")
+    def test_returns_none_on_non_200(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({}, status_code=404)
+
+        assert bw_client.get_site_tns_count() is None
+
+    @patch("requests.get")
+    def test_request_exception_reraises(self, mock_get, bw_client):
+        mock_get.side_effect = ConnectionError("network boom")
+
+        with pytest.raises(ConnectionError, match="network boom"):
+            bw_client.get_site_tns_count()
+
+    def test_invalid_site_id_raises_before_any_request(self, bw_client):
+        with patch("requests.get") as mock_get:
+            with pytest.raises(bw_util.BandwidthSiteMisconfiguredError):
+                bw_client.get_site_tns_count(site_id="abc")
+
+        mock_get.assert_not_called()
+
+
+class TestSHBandwidthClientGetSippeerForNumber:
+    @patch("requests.get")
+    def test_returns_decoded_json_on_success(self, mock_get, bw_client):
+        payload = {"locationId": 305643, "locationName": "PeerOneSiteThree"}
+        mock_get.return_value = _json_response(payload)
+
+        assert bw_client.get_sippeer_for_number("+14155551234") == payload
+
+    @patch("requests.get")
+    def test_builds_v2_tn_endpoint_with_e164_number(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_sippeer_for_number("+14155551234")
+
+        assert mock_get.call_args.args[0] == f"{bw_client.bw_account_api_url_na}/api/v2/tns/+14155551234/sippeers"
+
+    @patch("requests.get")
+    def test_au_uses_au_base_url(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({})
+
+        bw_client.get_sippeer_for_number("+61412345678", country_code="AU")
+
+        assert mock_get.call_args.args[0].startswith(f"{bw_client.bw_account_api_url_au}/api/v2/tns/")
+
+    @patch("requests.get")
+    def test_returns_none_on_non_200(self, mock_get, bw_client):
+        mock_get.return_value = _json_response({}, status_code=404)
+
+        assert bw_client.get_sippeer_for_number("+14155551234") is None
+
+    @patch("requests.get")
+    def test_request_exception_reraises(self, mock_get, bw_client):
+        mock_get.side_effect = ConnectionError("network boom")
+
+        with pytest.raises(ConnectionError, match="network boom"):
+            bw_client.get_sippeer_for_number("+14155551234")
+
+    def test_invalid_phone_number_raises_before_any_request(self, bw_client):
+        with patch("requests.get") as mock_get:
+            with pytest.raises(ValueError, match="Invalid phone number"):
+                bw_client.get_sippeer_for_number("invalid")
+
+        mock_get.assert_not_called()
+
+    def test_invalid_country_code_raises_value_error(self, bw_client):
+        with pytest.raises(ValueError):
+            bw_client.get_sippeer_for_number("+14155551234", country_code="MX")

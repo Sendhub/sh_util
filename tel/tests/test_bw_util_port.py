@@ -167,6 +167,60 @@ class TestMessagingErrorCodes:
         assert info["category"] == category
 
 
+class TestMessagingErrorCodeHelpers:
+    def test_missing_reference_file_falls_back_to_empty_dict(self):
+        with patch.object(bw_util, "_messaging_error_codes_cache", None), patch.object(bw_util, "MESSAGING_ERROR_CODES_PATH", "/nonexistent/codes.json"):
+            assert bw_util._load_messaging_error_codes() == {}
+
+    def test_log_known_code_returns_info_and_logs_description(self):
+        info = {"code": "4720", "description": "desc", "explanation": "why", "billable": False}
+        with patch.object(bw_util, "lookup_messaging_error_code", return_value=info), patch.object(bw_util.logging, "error") as mock_log:
+            result = bw_util.log_messaging_error_code("4720", context="msg-1")
+
+        assert result == info
+        assert "msg-1: Bandwidth messaging error 4720 (desc)" in mock_log.call_args.args[0]
+
+    def test_log_unknown_code_returns_none_and_logs_not_found(self):
+        with patch.object(bw_util, "lookup_messaging_error_code", return_value=None), patch.object(bw_util.logging, "error") as mock_log:
+            result = bw_util.log_messaging_error_code("9999")
+
+        assert result is None
+        assert "not found in the local error code reference" in mock_log.call_args.args[0]
+
+
+class TestBandwidthAuthHeader:
+    def test_basic_auth_header(self):
+        with patch.object(bw_util, "settings") as fake_settings:
+            fake_settings.BW_USE_OAUTH2 = False
+            fake_settings.BW_USERNAME = "user"
+            fake_settings.BW_PASSWORD = "pass"
+            header = bw_util.get_bandwidth_auth_header()
+
+        assert header == {"Authorization": "Basic dXNlcjpwYXNz"}
+
+    def test_oauth2_bearer_header(self):
+        fake_bandwidth = MagicMock()
+        fake_bandwidth.Configuration.return_value.get_access_token.return_value = "tok"
+        with patch.object(bw_util, "settings") as fake_settings, patch.dict("sys.modules", {"bandwidth": fake_bandwidth}):
+            fake_settings.BW_USE_OAUTH2 = True
+            fake_settings.BW_CLIENT_ID = "id"
+            fake_settings.BW_CLIENT_SECRET = "secret"
+            header = bw_util.get_bandwidth_auth_header()
+
+        assert header == {"Authorization": "Bearer tok"}
+        fake_bandwidth.Configuration.assert_called_once_with(client_id="id", client_secret="secret")
+
+
+class TestPhonenumberAsE164:
+    def test_invalid_number_raises_value_error(self):
+        with patch.object(bw_util, "validate_phone_number", return_value=False), pytest.raises(ValueError, match="Invalid phone number"):
+            bw_util.phonenumber_as_e164("123")
+
+    def test_non_string_number_is_coerced(self):
+        with patch.object(bw_util, "validate_phone_number", return_value=True):
+            assert bw_util.phonenumber_as_e164(4155551234) == "+14155551234"
+
+
 class TestNumberInfoCache:
     @patch("requests.get")
     def test_second_lookup_is_served_from_cache(self, mock_get, bw_client):  # noqa: F811
@@ -232,3 +286,12 @@ class TestPollOrderStatus:
 
 def test_client_class_is_exported():
     assert bw_util.SHBandwidthClient is SHBandwidthClient
+
+
+class TestNumberInfoCacheExpiry:
+    def test_expired_entry_is_evicted(self, bw_client):  # noqa: F811
+        bw_client._number_info_cache["k"] = ({"x": 1}, 1000.0)
+        with patch.object(bw_util.time, "time", return_value=1000.0 + SHBandwidthClient.CACHE_TTL_SECONDS + 1):
+            assert bw_client._get_cached_number_info("k") is None
+
+        assert "k" not in bw_client._number_info_cache

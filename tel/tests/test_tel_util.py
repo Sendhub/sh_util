@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from .. import tel_util
+from .. import tel_util, twilio_util
 from ..bw_util import BWNumberUnavailableError, BWTollFreeUnavailableError
 from ..tel_util import (
     BuyPhoneNumberFromCarrier,
@@ -88,7 +88,7 @@ class TestTwilioFindNumberInAreaCode:
 
 
 class TestTwilioBuyPhoneNumber:
-    @patch("utils.sh_util.tel.twilio_util.twilio_find_number_in_area_code")
+    @patch.object(twilio_util, "twilio_find_number_in_area_code")
     def test_buy_number_with_area_code_success(self, mock_find_number, mock_twilio_client, mock_phone_number):
         mock_find_number.return_value = [mock_phone_number]
         mock_twilio_client.incoming_phone_numbers.create.return_value = mock_phone_number
@@ -107,7 +107,7 @@ class TestTwilioBuyPhoneNumber:
         assert result == mock_phone_number
         mock_twilio_client.incoming_phone_numbers.create.assert_called_once_with(phone_number="+14155551234", sms_application_sid="AP_app_sid", voice_application_sid="AP_app_sid")
 
-    @patch("utils.sh_util.tel.twilio_util.twilio_find_number_in_area_code")
+    @patch.object(twilio_util, "twilio_find_number_in_area_code")
     def test_buy_number_with_area_code_exception_raises_area_code_unavailable_error(self, mock_find_number, mock_twilio_client, mock_phone_number):
         mock_find_number.return_value = [mock_phone_number]
         mock_twilio_client.incoming_phone_numbers.create.side_effect = Exception("carrier error")
@@ -131,7 +131,7 @@ class TestTwilioBuyPhoneNumber:
 
         assert "No available numbers left" in str(exc_info.value)
 
-    @patch("utils.sh_util.tel.twilio_util.twilio_find_number_in_area_code")
+    @patch.object(twilio_util, "twilio_find_number_in_area_code")
     def test_buy_number_no_numbers_available_raises_error(self, mock_find_number, mock_twilio_client):
         mock_find_number.return_value = None
 
@@ -464,6 +464,22 @@ class TestFindPhoneNumberInAreaCodeCall:
         with patch.object(tel_util, "SHBandwidthClient") as mock_client_cls:
             mock_client_cls.return_value.search_available_toll_free_number.side_effect = BWTollFreeUnavailableError("none")
             result = finder("bandwidth", toll_free=True, toll_free_area_code="800")
+
+        assert result == []
+
+    @pytest.mark.parametrize("quantity", ["abc", None, 0, -3])
+    def test_invalid_or_non_positive_quantity_falls_back_to_one(self, mock_tel_settings, quantity):
+        finder = FindPhoneNumberInAreaCode()
+        with patch.object(tel_util, "twilio_find_number_in_area_code", return_value=[]) as mock_find:
+            finder("twilio", area_code="415", quantity=quantity)
+
+        assert mock_find.call_args.kwargs["max_limit"] == 1
+
+    def test_bandwidth_search_returning_none_gives_empty_list(self, mock_tel_settings):
+        finder = FindPhoneNumberInAreaCode()
+        with patch.object(tel_util, "SHBandwidthClient") as mock_client_cls:
+            mock_client_cls.return_value.find_number_in_area_code.return_value = None
+            result = finder("bandwidth", area_code="415")
 
         assert result == []
 
